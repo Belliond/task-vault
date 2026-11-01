@@ -142,6 +142,53 @@ const courseList =
 
 
 // =========================================================
+// GOOGLE CLASSROOM — REFERENSI ELEMEN
+// =========================================================
+
+const classroomClientIdForm =
+    document.getElementById("classroomIdForm");
+
+const classroomClientId =
+    document.getElementById("classroomClientId");
+
+const classroomConnectArea =
+    document.getElementById("classroomConnectArea");
+
+const classroomConnect =
+    document.getElementById("classroomConnect");
+
+const classroomAuthLink =
+    document.getElementById("classroomAuthLink");
+
+const classroomPaste =
+    document.getElementById("classroomPaste");
+
+const classroomPasteUse =
+    document.getElementById("classroomPasteUse");
+
+const classroomStatus =
+    document.getElementById("classroomStatus");
+
+const classroomForget =
+    document.getElementById("classroomForget");
+
+const classroomBadge =
+    document.getElementById("classroomBadge");
+
+const classroomPicker =
+    document.getElementById("classroomPicker");
+
+const classroomCourseList =
+    document.getElementById("classroomCourseList");
+
+const classroomSync =
+    document.getElementById("classroomSync");
+
+const classroomSyncLog =
+    document.getElementById("classroomSyncLog");
+
+
+// =========================================================
 // EDIT MODAL
 // =========================================================
 
@@ -1789,6 +1836,1186 @@ moodleSync.addEventListener(
 
     }
 );
+
+
+// =========================================================
+// GOOGLE CLASSROOM (OAUTH 2.0 — CLIENT-SIDE)
+//  Web statis tanpa backend: pakai implicit flow resmi
+//  Google. Client ID milik user sendiri disimpan di
+//  browser. Token ditangkap dari halaman redirect
+//  (hash #access_token=...) lalu disimpan lokal.
+// =========================================================
+
+const CLASSROOM_CLIENT_KEY =
+    "ghost_matrix_classroom_client";
+
+const CLASSROOM_AUTH_KEY =
+    "ghost_matrix_classroom_auth";
+
+const CLASSROOM_COURSE_KEY =
+    "ghost_matrix_classroom_courses";
+
+const CLASSROOM_SCOPES =
+    "https://www.googleapis.com/auth/classroom.courses.readonly " +
+    "https://www.googleapis.com/auth/classroom.coursework.me";
+
+// Halaman GitHub Pages dipakai sebagai tujuan redirect
+// (Google menerima https sebagai redirect URI).
+const CLASSROOM_REDIRECT =
+    "https://virst132109-glitch.github.io/task-vault/";
+
+
+function loadClassroomClient() {
+
+    return localStorage.getItem(
+        CLASSROOM_CLIENT_KEY
+    ) || "";
+
+}
+
+
+function loadClassroomAuth() {
+
+    try {
+
+        const raw =
+            localStorage.getItem(CLASSROOM_AUTH_KEY);
+
+        return raw ? JSON.parse(raw) : null;
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        return null;
+
+    }
+
+}
+
+
+function saveClassroomAuth(auth) {
+
+    localStorage.setItem(
+        CLASSROOM_AUTH_KEY,
+        JSON.stringify(auth)
+    );
+
+}
+
+
+function classroomTokenValid() {
+
+    const auth = loadClassroomAuth();
+
+
+    return !!(
+        auth &&
+        auth.accessToken &&
+        Number(auth.expiresAt) > Date.now() + 60000
+
+    );
+
+}
+
+
+function setClassroomStatus(message, type = "") {
+
+    classroomStatus.textContent = message;
+
+    classroomStatus.classList.toggle(
+        "success",
+        type === "success"
+    );
+
+    classroomStatus.classList.toggle(
+        "error",
+        type === "error"
+    );
+
+}
+
+
+function setClassroomLog(message, type = "") {
+
+    classroomSyncLog.textContent = message;
+
+    classroomSyncLog.classList.toggle(
+        "error",
+        type === "error"
+    );
+
+}
+
+
+function renderClassroomStatus() {
+
+    const hasClient = !!loadClassroomClient();
+    const connected = classroomTokenValid();
+
+
+    classroomConnectArea.classList.toggle(
+        "hidden",
+        !hasClient
+    );
+
+
+    classroomBadge.textContent =
+        connected ? "LIVE" : "OFFLINE";
+
+    classroomBadge.classList.toggle(
+        "sync-badge-live",
+        connected
+    );
+
+    classroomBadge.classList.toggle(
+        "sync-badge-pending",
+        !connected
+    );
+
+
+    if (connected) {
+
+        setClassroomStatus(
+            "Token stored in this browser.",
+            "success"
+        );
+
+        classroomForget.classList.remove("hidden");
+        classroomSync.disabled = false;
+
+    }
+    else if (loadClassroomAuth()) {
+
+        setClassroomStatus(
+            "Token expired. Press CONNECT GOOGLE " +
+            "CLASSROOM again to refresh it.",
+            "error"
+        );
+
+        classroomForget.classList.remove("hidden");
+        classroomSync.disabled = true;
+
+    }
+    else {
+
+        setClassroomStatus("Not connected.", "");
+
+        classroomForget.classList.add("hidden");
+        classroomSync.disabled = true;
+
+    }
+
+}
+
+
+function classroomAuthUrl() {
+
+    const clientId =
+        loadClassroomClient();
+
+
+    if (!clientId) {
+
+        throw new Error(
+            "Save your OAuth Client ID first."
+        );
+
+    }
+
+
+    const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: CLASSROOM_REDIRECT,
+        response_type: "token",
+        scope: CLASSROOM_SCOPES,
+        include_granted_scopes: "true"
+    });
+
+
+    return (
+        "https://accounts.google.com/o/oauth2/v2/auth?" +
+        params.toString()
+    );
+
+}
+
+
+// Tangkap token dari URL redirect (hash) —
+// dipakai both halaman popup dan halaman manual.
+function captureClassroomHash() {
+
+    const hash =
+        window.location.hash || "";
+
+
+    if (!hash.includes("access_token=")) {
+
+        return null;
+
+    }
+
+
+    const params =
+        new URLSearchParams(hash.slice(1));
+
+    const accessToken =
+        params.get("access_token");
+
+    const expiresIn =
+        Number(params.get("expires_in") || 3600);
+
+
+    if (!accessToken) {
+
+        return null;
+
+    }
+
+
+    const auth = {
+        accessToken: accessToken,
+        expiresAt: Date.now() + expiresIn * 1000,
+        obtainedAt: new Date().toISOString()
+    };
+
+
+    saveClassroomAuth(auth);
+
+
+    // Bersihkan token dari address bar & history
+    try {
+
+        window.history.replaceState(
+            null,
+            "",
+            window.location.pathname +
+            window.location.search
+        );
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+    }
+
+
+    // Kalau halaman ini terbuka sebagai popup dari
+    // tab utama, kabari opener lalu tutup diri.
+    if (window.opener &&
+        typeof window.opener.postMessage === "function") {
+
+        try {
+
+            window.opener.postMessage(
+                {
+                    type: "classroom-token",
+                    auth: auth
+                },
+                "*"
+            );
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+        }
+
+
+        setTimeout(() => {
+
+            try {
+
+                window.close();
+
+            }
+            catch (error) {
+
+                console.error(error);
+
+            }
+
+        }, 300);
+
+    }
+
+
+    return auth;
+
+}
+
+
+// Terima token dari popup (cross-origin pun aman)
+window.addEventListener(
+    "message",
+    (event) => {
+
+        const data = event.data;
+
+
+        if (data &&
+            data.type === "classroom-token" &&
+            data.auth?.accessToken) {
+
+            saveClassroomAuth(data.auth);
+
+            renderClassroomStatus();
+
+            showToast(
+                "Google Classroom token captured.",
+                "success"
+            );
+
+            tryRenderClassroomPicker();
+
+        }
+
+    }
+);
+
+
+// Kalau user kembali ke tab utama (popup sudah
+// ditutup), cek ulang localStorage.
+window.addEventListener(
+    "focus",
+    () => {
+
+        if (loadClassroomAuth()) {
+
+            renderClassroomStatus();
+
+        }
+
+    }
+);
+
+
+classroomIdForm.addEventListener(
+    "submit",
+    (event) => {
+
+        event.preventDefault();
+
+
+        const value =
+            classroomClientId.value.trim();
+
+
+        if (!/\.apps\.googleusercontent\.com$/.test(value)) {
+
+            setClassroomStatus(
+                "That does not look like a Google " +
+                "Client ID (must end with " +
+                ".apps.googleusercontent.com).",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        localStorage.setItem(
+            CLASSROOM_CLIENT_KEY,
+            value
+        );
+
+        classroomClientId.value = "";
+
+        renderClassroomStatus();
+
+        setClassroomStatus(
+            "Client ID saved in this browser.",
+            "success"
+        );
+
+        showToast(
+            "Classroom Client ID saved.",
+            "success"
+        );
+
+    }
+);
+
+
+classroomConnect.addEventListener(
+    "click",
+    () => {
+
+        try {
+
+            const url =
+                classroomAuthUrl();
+
+
+            if (typeof window.open === "function") {
+
+                try {
+
+                    window.open(url, "_blank");
+
+                }
+                catch (error) {
+
+                    console.error(error);
+
+                }
+
+            }
+
+            setClassroomLog(
+                "Google window opened. Allow access — " +
+                "the token is captured automatically."
+            );
+
+        }
+        catch (error) {
+
+            setClassroomStatus(
+                error.message,
+                "error"
+            );
+
+        }
+
+    }
+);
+
+
+classroomAuthLink.addEventListener(
+    "click",
+    () => {
+
+        try {
+
+            const url =
+                classroomAuthUrl();
+
+
+            if (typeof window.open === "function") {
+
+                try {
+
+                    window.open(url, "_blank");
+
+                }
+                catch (error) {
+
+                    console.error(error);
+
+                }
+
+            }
+
+        }
+        catch (error) {
+
+            setClassroomStatus(
+                error.message,
+                "error"
+            );
+
+        }
+
+    }
+);
+
+
+classroomPasteUse.addEventListener(
+    "click",
+    () => {
+
+        const text =
+            String(classroomPaste.value || "").trim();
+
+
+        if (!text.includes("access_token=")) {
+
+            setClassroomStatus(
+                "That does not look like a redirect " +
+                "link containing #access_token=...",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        const params =
+            new URLSearchParams(
+                text.split("#")[1] || ""
+            );
+
+        const accessToken =
+            params.get("access_token");
+
+        const expiresIn =
+            Number(params.get("expires_in") || 3600);
+
+
+        if (!accessToken) {
+
+            setClassroomStatus(
+                "No access_token found in the pasted link.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        saveClassroomAuth({
+            accessToken: accessToken,
+            expiresAt: Date.now() + expiresIn * 1000,
+            obtainedAt: new Date().toISOString()
+        });
+
+
+        classroomPaste.value = "";
+
+        renderClassroomStatus();
+
+        showToast(
+            "Google Classroom token saved.",
+            "success"
+        );
+
+        tryRenderClassroomPicker();
+
+    }
+);
+
+
+classroomForget.addEventListener(
+    "click",
+    () => {
+
+        localStorage.removeItem(
+            CLASSROOM_AUTH_KEY
+        );
+
+        classroomCourseList.innerHTML = "";
+        classroomPicker.classList.add("hidden");
+
+        setClassroomLog("");
+
+        renderClassroomStatus();
+
+        showToast(
+            "Classroom token removed from this browser.",
+            "warning"
+        );
+
+    }
+);
+
+
+// ---------- REST ke Classroom API ----------
+
+async function classroomRest(path) {
+
+    const auth = loadClassroomAuth();
+
+
+    if (!classroomTokenValid()) {
+
+        throw new Error(
+            "Classroom token expired. Press CONNECT " +
+            "GOOGLE CLASSROOM again."
+        );
+
+    }
+
+
+    const response = await fetch(
+        "https://classroom.googleapis.com" + path,
+        {
+            headers: {
+                Authorization:
+                    "Bearer " + auth.accessToken
+            }
+        }
+    );
+
+
+    const data =
+        await response.json().catch(() => null);
+
+
+    if (!response.ok || data?.error) {
+
+        throw new Error(
+            data?.error?.message ||
+            `Classroom API error (${response.status}).`
+        );
+
+    }
+
+
+    return data;
+
+}
+
+
+// ---------- Pemilih kelas Classroom ----------
+
+function loadClassroomCourseSelection() {
+
+    try {
+
+        const raw =
+            localStorage.getItem(
+                CLASSROOM_COURSE_KEY
+            );
+
+        return raw ? JSON.parse(raw) : null;
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        return null;
+
+    }
+
+}
+
+
+function saveClassroomCourseSelection(ids) {
+
+    localStorage.setItem(
+        CLASSROOM_COURSE_KEY,
+        JSON.stringify(ids)
+    );
+
+}
+
+
+function renderClassroomPicker(courses) {
+
+    const stored =
+        loadClassroomCourseSelection();
+
+    classroomCourseList.innerHTML = "";
+
+
+    courses.forEach((course) => {
+
+        const label =
+            document.createElement("label");
+
+        label.className = "course-item";
+
+
+        const box =
+            document.createElement("input");
+
+        box.type = "checkbox";
+        box.value = String(course.id);
+        box.checked =
+            Array.isArray(stored)
+                ? stored.includes(String(course.id))
+                : true;
+
+
+        const name =
+            document.createElement("span");
+
+        name.textContent =
+            course.name ||
+            `Classroom ${course.id}`;
+
+
+        label.appendChild(box);
+        label.appendChild(name);
+
+        classroomCourseList.appendChild(label);
+
+    });
+
+
+    classroomPicker.classList.remove("hidden");
+
+}
+
+
+function selectedClassroomCourseIds() {
+
+    return Array.from(
+        classroomCourseList.querySelectorAll(
+            "input[type=checkbox]:checked"
+        )
+    ).map((box) => box.value);
+
+}
+
+
+classroomCourseList.addEventListener(
+    "change",
+    () => {
+
+        saveClassroomCourseSelection(
+            selectedClassroomCourseIds()
+        );
+
+    }
+);
+
+
+async function tryRenderClassroomPicker() {
+
+    try {
+
+        const result =
+            await classroomRest(
+                "/v1/courses?studentId=me&courseStates=ACTIVE"
+            );
+
+
+        if (Array.isArray(result.courses) &&
+            result.courses.length > 0) {
+
+            renderClassroomPicker(result.courses);
+
+        }
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+    }
+
+}
+
+
+// Ubah dueDate/dueDateTime milik Classroom -> YYYY-MM-DD
+function classroomDeadlineText(work) {
+
+    const due =
+        work.dueDate || work.dueDateTime;
+
+
+    if (!due || !due.year) {
+
+        return "";
+
+    }
+
+
+    const pad = (n) =>
+        String(n).padStart(2, "0");
+
+
+    return (
+        due.year +
+        "-" +
+        pad(due.month) +
+        "-" +
+        pad(due.day)
+    );
+
+}
+
+
+// ---------- SYNC CLASSROOM ----------
+
+classroomSync.addEventListener(
+    "click",
+    async () => {
+
+        if (!classroomTokenValid()) {
+
+            setClassroomLog(
+                "Connect Google Classroom first.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        if (!supabaseClient) {
+
+            setClassroomLog(
+                "Database client unavailable. Reload the page.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        classroomSync.disabled = true;
+        classroomSync.textContent = "SYNCING...";
+
+        setClassroomLog("Contacting Google Classroom...");
+
+
+        try {
+
+            // 1. Daftar kelas aktif
+            const result =
+                await classroomRest(
+                    "/v1/courses?studentId=me&courseStates=ACTIVE"
+                );
+
+
+            const courses =
+                (result.courses || []).filter(
+                    (course) => course.id
+                );
+
+
+            if (courses.length === 0) {
+
+                throw new Error(
+                    "No active classrooms found " +
+                    "on this Google account."
+                );
+
+            }
+
+
+            // 2. Pemilih kelas
+            renderClassroomPicker(courses);
+
+            const selected =
+                selectedClassroomCourseIds();
+
+
+            if (selected.length === 0) {
+
+                throw new Error(
+                    "Select at least one classroom, " +
+                    "then press SYNC again."
+                );
+
+            }
+
+            saveClassroomCourseSelection(selected);
+
+
+            const selectedSet =
+                new Set(selected.map(String));
+
+            const selectedCourses = courses.filter(
+                (course) =>
+                    selectedSet.has(String(course.id))
+            );
+
+
+            // 3. Coursework per kelas
+            setClassroomLog("Loading assignments...");
+
+
+            const assignments = [];
+
+
+            for (const course of selectedCourses) {
+
+                const work =
+                    await classroomRest(
+                        `/v1/courses/${course.id}/courseWork` +
+                        "?pageSize=100"
+                    );
+
+
+                (work.courseWork || []).forEach(
+                    (item) => {
+
+                        assignments.push({
+                            id: item.id,
+                            title: item.title,
+                            courseId: course.id,
+                            courseName: course.name,
+                            deadline:
+                                classroomDeadlineText(item)
+                        });
+
+                    }
+                );
+
+            }
+
+
+            // 4. Saring: harus ada deadline & belum lewat
+            const withDue =
+                assignments.filter(
+                    (item) => item.deadline !== ""
+                );
+
+            const skipped =
+                assignments.length - withDue.length;
+
+
+            const todayText =
+                unixToLocalDate(Date.now() / 1000);
+
+
+            const active = withDue.filter(
+                (item) =>
+                    item.deadline >= todayText
+            );
+
+            const expired =
+                withDue.length - active.length;
+
+
+            // 5. Existing tugas Classroom (anti dobel)
+            const {
+                data: existingRows,
+                error: existingError
+            } = await supabaseClient
+                .from("tasks")
+                .select("id, external_id, deadline")
+                .eq("source", "classroom");
+
+
+            if (existingError) {
+
+                throw new Error(
+                    existingError.message
+                );
+
+            }
+
+
+            const existingIdByExternalId = new Map();
+
+            (existingRows || []).forEach((row) => {
+
+                existingIdByExternalId.set(
+                    row.external_id,
+                    row.id
+                );
+
+            });
+
+
+            // 6. Insert / update
+            let created = 0;
+            let updated = 0;
+
+
+            for (const item of active) {
+
+                const externalId =
+                    `gc:${item.courseId}:${item.id}`;
+
+
+                const payload = {
+                    course: item.title,
+                    class_name:
+                        item.courseName || "-",
+                    deadline: item.deadline,
+                    category: "Classroom",
+                    source: "classroom",
+                    external_id: externalId,
+                    synced_at:
+                        new Date().toISOString()
+                };
+
+
+                const knownId =
+                    existingIdByExternalId.get(
+                        externalId
+                    );
+
+
+                if (knownId) {
+
+                    const {
+                        error: updateError
+                    } = await supabaseClient
+                        .from("tasks")
+                        .update({
+                            course: payload.course,
+                            class_name:
+                                payload.class_name,
+                            deadline: payload.deadline,
+                            category: payload.category,
+                            synced_at: payload.synced_at
+                        })
+                        .eq("id", knownId)
+                        .select("id");
+
+
+                    if (updateError) {
+
+                        throw new Error(
+                            updateError.message
+                        );
+
+                    }
+
+
+                    updated += 1;
+
+                }
+                else {
+
+                    const insertResult =
+                        await supabaseClient
+                            .from("tasks")
+                            .insert([payload])
+                            .select("id");
+
+
+                    if (insertResult.error) {
+
+                        throw new Error(
+                            insertResult.error.message
+                        );
+
+                    }
+
+
+                    created += 1;
+
+                }
+
+            }
+
+
+            // 6b. Bersihkan: kelas tidak dicentang
+            //     atau deadline sudah lewat
+            const staleRows = (existingRows || [])
+                .filter((row) => {
+
+                    const parts =
+                        String(row.external_id || "")
+                            .split(":");
+
+                    if (parts[0] !== "gc") {
+
+                        return false;
+
+                    }
+
+
+                    if (!selectedSet.has(parts[1])) {
+
+                        return true;
+
+                    }
+
+
+                    const deadline =
+                        String(row.deadline || "")
+                            .slice(0, 10);
+
+
+                    return (
+                        deadline !== "" &&
+                        deadline < todayText
+                    );
+
+                });
+
+
+            let removed = 0;
+
+
+            if (staleRows.length > 0) {
+
+                const {
+                    error: deleteError
+                } = await supabaseClient
+                    .from("tasks")
+                    .delete()
+                    .eq("source", "classroom")
+                    .in(
+                        "id",
+                        staleRows.map((row) => row.id)
+                    );
+
+
+                if (deleteError) {
+
+                    throw new Error(
+                        deleteError.message
+                    );
+
+                }
+
+
+                removed = staleRows.length;
+
+            }
+
+
+            const summary =
+                `Sync complete.\n` +
+                `New: ${created} • Updated: ${updated} • ` +
+                `No deadline (skipped): ${skipped}` +
+                (expired > 0
+                    ? ` • Expired (skipped): ${expired}`
+                    : "") +
+                (removed > 0
+                    ? `\nRemoved (unselected/expired): ${removed}`
+                    : "");
+
+
+            setClassroomLog(summary);
+
+            showToast(
+                `Classroom sync: ${created} new, ` +
+                `${updated} updated.`,
+                "success"
+            );
+
+
+            activateMenu(listMenu);
+
+            showOnly(taskListSection);
+
+            await loadTasks();
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+            setClassroomLog(
+                error.message || "Sync failed.",
+                "error"
+            );
+
+            showToast(
+                "Classroom sync failed: " +
+                (error.message || "unknown error"),
+                "error"
+            );
+
+        }
+        finally {
+
+            classroomSync.disabled = false;
+            classroomSync.textContent =
+                "⟳ SYNC ASSIGNMENTS FROM CLASSROOM";
+
+            renderClassroomStatus();
+
+        }
+
+    }
+);
+
+
+// Tangkap token redirect (jika halaman dibuka
+// dengan #access_token=... di URL) & render status
+captureClassroomHash();
+
+renderClassroomStatus();
 
 
 // =========================================================

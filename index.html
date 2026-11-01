@@ -882,7 +882,7 @@
 
                     <!-- GOOGLE CLASSROOM -->
 
-                    <div class="sync-card sync-card-pending">
+                    <div class="sync-card">
 
                         <div class="sync-card-head">
 
@@ -890,30 +890,199 @@
                                 GOOGLE CLASSROOM
                             </span>
 
-                            <span class="sync-badge sync-badge-pending">
-                                PHASE 2
+                            <span
+                                id="classroomBadge"
+                                class="sync-badge sync-badge-pending"
+                            >
+                                OFFLINE
                             </span>
 
                         </div>
 
                         <h3>
-                            Google Classroom API
+                            Google Classroom
                         </h3>
 
                         <p class="sync-note">
-                            Planned next: a one-time OAuth connection to your
-                            Google Classroom so assignments with due dates land
-                            here automatically. Requires a small setup in the
-                            Google Cloud Console.
+                            One-time setup with your own Google OAuth Client ID
+                            (free, ~2 minutes). Assignments with due dates are
+                            pulled straight from your enrolled Classroom courses.
+                            The token stays in this browser only.
                         </p>
+
+
+                        <div class="sso-hint">
+
+                            <strong>One-time setup (Google Cloud Console):</strong>
+
+                            1. Open
+                            <em>console.cloud.google.com</em> → create a project.<br>
+                            2. Enable <em>Google Classroom API</em>.<br>
+                            3. <em>Credentials → Create OAuth client ID → Web
+                            application</em>. Add these under
+                            <em>Authorized JavaScript origins</em>:
+                            <code>https://virst132109-glitch.github.io</code>
+                            and <em>Authorized redirect URIs</em>:
+                            <code>https://virst132109-glitch.github.io/task-vault/</code><br>
+                            4. <em>OAuth consent screen → External → Test users</em>
+                            → add every Google account that will sync
+                            (yours and your friends').<br>
+                            5. Copy the Client ID
+                            (<code>....apps.googleusercontent.com</code>) below.
+
+                        </div>
+
+
+                        <form id="classroomIdForm">
+
+                            <div class="form-group">
+
+                                <label for="classroomClientId">
+                                    OAUTH CLIENT ID
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="classroomClientId"
+                                    spellcheck="false"
+                                    autocomplete="off"
+                                    placeholder="1234567890-abc.apps.googleusercontent.com"
+                                >
+
+                            </div>
+
+                            <button
+                                type="submit"
+                                class="submit-button"
+                            >
+                                SAVE CLIENT ID
+                            </button>
+
+                        </form>
+
+
+                        <div
+                            id="classroomConnectArea"
+                            class="sso-flow hidden"
+                        >
+
+                            <button
+                                type="button"
+                                id="classroomConnect"
+                                class="sso-button"
+                            >
+                                1. CONNECT GOOGLE CLASSROOM (POPUP)
+                            </button>
+
+                            <small class="input-hint">
+                                A Google window opens — pick the account that is
+                                enrolled in your classes and allow access. The
+                                window closes itself when the token is captured.
+                                If the popup is blocked, use the manual paste below.
+                            </small>
+
+                            <button
+                                type="button"
+                                id="classroomAuthLink"
+                                class="sso-button"
+                            >
+                                MANUAL: OPEN AUTH LINK (NEW TAB)
+                            </button>
+
+                            <small class="input-hint">
+                                After allowing access you land on the Task Vault
+                                page with a long address. Copy the WHOLE address
+                                bar (<kbd>Ctrl</kbd>+<kbd>L</kbd> →
+                                <kbd>Ctrl</kbd>+<kbd>C</kbd>) and paste it below.
+                            </small>
+
+                            <div class="form-group">
+
+                                <label for="classroomPaste">
+                                    PASTE THE REDIRECT LINK (MANUAL FALLBACK)
+                                </label>
+
+                                <textarea
+                                    id="classroomPaste"
+                                    rows="2"
+                                    spellcheck="false"
+                                    placeholder="https://virst132109-glitch.github.io/task-vault/#access_token=..."
+                                ></textarea>
+
+                            </div>
+
+                            <button
+                                type="button"
+                                id="classroomPasteUse"
+                                class="sso-button"
+                            >
+                                2. USE PASTED LINK &amp; SAVE TOKEN
+                            </button>
+
+                        </div>
+
+
+                        <div class="sync-status-row">
+
+                            <div
+                                id="classroomStatus"
+                                class="sync-status"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                Not connected.
+                            </div>
+
+                            <button
+                                type="button"
+                                id="classroomForget"
+                                class="mini-button hidden"
+                            >
+                                FORGET TOKEN
+                            </button>
+
+                        </div>
+
+
+                        <div
+                            id="classroomPicker"
+                            class="course-picker hidden"
+                        >
+
+                            <div class="section-label">
+                                // ACTIVE CLASSROOMS — UNCHECK CLASSES YOU NO LONGER FOLLOW
+                            </div>
+
+                            <div
+                                id="classroomCourseList"
+                                class="course-list"
+                            ></div>
+
+                            <small class="input-hint">
+                                Only checked classrooms are synced. Tasks from
+                                unchecked classrooms are removed from the shared
+                                list on the next sync. Your choice is remembered in
+                                this browser.
+                            </small>
+
+                        </div>
+
 
                         <button
                             type="button"
+                            id="classroomSync"
                             class="sync-button"
                             disabled
                         >
-                            PLANNED
+                            ⟳ SYNC ASSIGNMENTS FROM CLASSROOM
                         </button>
+
+                        <div
+                            id="classroomSyncLog"
+                            class="sync-log"
+                            role="status"
+                            aria-live="polite"
+                        ></div>
 
                     </div>
 
