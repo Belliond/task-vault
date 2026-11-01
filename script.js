@@ -3141,12 +3141,108 @@ function renderTasks() {
     }
 
 
+    // Kelompokkan tugas berdasarkan mata kuliah
+    // (class_name) supaya daftar tidak menumpuk
+    // menjadi satu urutan panjang.
+
+    const groups = new Map();
+
     tasks.forEach((task) => {
 
-        const card =
-            createTaskCard(task);
+        const subject =
+            String(task.class_name || "").trim() ||
+            "UNASSIGNED";
 
-        taskContainer.appendChild(card);
+
+        if (!groups.has(subject)) {
+
+            groups.set(subject, []);
+
+        }
+
+
+        groups.get(subject).push(task);
+
+    });
+
+
+    // tasks sudah terurut deadline naik, jadi item
+    // pertama tiap grup = deadline terdekat.
+    // Urutkan grup: deadline paling dekat dulu,
+    // lalu nama mata kuliah (A-Z) sebagai pemecah
+    // seri.
+
+    const sortedGroups =
+        Array.from(groups.entries()).sort(
+            (a, b) => {
+
+                const aNext =
+                    a[1][0]?.deadline || "9999-99-99";
+
+                const bNext =
+                    b[1][0]?.deadline || "9999-99-99";
+
+
+                if (aNext !== bNext) {
+
+                    return aNext < bNext ? -1 : 1;
+
+                }
+
+
+                return a[0].localeCompare(b[0]);
+
+            }
+        );
+
+
+    sortedGroups.forEach(([subject, items]) => {
+
+        const group =
+            document.createElement("div");
+
+        group.className = "task-group";
+
+
+        const header =
+            document.createElement("div");
+
+        header.className = "task-group-header";
+
+
+        const title =
+            document.createElement("span");
+
+        title.className = "task-group-title";
+        title.textContent = subject;
+
+
+        const meta =
+            document.createElement("span");
+
+        meta.className = "task-group-meta";
+        meta.textContent =
+            `${items.length} TASK` +
+            `${items.length > 1 ? "S" : ""}` +
+            ` // NEXT: ${formatDate(items[0].deadline)}`;
+
+
+        header.appendChild(title);
+        header.appendChild(meta);
+
+        group.appendChild(header);
+
+
+        items.forEach((task) => {
+
+            group.appendChild(
+                createTaskCard(task)
+            );
+
+        });
+
+
+        taskContainer.appendChild(group);
 
     });
 
