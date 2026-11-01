@@ -1519,13 +1519,30 @@ moodleSync.addEventListener(
                 assignments.length - withDue.length;
 
 
+            // 4b. Saring yang sudah lewat deadline — tugas lama
+            // tidak boleh masuk, apalagi muncul lagi saat sync ulang.
+            // (Tugas yang deadline-nya hari ini masih dianggap aktif.)
+            const todayDateStr =
+                unixToLocalDate(Date.now() / 1000);
+
+
+            const active = withDue.filter(
+                (item) =>
+                    unixToLocalDate(item.duedate) >=
+                    todayDateStr
+            );
+
+            const expired =
+                withDue.length - active.length;
+
+
             // 5. Peta existing tugas Moodle (anti dobel)
             const {
                 data: existingRows,
                 error: existingError
             } = await supabaseClient
                 .from("tasks")
-                .select("id, external_id")
+                .select("id, external_id, deadline")
                 .eq("source", "moodle");
 
 
@@ -1562,7 +1579,7 @@ moodleSync.addEventListener(
             let updated = 0;
 
 
-            for (const item of withDue) {
+            for (const item of active) {
 
                 const externalId =
                     `assign:${item.courseId}:${item.id}`;
@@ -1650,21 +1667,46 @@ moodleSync.addEventListener(
             }
 
 
-            // 6b. Hapus tugas Moodle dari kelas yang tidak dicentang
-            const staleIds = (existingRows || [])
+            // 6b. Hapus tugas Moodle yang usang:
+            //     - dari kelas yang tidak dicentang
+            //     - atau sudah lewat deadline
+            const staleRows = (existingRows || [])
                 .filter((row) => {
 
                     const parts =
                         String(row.external_id || "")
                             .split(":");
 
+                    if (parts[0] !== "assign") {
+
+                        return false;
+
+                    }
+
+
+                    // Kelas tidak dicentang -> usang
+                    if (!selectedSet.has(parts[1])) {
+
+                        return true;
+
+                    }
+
+
+                    // Deadline sudah lewat -> usang
+                    const deadline =
+                        String(row.deadline || "")
+                            .slice(0, 10);
+
+
                     return (
-                        parts[0] === "assign" &&
-                        !selectedSet.has(parts[1])
+                        deadline !== "" &&
+                        deadline < todayDateStr
                     );
 
-                })
-                .map((row) => row.id);
+                });
+
+            const staleIds =
+                staleRows.map((row) => row.id);
 
 
             let removed = 0;
@@ -1697,8 +1739,11 @@ moodleSync.addEventListener(
                 `Sync complete.\n` +
                 `New: ${created} • Updated: ${updated} • ` +
                 `No deadline (skipped): ${skipped}` +
+                (expired > 0
+                    ? ` • Expired (skipped): ${expired}`
+                    : "") +
                 (removed > 0
-                    ? `\nRemoved (unselected courses): ${removed}`
+                    ? `\nRemoved (unselected/expired): ${removed}`
                     : "");
 
 
