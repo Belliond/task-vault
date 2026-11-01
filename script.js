@@ -15,11 +15,15 @@ const SUPABASE_KEY =
     "sb_publishable_NowNDOlf5_ysmjIvbUSZXw_esLgw4Eg";
 
 
+// Jika CDN Supabase gagal dimuat, jangan sampai seluruh script crash.
 const supabaseClient =
-    window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY
-    );
+    typeof window.supabase !== "undefined" &&
+    typeof window.supabase.createClient === "function"
+        ? window.supabase.createClient(
+            SUPABASE_URL,
+            SUPABASE_KEY
+        )
+        : null;
 
 
 // =========================================================
@@ -76,6 +80,66 @@ const totalTasks =
 const upcomingTasks =
     document.getElementById("upcomingTasks");
 
+const overdueTasks =
+    document.getElementById("overdueTasks");
+
+
+const mainContent =
+    document.getElementById("mainContent");
+
+
+// =========================================================
+// SYNC ELEMENT
+// =========================================================
+
+const syncMenu =
+    document.getElementById("syncMenu");
+
+const syncSection =
+    document.getElementById("syncSection");
+
+const moodleForm =
+    document.getElementById("moodleForm");
+
+const moodleUrl =
+    document.getElementById("moodleUrl");
+
+const moodleUsername =
+    document.getElementById("moodleUsername");
+
+const moodlePassword =
+    document.getElementById("moodlePassword");
+
+const moodleConnect =
+    document.getElementById("moodleConnect");
+
+const moodleForgetToken =
+    document.getElementById("moodleForgetToken");
+
+const moodleStatus =
+    document.getElementById("moodleStatus");
+
+const moodleSync =
+    document.getElementById("moodleSync");
+
+const syncLog =
+    document.getElementById("syncLog");
+
+const ssoLaunch =
+    document.getElementById("ssoLaunch");
+
+const ssoPaste =
+    document.getElementById("ssoPaste");
+
+const ssoUse =
+    document.getElementById("ssoUse");
+
+const coursePicker =
+    document.getElementById("coursePicker");
+
+const courseList =
+    document.getElementById("courseList");
+
 
 // =========================================================
 // EDIT MODAL
@@ -86,6 +150,26 @@ const editModal =
 
 const closeModal =
     document.getElementById("closeModal");
+
+
+// =========================================================
+// CONFIRM MODAL (pengganti window.confirm bawaan browser)
+// =========================================================
+
+const confirmModal =
+    document.getElementById("confirmModal");
+
+const confirmTitle =
+    document.getElementById("confirmTitle");
+
+const confirmMessage =
+    document.getElementById("confirmMessage");
+
+const confirmAccept =
+    document.getElementById("confirmAccept");
+
+const confirmCancel =
+    document.getElementById("confirmCancel");
 
 const editForm =
     document.getElementById("editForm");
@@ -153,15 +237,23 @@ function showToast(message, type = "info") {
 // NAVIGATION
 // =========================================================
 
+function openDashboard() {
+
+    homePage.classList.add("hidden");
+    dashboardPage.classList.remove("hidden");
+
+    loadTasks();
+
+    mainContent.focus();
+
+}
+
+
 enterDashboard.addEventListener(
     "click",
     () => {
 
-        homePage.classList.add("hidden");
-
-        dashboardPage.classList.remove("hidden");
-
-        loadTasks();
+        openDashboard();
 
     }
 );
@@ -182,6 +274,26 @@ function activateMenu(button) {
 }
 
 
+// Tampilkan hanya SATU section di area konten utama
+function showOnly(section) {
+
+    [
+        taskListSection,
+        scheduleSection,
+        addTaskSection,
+        syncSection
+    ].forEach((item) => {
+
+        item.classList.toggle(
+            "hidden",
+            item !== section
+        );
+
+    });
+
+}
+
+
 // LIST TUGAS
 
 listMenu.addEventListener(
@@ -190,11 +302,7 @@ listMenu.addEventListener(
 
         activateMenu(listMenu);
 
-        taskListSection.classList.remove("hidden");
-
-        scheduleSection.classList.add("hidden");
-
-        addTaskSection.classList.add("hidden");
+        showOnly(taskListSection);
 
         loadTasks();
 
@@ -210,11 +318,7 @@ scheduleMenu.addEventListener(
 
         activateMenu(scheduleMenu);
 
-        taskListSection.classList.add("hidden");
-
-        scheduleSection.classList.remove("hidden");
-
-        addTaskSection.classList.add("hidden");
+        showOnly(scheduleSection);
 
         renderSchedule();
 
@@ -230,11 +334,34 @@ addMenu.addEventListener(
 
         activateMenu(addMenu);
 
-        taskListSection.classList.add("hidden");
+        showOnly(addTaskSection);
 
-        scheduleSection.classList.add("hidden");
+    }
+);
 
-        addTaskSection.classList.remove("hidden");
+
+// SYNC LMS
+
+syncMenu.addEventListener(
+    "click",
+    () => {
+
+        activateMenu(syncMenu);
+
+        showOnly(syncSection);
+
+        renderMoodleStatus();
+
+
+        // Muat daftar kelas (untuk picker) kalau sudah connect
+        const config = loadMoodleConfig();
+
+
+        if (config?.token) {
+
+            tryRenderCoursePicker(config);
+
+        }
 
     }
 );
@@ -248,11 +375,7 @@ addTaskFromList.addEventListener(
 
         activateMenu(addMenu);
 
-        taskListSection.classList.add("hidden");
-
-        scheduleSection.classList.add("hidden");
-
-        addTaskSection.classList.remove("hidden");
+        showOnly(addTaskSection);
 
         document
             .getElementById("course")
@@ -317,19 +440,38 @@ taskForm.addEventListener(
         }
 
 
+        if (!supabaseClient) {
+
+            showToast(
+                "Database client is unavailable. Reload the page.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        const payload = {
+            course: course,
+            class_name: className,
+            deadline: deadline,
+            category: category,
+            status: status
+        };
+
+
+        let insertResult =
+            await supabaseClient
+                .from("tasks")
+                .insert([payload])
+                .select("id");
+
+
         const {
+            data: createdRows,
             error
-        } = await supabaseClient
-            .from("tasks")
-            .insert([
-                {
-                    course: course,
-                    class_name: className,
-                    deadline: deadline,
-                    category: category,
-                    status: status
-                }
-            ]);
+        } = insertResult;
 
 
         if (error) {
@@ -346,6 +488,18 @@ taskForm.addEventListener(
         }
 
 
+        if (!createdRows || createdRows.length === 0) {
+
+            showToast(
+                "Task was not created. Check the insert policy for anon access.",
+                "warning"
+            );
+
+            return;
+
+        }
+
+
         showToast("Task added to the matrix.", "success");
 
 
@@ -354,11 +508,1239 @@ taskForm.addEventListener(
 
         activateMenu(listMenu);
 
-        taskListSection.classList.remove("hidden");
-
-        addTaskSection.classList.add("hidden");
+        showOnly(taskListSection);
 
         await loadTasks();
+
+    }
+);
+
+
+// =========================================================
+// MOODLE SYNC (FASE 1)
+// =========================================================
+
+const MOODLE_STORAGE_KEY =
+    "ghost_matrix_moodle_auth";
+
+
+function loadMoodleConfig() {
+
+    try {
+
+        const raw =
+            localStorage.getItem(MOODLE_STORAGE_KEY);
+
+        return raw ? JSON.parse(raw) : null;
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        return null;
+
+    }
+
+}
+
+
+function saveMoodleConfig(config) {
+
+    localStorage.setItem(
+        MOODLE_STORAGE_KEY,
+        JSON.stringify(config)
+    );
+
+}
+
+
+function setMoodleStatus(message, type = "") {
+
+    moodleStatus.textContent = message;
+
+    moodleStatus.classList.toggle(
+        "success",
+        type === "success"
+    );
+
+    moodleStatus.classList.toggle(
+        "error",
+        type === "error"
+    );
+
+}
+
+
+function setSyncLog(message, type = "") {
+
+    syncLog.textContent = message;
+
+    syncLog.classList.toggle(
+        "error",
+        type === "error"
+    );
+
+}
+
+
+function renderMoodleStatus() {
+
+    const config = loadMoodleConfig();
+
+
+    if (config?.token) {
+
+        setMoodleStatus(
+            `Token stored • ${config.username || "?"} @ ${config.url}`,
+            "success"
+        );
+
+        moodleForgetToken.classList.remove("hidden");
+
+        moodleSync.disabled = false;
+
+        moodleConnect.textContent = "RECONNECT";
+
+        if (moodleUrl.value !== config.url) {
+
+            moodleUrl.value = config.url;
+
+        }
+
+        if (moodleUsername.value !== config.username) {
+
+            moodleUsername.value = config.username || "";
+
+        }
+
+    }
+    else {
+
+        setMoodleStatus(
+            "Not connected. Enter your Moodle account to obtain a token."
+        );
+
+        moodleForgetToken.classList.add("hidden");
+
+        moodleSync.disabled = true;
+
+        moodleConnect.textContent = "CONNECT & SAVE TOKEN";
+
+    }
+
+}
+
+
+// HTTP helper: Moodle REST memakai form-urlencoded (simple request,
+// lolos CORS tanpa preflight — server Moodle ITERA mengirim ACAO *)
+
+async function moodlePost(url, params) {
+
+    if (typeof fetch !== "function") {
+
+        throw new Error(
+            "This browser does not support fetch()."
+        );
+
+    }
+
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type":
+                "application/x-www-form-urlencoded"
+        },
+        body:
+            new URLSearchParams(params).toString()
+    });
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            `Moodle responded with HTTP ${response.status}.`
+        );
+
+    }
+
+
+    const text = await response.text();
+
+
+    try {
+
+        return JSON.parse(text);
+
+    }
+    catch (error) {
+
+        throw new Error(
+            "Unexpected (non-JSON) response from Moodle."
+        );
+
+    }
+
+}
+
+
+function normalizeSiteUrl(url) {
+
+    return String(url || "")
+        .trim()
+        .replace(/\/+$/, "");
+
+}
+
+
+function mapMoodleError(info) {
+
+    const code = info?.errorcode || "";
+
+
+    if (code === "invalidtoken") {
+
+        return "Token expired or revoked. Reconnect with your Moodle account.";
+
+    }
+
+
+    if (code === "invalidlogin") {
+
+        return "Wrong Moodle username or password.";
+
+    }
+
+
+    if (code === "invalidservice" ||
+        code === "webservicesnotenabled") {
+
+        return "Web services are disabled on this Moodle site.";
+
+    }
+
+
+    return (
+        info?.message ||
+        info?.error ||
+        "Unknown Moodle error."
+    );
+
+}
+
+
+async function moodleRest(config, params) {
+
+    const data = await moodlePost(
+        normalizeSiteUrl(config.url) +
+        "/webservice/rest/server.php",
+        {
+            wstoken: config.token,
+            moodlewsrestformat: "json",
+            ...params
+        }
+    );
+
+
+    if (data && data.errorcode) {
+
+        throw new Error(mapMoodleError(data));
+
+    }
+
+
+    return data;
+
+}
+
+
+function unixToLocalDate(unixSeconds) {
+
+    const date =
+        new Date(Number(unixSeconds) * 1000);
+
+    const pad = (n) =>
+        String(n).padStart(2, "0");
+
+
+    return (
+        date.getFullYear() +
+        "-" +
+        pad(date.getMonth() + 1) +
+        "-" +
+        pad(date.getDate())
+    );
+
+}
+
+
+function chunkArray(items, size) {
+
+    const chunks = [];
+
+    for (let i = 0; i < items.length; i += size) {
+
+        chunks.push(items.slice(i, i + size));
+
+    }
+
+    return chunks;
+
+}
+
+
+// CONNECT: tukar username+password -> token (sekali saja)
+
+moodleForm.addEventListener(
+    "submit",
+    async (event) => {
+
+        event.preventDefault();
+
+        setSyncLog("");
+
+
+        const url =
+            normalizeSiteUrl(moodleUrl.value);
+
+        const username =
+            moodleUsername.value.trim();
+
+        const password =
+            moodlePassword.value;
+
+
+        if (!username || !password) {
+
+            setMoodleStatus(
+                "Enter your Moodle username and password.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        moodleConnect.disabled = true;
+        moodleConnect.textContent = "REQUESTING TOKEN...";
+
+
+        try {
+
+            const data =
+                await moodlePost(
+                    url + "/login/token.php",
+                    {
+                        username: username,
+                        password: password,
+                        service: "moodle_mobile_app"
+                    }
+                );
+
+
+            if (!data.token) {
+
+                throw new Error(
+                    mapMoodleError(data)
+                );
+
+            }
+
+
+            saveMoodleConfig({
+                url: url,
+                username: username,
+                token: data.token
+            });
+
+            // Password TIDAK pernah disimpan
+            moodlePassword.value = "";
+
+            setMoodleStatus(
+                `Token stored • ${username} @ ${url}`,
+                "success"
+            );
+
+            setSyncLog(
+                "Token saved in this browser. Press SYNC to pull your assignments."
+            );
+
+            showToast("Moodle connection established.", "success");
+
+            tryRenderCoursePicker(loadMoodleConfig());
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+            setMoodleStatus(
+                error.message || "Connection failed.",
+                "error"
+            );
+
+        }
+        finally {
+
+            moodleConnect.disabled = false;
+
+
+            const config =
+                loadMoodleConfig();
+
+
+            if (config?.token) {
+
+                renderMoodleStatus();
+
+            }
+            else {
+
+                // Pertahankan pesan error yang baru muncul
+                moodleConnect.textContent =
+                    "CONNECT & SAVE TOKEN";
+
+            }
+
+        }
+
+    }
+);
+
+
+moodleForgetToken.addEventListener(
+    "click",
+    () => {
+
+        localStorage.removeItem(MOODLE_STORAGE_KEY);
+
+        moodleUsername.value = "";
+        moodlePassword.value = "";
+
+        setSyncLog("");
+
+        renderMoodleStatus();
+
+        showToast("Moodle token removed from this browser.", "warning");
+
+    }
+);
+
+
+// =========================================================
+// CONNECT VIA GOOGLE SSO (mekanisme resmi aplikasi Moodle)
+//  Akun kampus yang hanya bisa login Google tidak punya
+//  password lokal, sehingga token.php tidak berfungsi.
+//  Alur resminya: launch.php melempar token sebagai URL
+//  moodlemobile://token=base64(siteid:::wstoken[:::priv])
+//  setelah login Google. Pengguna menyalin URL hasil
+//  lemparan itu; di sini kita decode, verifikasi langsung
+//  ke server Moodle, lalu simpan tokennya.
+// =========================================================
+
+const MOODLE_SSO_KEY =
+    "ghost_matrix_moodle_sso";
+
+
+function decodeMoodleLaunch(pasted) {
+
+    const text =
+        String(pasted || "").trim();
+
+
+    if (!text) {
+
+        throw new Error(
+            "Paste the moodlemobile:// link first."
+        );
+
+    }
+
+
+    const match =
+        text.match(/token=([A-Za-z0-9+/=_-]+)/);
+
+
+    const blob =
+        match
+            ? match[1]
+            : (/^[A-Za-z0-9+/=_-]+$/.test(text)
+                ? text
+                : null);
+
+
+    if (!blob) {
+
+        throw new Error(
+            "That does not look like a moodlemobile://token=... link."
+        );
+
+    }
+
+
+    let decoded;
+
+
+    try {
+
+        const base64 =
+            blob
+                .replace(/-/g, "+")
+                .replace(/_/g, "/") +
+            "=".repeat((4 - (blob.length % 4)) % 4);
+
+        decoded = atob(base64);
+
+    }
+    catch (error) {
+
+        throw new Error(
+            "The pasted link could not be decoded."
+        );
+
+    }
+
+
+    const parts =
+        decoded.split(":::");
+
+    const token =
+        (parts[1] || "").trim();
+
+
+    if (!/^[A-Za-z0-9]{20,}$/.test(token)) {
+
+        throw new Error(
+            "Decoded link does not contain a valid token."
+        );
+
+    }
+
+
+    return token;
+
+}
+
+
+ssoLaunch.addEventListener(
+    "click",
+    () => {
+
+        const url =
+            normalizeSiteUrl(moodleUrl.value) ||
+            "https://kuliah2.itera.ac.id";
+
+
+        const passport =
+            "gtm" +
+            Date.now().toString(36) +
+            ":" +
+            Math.random().toString(36).slice(2) +
+            Math.random().toString(36).slice(2);
+
+
+        localStorage.setItem(
+            MOODLE_SSO_KEY,
+            JSON.stringify({
+                passport: passport,
+                url: url
+            })
+        );
+
+
+        const launchUrl =
+            url +
+            "/admin/tool/mobile/launch.php" +
+            "?service=moodle_mobile_app" +
+            "&passport=" + encodeURIComponent(passport) +
+            "&confirmed=1";
+
+
+        if (typeof window.open === "function") {
+
+            try {
+
+                window.open(launchUrl, "_blank");
+
+            }
+            catch (error) {
+
+                console.error(error);
+
+            }
+
+        }
+
+
+        setSyncLog(
+            "New tab opened. Log in with Google there, " +
+            "then paste the moodlemobile:// link below."
+        );
+
+    }
+);
+
+
+ssoUse.addEventListener(
+    "click",
+    async () => {
+
+        setSyncLog("");
+
+
+        let token;
+
+
+        try {
+
+            token =
+                decodeMoodleLaunch(ssoPaste.value);
+
+        }
+        catch (error) {
+
+            setMoodleStatus(error.message, "error");
+
+            return;
+
+        }
+
+
+        let pending = null;
+
+
+        try {
+
+            pending = JSON.parse(
+                localStorage.getItem(MOODLE_SSO_KEY)
+            );
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+        }
+
+
+        const url =
+            normalizeSiteUrl(
+                pending?.url || moodleUrl.value
+            ) ||
+            "https://kuliah2.itera.ac.id";
+
+
+        ssoUse.disabled = true;
+        ssoUse.textContent = "VERIFYING TOKEN...";
+
+
+        try {
+
+            const info =
+                await moodleRest(
+                    { url: url, token: token },
+                    { wsfunction: "core_webservice_get_site_info" }
+                );
+
+
+            saveMoodleConfig({
+                url: url,
+                username:
+                    info.username ||
+                    info.fullname ||
+                    "sso-user",
+                token: token
+            });
+
+
+            ssoPaste.value = "";
+
+            localStorage.removeItem(MOODLE_SSO_KEY);
+
+            renderMoodleStatus();
+
+            setSyncLog(
+                "SSO token verified and saved in this browser. " +
+                "Press SYNC to pull your assignments."
+            );
+
+            showToast(
+                "Moodle SSO connection established.",
+                "success"
+            );
+
+            tryRenderCoursePicker(loadMoodleConfig());
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+            setMoodleStatus(
+                error.message || "Token check failed.",
+                "error"
+            );
+
+        }
+        finally {
+
+            ssoUse.disabled = false;
+            ssoUse.textContent =
+                "2. USE PASTED LINK & SAVE TOKEN";
+
+        }
+
+    }
+);
+
+
+// =========================================================
+// PEMILIH KELAS (COURSE PICKER)
+//  Akun kampus sering masih terdaftar di kelas lama yang
+//  sudah tidak diikuti. Sebelum sync, pengguna memilih
+//  kelas aktif mana saja yang boleh masuk; tugas Moodle
+//  dari kelas yang tidak dicentang dihapus dari daftar.
+// =========================================================
+
+const MOODLE_COURSE_KEY =
+    "ghost_matrix_moodle_courses";
+
+
+function loadCourseSelection() {
+
+    try {
+
+        const raw =
+            localStorage.getItem(MOODLE_COURSE_KEY);
+
+        return raw ? JSON.parse(raw) : null;
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        return null;
+
+    }
+
+}
+
+
+function saveCourseSelection(ids) {
+
+    localStorage.setItem(
+        MOODLE_COURSE_KEY,
+        JSON.stringify(ids)
+    );
+
+}
+
+
+function renderCoursePicker(courses) {
+
+    const stored = loadCourseSelection();
+
+    courseList.innerHTML = "";
+
+
+    courses.forEach((course) => {
+
+        const label =
+            document.createElement("label");
+
+        label.className = "course-item";
+
+
+        const box =
+            document.createElement("input");
+
+        box.type = "checkbox";
+        box.value = String(course.id);
+        box.checked =
+            Array.isArray(stored)
+                ? stored.includes(String(course.id))
+                : true;
+
+
+        const name =
+            document.createElement("span");
+
+        name.textContent =
+            course.fullname ||
+            course.shortname ||
+            `Course ${course.id}`;
+
+
+        label.appendChild(box);
+        label.appendChild(name);
+
+        courseList.appendChild(label);
+
+    });
+
+
+    coursePicker.classList.remove("hidden");
+
+}
+
+
+function selectedCourseIds() {
+
+    return Array.from(
+        courseList.querySelectorAll(
+            "input[type=checkbox]:checked"
+        )
+    ).map((box) => box.value);
+
+}
+
+
+// Pilihan langsung diingat tiap checkbox diubah
+courseList.addEventListener(
+    "change",
+    () => {
+
+        saveCourseSelection(selectedCourseIds());
+
+    }
+);
+
+
+// Muat daftar kelas setelah connect (gagal = diam saja,
+// picker tetap muncul saat tombol SYNC ditekan)
+async function tryRenderCoursePicker(config) {
+
+    try {
+
+        const siteInfo =
+            await moodleRest(config, {
+                wsfunction: "core_webservice_get_site_info"
+            });
+
+
+        const courses =
+            await moodleRest(config, {
+                wsfunction: "core_enrol_get_users_courses",
+                userid: siteInfo.userid
+            });
+
+
+        if (Array.isArray(courses) &&
+            courses.length > 0) {
+
+            renderCoursePicker(courses);
+
+        }
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+    }
+
+}
+
+
+// SYNC: tarik daftar course + assignment, masukkan ke task ledger
+
+moodleSync.addEventListener(
+    "click",
+    async () => {
+
+        const config = loadMoodleConfig();
+
+
+        if (!config?.token) {
+
+            setSyncLog(
+                "Connect your Moodle account first.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        if (!supabaseClient) {
+
+            setSyncLog(
+                "Database client unavailable. Reload the page.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        moodleSync.disabled = true;
+        moodleSync.textContent = "SYNCING...";
+
+        setSyncLog("Contacting Moodle...");
+
+
+        try {
+
+            // 1. Validasi token + ambil id user
+            const siteInfo =
+                await moodleRest(config, {
+                    wsfunction: "core_webservice_get_site_info"
+                });
+
+
+            setSyncLog("Loading enrolled courses...");
+
+
+            // 2. Daftar mata kuliah semester ini
+            const courses =
+                await moodleRest(config, {
+                    wsfunction: "core_enrol_get_users_courses",
+                    userid: siteInfo.userid
+                });
+
+
+            if (!Array.isArray(courses) ||
+                courses.length === 0) {
+
+                throw new Error(
+                    "No enrolled courses found on this Moodle account."
+                );
+
+            }
+
+
+            const courseNameById = {};
+
+            courses.forEach((course) => {
+
+                courseNameById[course.id] =
+                    course.fullname ||
+                    course.shortname ||
+                    `Course ${course.id}`;
+
+            });
+
+
+            // 2b. pemilih kelas: tampilkan picker, baca pilihan
+            renderCoursePicker(courses);
+
+            const selected = selectedCourseIds();
+
+
+            if (selected.length === 0) {
+
+                throw new Error(
+                    "Select at least one course, then press SYNC again."
+                );
+
+            }
+
+            saveCourseSelection(selected);
+
+
+            const selectedSet =
+                new Set(selected.map(String));
+
+            const selectedCourses = courses.filter(
+                (course) =>
+                    selectedSet.has(String(course.id))
+            );
+
+
+            // 3. Semua assignment (dibagi per 20 course)
+            setSyncLog("Loading assignments...");
+
+            const assignments = [];
+
+
+            for (const group of
+                chunkArray(selectedCourses, 20)) {
+
+                const params = {
+                    wsfunction: "mod_assign_get_assignments"
+                };
+
+                group.forEach((course, index) => {
+
+                    params[`courseids[${index}]`] =
+                        course.id;
+
+                });
+
+
+                const result =
+                    await moodleRest(config, params);
+
+
+                (result.courses || []).forEach(
+                    (course) => {
+
+                        // Pertahanan kedua: abaikan course yang
+                        // tidak diminta / tidak dicentang
+                        if (!selectedSet.has(
+                            String(course.id)
+                        )) {
+
+                            return;
+
+                        }
+
+                        (course.assignments || []).forEach(
+                            (assignment) => {
+
+                                assignments.push({
+                                    id: assignment.id,
+                                    name: assignment.name,
+                                    duedate: assignment.duedate,
+                                    courseId: course.id
+                                });
+
+                            }
+                        );
+
+                    }
+                );
+
+            }
+
+
+            // 4. Hanya yang punya deadline
+            const withDue =
+                assignments.filter((item) =>
+                    Number(item.duedate) > 0
+                );
+
+            const skipped =
+                assignments.length - withDue.length;
+
+
+            // 5. Peta existing tugas Moodle (anti dobel)
+            const {
+                data: existingRows,
+                error: existingError
+            } = await supabaseClient
+                .from("tasks")
+                .select("id, external_id")
+                .eq("source", "moodle");
+
+
+            if (existingError) {
+
+                if (existingError.code === "42703") {
+
+                    throw new Error(
+                        "Missing sync columns. Run SUPABASE_SETUP.sql first."
+                    );
+
+                }
+
+
+                throw new Error(existingError.message);
+
+            }
+
+
+            const existingIdByExternalId = new Map();
+
+            (existingRows || []).forEach((row) => {
+
+                existingIdByExternalId.set(
+                    row.external_id,
+                    row.id
+                );
+
+            });
+
+
+            // 6. Insert / update per assignment
+            let created = 0;
+            let updated = 0;
+
+
+            for (const item of withDue) {
+
+                const externalId =
+                    `assign:${item.courseId}:${item.id}`;
+
+                const payload = {
+                    course: item.name,
+                    class_name:
+                        courseNameById[item.courseId] || "-",
+                    deadline:
+                        unixToLocalDate(item.duedate),
+                    category: "Moodle",
+                    source: "moodle",
+                    external_id: externalId,
+                    synced_at:
+                        new Date().toISOString()
+                };
+
+
+                const knownId =
+                    existingIdByExternalId.get(externalId);
+
+
+                if (knownId) {
+
+                    // Update data dasar SAJA — status pilihan user
+                    // (Pending/In Progress/Completed) tidak ditimpa.
+                    const {
+                        error: updateError
+                    } = await supabaseClient
+                        .from("tasks")
+                        .update({
+                            course: payload.course,
+                            class_name: payload.class_name,
+                            deadline: payload.deadline,
+                            category: payload.category,
+                            synced_at: payload.synced_at
+                        })
+                        .eq("id", knownId)
+                        .select("id");
+
+
+                    if (updateError) {
+
+                        throw new Error(updateError.message);
+
+                    }
+
+
+                    updated += 1;
+
+                }
+                else {
+
+                    let insertResult =
+                        await supabaseClient
+                            .from("tasks")
+                            .insert([payload])
+                            .select("id");
+
+
+                    // Fallback bila kolom migrasi belum ada
+                    if (insertResult.error &&
+                        insertResult.error.code === "42703") {
+
+                        throw new Error(
+                            "Missing sync columns. Run SUPABASE_SETUP.sql first."
+                        );
+
+                    }
+
+
+                    if (insertResult.error) {
+
+                        throw new Error(
+                            insertResult.error.message
+                        );
+
+                    }
+
+
+                    created += 1;
+
+                }
+
+            }
+
+
+            // 6b. Hapus tugas Moodle dari kelas yang tidak dicentang
+            const staleIds = (existingRows || [])
+                .filter((row) => {
+
+                    const parts =
+                        String(row.external_id || "")
+                            .split(":");
+
+                    return (
+                        parts[0] === "assign" &&
+                        !selectedSet.has(parts[1])
+                    );
+
+                })
+                .map((row) => row.id);
+
+
+            let removed = 0;
+
+
+            if (staleIds.length > 0) {
+
+                const {
+                    error: deleteError
+                } = await supabaseClient
+                    .from("tasks")
+                    .delete()
+                    .eq("source", "moodle")
+                    .in("id", staleIds);
+
+
+                if (deleteError) {
+
+                    throw new Error(deleteError.message);
+
+                }
+
+
+                removed = staleIds.length;
+
+            }
+
+
+            const summary =
+                `Sync complete.\n` +
+                `New: ${created} • Updated: ${updated} • ` +
+                `No deadline (skipped): ${skipped}` +
+                (removed > 0
+                    ? `\nRemoved (unselected courses): ${removed}`
+                    : "");
+
+
+            setSyncLog(summary);
+
+            showToast(
+                `Moodle sync: ${created} new, ${updated} updated.`,
+                "success"
+            );
+
+
+            // 7. Tampilkan hasilnya
+            activateMenu(listMenu);
+
+            showOnly(taskListSection);
+
+            await loadTasks();
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+            setSyncLog(
+                error.message || "Sync failed.",
+                "error"
+            );
+
+            showToast(
+                "Moodle sync failed: " +
+                (error.message || "unknown error"),
+                "error"
+            );
+
+        }
+        finally {
+
+            moodleSync.disabled = false;
+            moodleSync.textContent =
+                "⟳ SYNC ASSIGNMENTS FROM MOODLE";
+
+        }
 
     }
 );
@@ -368,11 +1750,73 @@ taskForm.addEventListener(
 // LOAD TASKS
 // =========================================================
 
-async function loadTasks() {
+function renderLoadingState() {
 
     taskContainer.innerHTML = "";
 
-    taskContainer.appendChild(emptyTask);
+
+    for (let i = 0; i < 3; i += 1) {
+
+        const skeleton =
+            document.createElement("div");
+
+        skeleton.className = "skeleton-card";
+        skeleton.setAttribute("aria-hidden", "true");
+
+        skeleton.innerHTML = `
+
+            <div>
+                <div class="skeleton-line short"></div>
+                <div class="skeleton-line tall" style="margin-top: 12px;"></div>
+                <div class="skeleton-line" style="margin-top: 12px; width: 45%;"></div>
+            </div>
+
+            <div>
+                <div class="skeleton-line short"></div>
+                <div class="skeleton-line" style="margin-top: 12px; width: 70%; height: 26px;"></div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+                <div class="skeleton-line" style="width: 80px; height: 40px;"></div>
+                <div class="skeleton-line" style="width: 80px; height: 40px;"></div>
+            </div>
+
+        `;
+
+        taskContainer.appendChild(skeleton);
+
+    }
+
+}
+
+
+function renderLoadError(message) {
+
+    taskContainer.innerHTML = `
+        <div class="empty-task">
+            <div class="empty-icon">!</div>
+            <h3>Data retrieval failed</h3>
+            <p>${escapeHtml(message)}</p>
+        </div>
+    `;
+
+}
+
+
+async function loadTasks() {
+
+    renderLoadingState();
+
+
+    if (!supabaseClient) {
+
+        renderLoadError(
+            "The database client failed to load. Check your internet connection and reload the page."
+        );
+
+        return;
+
+    }
 
 
     const {
@@ -390,13 +1834,7 @@ async function loadTasks() {
 
         console.error(error);
 
-        taskContainer.innerHTML = `
-            <div class="empty-task">
-                <div class="empty-icon">!</div>
-                <h3>Data retrieval failed</h3>
-                <p>${escapeHtml(error.message)}</p>
-            </div>
-        `;
+        renderLoadError(error.message);
 
         return;
 
@@ -558,7 +1996,7 @@ function createTaskCard(task) {
         "click",
         () => {
 
-            deleteTask(task.id);
+            deleteTask(task);
 
         }
     );
@@ -573,7 +2011,21 @@ function createTaskCard(task) {
 // EDIT TASK
 // =========================================================
 
+let lastFocusedElement = null;
+
+
+function isEditModalOpen() {
+
+    return !editModal.classList.contains("hidden");
+
+}
+
+
 function openEditModal(task) {
+
+    lastFocusedElement =
+        document.activeElement;
+
 
     editId.value =
         task.id;
@@ -596,6 +2048,8 @@ function openEditModal(task) {
 
     editModal.classList.remove("hidden");
 
+    editCourse.focus();
+
 }
 
 
@@ -613,9 +2067,49 @@ function normalizeDateInput(dateValue) {
 }
 
 
-function closeEditModal() {
+function closeEditModal(restoreFocus = true) {
 
     editModal.classList.add("hidden");
+
+    if (restoreFocus &&
+        lastFocusedElement &&
+        typeof lastFocusedElement.focus === "function") {
+
+        lastFocusedElement.focus();
+
+    }
+
+    lastFocusedElement = null;
+
+}
+
+
+// Karena list di-render ulang setelah simpan, elemen tombol lama sudah
+// dilepas dari DOM. Cari tombol berdasarkan id task terbaru, lalu fokuskan.
+function focusTaskButton(kind, id) {
+
+    const selector =
+        kind === "edit"
+            ? ".edit-button"
+            : ".delete-button";
+
+
+    const button =
+        Array.from(
+            taskContainer.querySelectorAll(selector)
+        ).find((item) => item.dataset.id === id);
+
+
+    if (button) {
+
+        button.focus();
+
+    }
+    else {
+
+        mainContent.focus();
+
+    }
 
 }
 
@@ -633,6 +2127,104 @@ editModal.addEventListener(
         if (event.target === editModal) {
 
             closeEditModal();
+
+        }
+
+    }
+);
+
+
+// KEYBOARD: ESC UNTUK TUTUP + FOCUS TRAP DI DALAM MODAL
+//  Berlaku untuk modal edit maupun modal konfirmasi hapus.
+
+document.addEventListener(
+    "keydown",
+    (event) => {
+
+        // Modal konfirmasi diprioritaskan: ia berada di lapisan
+        // teratas dan menunggu keputusan pengguna.
+        const activeModal =
+            isConfirmModalOpen()
+                ? confirmModal
+                : (isEditModalOpen()
+                    ? editModal
+                    : null);
+
+
+        if (!activeModal) {
+
+            return;
+
+        }
+
+
+        if (event.key === "Escape") {
+
+            event.preventDefault();
+
+
+            if (activeModal === confirmModal) {
+
+                closeConfirmModal(false);
+
+            }
+            else {
+
+                closeEditModal();
+
+            }
+
+
+            return;
+
+        }
+
+
+        if (event.key !== "Tab") {
+
+            return;
+
+        }
+
+
+        const focusable =
+            activeModal.querySelectorAll(
+                "button, input, select, textarea, a[href]"
+            );
+
+
+        if (focusable.length === 0) {
+
+            return;
+
+        }
+
+
+        const first = focusable[0];
+        const last =
+            focusable[focusable.length - 1];
+
+
+        if (event.shiftKey &&
+            document.activeElement === first) {
+
+            event.preventDefault();
+            last.focus();
+
+        }
+        else if (!event.shiftKey &&
+            document.activeElement === last) {
+
+            event.preventDefault();
+            first.focus();
+
+        }
+        else if (
+            !activeModal.contains(document.activeElement)
+        ) {
+
+            event.preventDefault();
+            first.focus();
 
         }
 
@@ -685,6 +2277,18 @@ editForm.addEventListener(
         }
 
 
+        if (!supabaseClient) {
+
+            showToast(
+                "Database client is unavailable. Reload the page.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
         const {
             data: updatedRows,
             error
@@ -730,9 +2334,138 @@ editForm.addEventListener(
         showToast("Task updated successfully.", "success");
 
 
-        closeEditModal();
+        closeEditModal(false);
 
         await loadTasks();
+
+        focusTaskButton("edit", id);
+
+    }
+);
+
+
+// =========================================================
+// CONFIRM MODAL (pengganti window.confirm bawaan browser)
+//  window.confirm memblokir thread dan tidak bisa di-styling,
+//  sehingga tampil asing di tema Ghost Matrix. Modal ini
+//  mengembalikan Promise<boolean> dan mengikuti perilaku
+//  aksesibilitas modal edit (Escape, focus trap, backdrop).
+// =========================================================
+
+let confirmResolver = null;
+let confirmReturnFocus = null;
+
+
+function isConfirmModalOpen() {
+
+    return !confirmModal.classList.contains("hidden");
+
+}
+
+
+function openConfirmModal({
+
+    title = "Confirm?",
+    message = "",
+    acceptLabel = "DELETE",
+    cancelLabel = "ABORT"
+
+}) {
+
+    return new Promise((resolve) => {
+
+        // Klik DELETE dua kali cepat: abaikan permintaan kedua,
+        // modal masih terbuka untuk permintaan pertama.
+        if (confirmResolver) {
+
+            resolve(false);
+
+            return;
+
+        }
+
+
+        confirmResolver = resolve;
+
+        confirmReturnFocus = document.activeElement;
+
+
+        confirmTitle.textContent = title;
+        confirmMessage.textContent = message;
+        confirmAccept.textContent = acceptLabel;
+        confirmCancel.textContent = cancelLabel;
+
+
+        confirmModal.classList.remove("hidden");
+
+        confirmCancel.focus();
+
+    });
+
+}
+
+
+function closeConfirmModal(result) {
+
+    confirmModal.classList.add("hidden");
+
+
+    if (confirmReturnFocus &&
+        typeof confirmReturnFocus.focus === "function") {
+
+        confirmReturnFocus.focus();
+
+    }
+
+    confirmReturnFocus = null;
+
+
+    const resolver = confirmResolver;
+
+    confirmResolver = null;
+
+
+    if (resolver) {
+
+        resolver(result);
+
+    }
+
+}
+
+
+function askConfirmation(message, options = {}) {
+
+    return openConfirmModal({
+        ...options,
+        message: message
+    });
+
+}
+
+
+confirmAccept.addEventListener(
+    "click",
+    () => closeConfirmModal(true)
+);
+
+
+confirmCancel.addEventListener(
+    "click",
+    () => closeConfirmModal(false)
+);
+
+
+confirmModal.addEventListener(
+    "click",
+    (event) => {
+
+        // Klik di area gelap luar = batal (sama seperti Escape)
+        if (event.target === confirmModal) {
+
+            closeConfirmModal(false);
+
+        }
 
     }
 );
@@ -742,11 +2475,32 @@ editForm.addEventListener(
 // DELETE TASK
 // =========================================================
 
-async function deleteTask(id) {
+async function deleteTask(task) {
+
+    const id = task?.id;
+
+
+    const label =
+        [task?.course, task?.class_name]
+            .filter(Boolean)
+            .join(" / ");
+
 
     const confirmation =
-        confirm(
-            "Delete this task from the matrix?"
+        await askConfirmation(
+            label
+                ? `"${label}" will be deleted from ` +
+                  "the matrix. This action is permanent " +
+                  "and visible to everyone sharing " +
+                  "the ledger."
+                : "Delete this task from the matrix? " +
+                  "This action is permanent and visible " +
+                  "to everyone sharing the ledger.",
+            {
+                title: label
+                    ? `Purge "${label}"?`
+                    : "Delete Task?"
+            }
         );
 
 
@@ -757,12 +2511,26 @@ async function deleteTask(id) {
     }
 
 
+    if (!supabaseClient) {
+
+        showToast(
+            "Database client is unavailable. Reload the page.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
     const {
+        data: deletedRows,
         error
     } = await supabaseClient
         .from("tasks")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
 
 
     if (error) {
@@ -779,10 +2547,36 @@ async function deleteTask(id) {
     }
 
 
+    if (!deletedRows || deletedRows.length === 0) {
+
+        showToast(
+            "No task was removed. Check the delete policy for anon access.",
+            "warning"
+        );
+
+        return;
+
+    }
+
+
     showToast("Task removed from the matrix.", "success");
 
 
     await loadTasks();
+
+    const remaining =
+        taskContainer.querySelector(".delete-button");
+
+    if (remaining) {
+
+        remaining.focus();
+
+    }
+    else {
+
+        mainContent.focus();
+
+    }
 
 }
 
@@ -809,6 +2603,56 @@ function updateStatistics() {
 
     upcomingTasks.textContent =
         upcoming.length;
+
+
+    const overdue =
+        tasks.filter((task) => {
+
+            return isOverdue(task);
+
+        });
+
+
+    overdueTasks.textContent =
+        overdue.length;
+
+}
+
+
+// =========================================================
+// TERLEWAT (DEADLINE LEBIH DARI HARI INI)
+// =========================================================
+
+function isOverdue(task) {
+
+    if (!task.deadline) {
+
+        return false;
+
+    }
+
+
+    const status =
+        String(task.status || "").trim();
+
+    if (status === "Completed" || status === "Selesai") {
+
+        return false;
+
+    }
+
+
+    const today =
+        startOfDay(new Date());
+
+
+    const target =
+        startOfDay(
+            new Date(task.deadline + "T00:00:00")
+        );
+
+
+    return target < today;
 
 }
 
@@ -934,27 +2778,6 @@ function getDeadlineInfo(deadline) {
     }
 
 
-    if (days === 1) {
-
-        return {
-            text: "1 DAY LEFT",
-            overdue: false
-        };
-
-    }
-
-
-    if (days <= 3) {
-
-        return {
-            text:
-                `${days} DAYS LEFT`,
-            overdue: false
-        };
-
-    }
-
-
     return {
         text:
             `${days} DAYS LEFT`,
@@ -995,7 +2818,7 @@ function formatDate(dateString) {
 
 
     return date.toLocaleDateString(
-        "id-ID",
+        "en-GB",
         {
             day: "2-digit",
             month: "short",
@@ -1176,10 +2999,3 @@ function escapeHtml(value) {
         .replace(/'/g, "&#039;");
 
 }
-
-
-// =========================================================
-// INIT
-// =========================================================
-
-renderSchedule();

@@ -1,10 +1,40 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Anonymous // Ghost Task Matrix</title>
+    <title>Ghost Task Matrix — Academic Task Manager</title>
+
+    <meta
+        name="description"
+        content="Ghost Task Matrix is a cyber-themed dashboard for tracking academic assignments, deadlines, and lecture schedules."
+    >
+    <meta name="theme-color" content="#030b09">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Ghost Task Matrix — Academic Task Manager">
+    <meta
+        property="og:description"
+        content="Track assignments, deadlines, and lecture schedules in a cyber-themed terminal dashboard."
+    >
+    <meta
+        property="og:image"
+        content="https://raw.githubusercontent.com/virst132109-glitch/task-vault/main/BackGround.webp"
+    >
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Ghost Task Matrix — Academic Task Manager">
+    <meta
+        name="twitter:description"
+        content="Track assignments, deadlines, and lecture schedules in a cyber-themed terminal dashboard."
+    >
+    <meta
+        name="twitter:image"
+        content="https://raw.githubusercontent.com/virst132109-glitch/task-vault/main/BackGround.webp"
+    >
+
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
     <link rel="stylesheet" href="style.css">
 </head>
@@ -162,6 +192,16 @@
                     Add / Remove
                 </button>
 
+
+                <button
+                    class="menu-button"
+                    id="syncMenu"
+                    type="button"
+                >
+                    <span>⇄</span>
+                    Sync LMS
+                </button>
+
             </nav>
 
 
@@ -180,7 +220,7 @@
              KONTEN UTAMA
         ================================================== -->
 
-        <main class="main-content">
+        <main class="main-content" id="mainContent" tabindex="-1">
 
 
             <!-- TOP BAR -->
@@ -216,7 +256,7 @@
                             // TASK DATABASE
                         </div>
 
-                        <h1>Task Ledger</h1>
+                        <h2>Task Ledger</h2>
 
                         <p>
                             Track and manage your academic assignments.
@@ -278,6 +318,27 @@
 
                         <p>
                             Due in ≤ 3 days
+                        </p>
+
+                    </div>
+
+
+                    <div class="stat-card">
+
+                        <div class="stat-header">
+                            OVERDUE
+                            <span>03</span>
+                        </div>
+
+                        <div
+                            id="overdueTasks"
+                            class="stat-number"
+                        >
+                            0
+                        </div>
+
+                        <p>
+                            Past deadline
                         </p>
 
                     </div>
@@ -354,9 +415,9 @@
                             // ACADEMIC MATRIX
                         </div>
 
-                        <h1>
+                        <h2>
                             Lecture Schedule
-                        </h1>
+                        </h2>
 
                         <p>
                             Your current semester schedule.
@@ -383,6 +444,10 @@
                 <div class="table-wrapper">
 
                     <table class="schedule-table">
+
+                        <caption class="visually-hidden">
+                            Lecture schedule for the fall 2026 / 2027 semester
+                        </caption>
 
                         <thead>
 
@@ -431,9 +496,9 @@
                             // TASK CONTROL
                         </div>
 
-                        <h1>
+                        <h2>
                             Manage Tasks
-                        </h1>
+                        </h2>
 
                         <p>
                             Create a new coursework task.
@@ -566,6 +631,298 @@
             </section>
 
 
+            <!-- =================================================
+                 SYNC LMS (MOODLE + CLASSROOM)
+            ================================================== -->
+
+            <section
+                id="syncSection"
+                class="hidden"
+            >
+
+                <div class="page-header">
+
+                    <div>
+
+                        <div class="section-label">
+                            // EXTERNAL UPLINK
+                        </div>
+
+                        <h2>
+                            Sync LMS
+                        </h2>
+
+                        <p>
+                            Pull assignments from your university LMS automatically.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="sync-grid">
+
+
+                    <!-- MOODLE -->
+
+                    <div class="sync-card">
+
+                        <div class="sync-card-head">
+
+                            <span class="sync-badge">
+                                MOODLE
+                            </span>
+
+                            <span class="sync-badge sync-badge-live">
+                                LIVE
+                            </span>
+
+                        </div>
+
+                        <h3>
+                            University e-learning
+                        </h3>
+
+                        <p class="sync-note">
+                            Connect once with your Moodle account. The site
+                            exchanges your credentials for an access token
+                            through the official
+                            <code>/login/token.php</code> endpoint — the same
+                            mechanism the Moodle mobile app uses.
+                        </p>
+
+
+                        <div class="sso-hint">
+                            <strong>Log in to kuliah2.itera.ac.id with Google? (SSO account)</strong>
+                            Your account has no Moodle password, so username + password
+                            below can never work. Use the official SSO hand-off instead —
+                            the same mechanism the Moodle mobile app uses:
+                        </div>
+
+
+                        <div class="sso-flow">
+
+                            <button
+                                type="button"
+                                id="ssoLaunch"
+                                class="sso-button"
+                            >
+                                1. OPEN GOOGLE LOGIN (NEW TAB)
+                            </button>
+
+                            <small class="input-hint">
+                                Log in with Google in the new tab. When the result page
+                                appears, copy its address: right-click the
+                                "Click here to launch the app" link →
+                                <em>Copy link address</em> — or press
+                                <kbd>Ctrl</kbd>+<kbd>L</kbd> then <kbd>Ctrl</kbd>+<kbd>C</kbd>
+                                on the address bar. The address starts with
+                                <code>moodlemobile://token=</code>. Paste it below.
+                            </small>
+
+                            <div class="form-group">
+
+                                <label for="ssoPaste">
+                                    PASTE THE MOBILE HAND-OFF LINK
+                                </label>
+
+                                <textarea
+                                    id="ssoPaste"
+                                    rows="2"
+                                    spellcheck="false"
+                                    placeholder="moodlemobile://token=..."
+                                ></textarea>
+
+                            </div>
+
+                            <button
+                                type="button"
+                                id="ssoUse"
+                                class="sso-button"
+                            >
+                                2. USE PASTED LINK &amp; SAVE TOKEN
+                            </button>
+
+                        </div>
+
+
+                        <form id="moodleForm">
+
+                            <div class="form-group">
+
+                                <label for="moodleUrl">
+                                    SITE URL
+                                </label>
+
+                                <input
+                                    type="url"
+                                    id="moodleUrl"
+                                    value="https://kuliah2.itera.ac.id"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="moodleUsername">
+                                    MOODLE USERNAME
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="moodleUsername"
+                                    autocomplete="username"
+                                    placeholder="Example: krisna.124140152"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="moodlePassword">
+                                    MOODLE PASSWORD
+                                </label>
+
+                                <input
+                                    type="password"
+                                    id="moodlePassword"
+                                    autocomplete="current-password"
+                                    placeholder="Leave empty if a token is already saved"
+                                >
+
+                                <small class="input-hint">
+                                    Your password is sent only to the Moodle site over
+                                    HTTPS to obtain a token, and is never stored.
+                                    The token itself stays in this browser.
+                                </small>
+
+                            </div>
+
+
+                            <button
+                                type="submit"
+                                class="submit-button"
+                                id="moodleConnect"
+                            >
+                                CONNECT &amp; SAVE TOKEN
+                            </button>
+
+                        </form>
+
+
+                        <div class="sync-status-row">
+
+                            <div
+                                id="moodleStatus"
+                                class="sync-status"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                Not connected.
+                            </div>
+
+                            <button
+                                type="button"
+                                id="moodleForgetToken"
+                                class="mini-button hidden"
+                            >
+                                FORGET TOKEN
+                            </button>
+
+                        </div>
+
+
+                        <div
+                            id="coursePicker"
+                            class="course-picker hidden"
+                        >
+
+                            <div class="section-label">
+                                // ACTIVE COURSES — UNCHECK CLASSES YOU NO LONGER FOLLOW
+                            </div>
+
+                            <div
+                                id="courseList"
+                                class="course-list"
+                            ></div>
+
+                            <small class="input-hint">
+                                Only checked courses are synced. Moodle tasks from
+                                unchecked courses are removed from the shared list
+                                on the next sync. Your choice is remembered in
+                                this browser.
+                            </small>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="moodleSync"
+                            class="sync-button"
+                            disabled
+                        >
+                            ⟳ SYNC ASSIGNMENTS FROM MOODLE
+                        </button>
+
+                        <div
+                            id="syncLog"
+                            class="sync-log"
+                            role="status"
+                            aria-live="polite"
+                        ></div>
+
+                    </div>
+
+
+                    <!-- GOOGLE CLASSROOM -->
+
+                    <div class="sync-card sync-card-pending">
+
+                        <div class="sync-card-head">
+
+                            <span class="sync-badge">
+                                GOOGLE CLASSROOM
+                            </span>
+
+                            <span class="sync-badge sync-badge-pending">
+                                PHASE 2
+                            </span>
+
+                        </div>
+
+                        <h3>
+                            Google Classroom API
+                        </h3>
+
+                        <p class="sync-note">
+                            Planned next: a one-time OAuth connection to your
+                            Google Classroom so assignments with due dates land
+                            here automatically. Requires a small setup in the
+                            Google Cloud Console.
+                        </p>
+
+                        <button
+                            type="button"
+                            class="sync-button"
+                            disabled
+                        >
+                            PLANNED
+                        </button>
+
+                    </div>
+
+
+                </div>
+
+            </section>
+
+
         </main>
 
     </section>
@@ -580,6 +937,9 @@
     <div
         id="editModal"
         class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="editModalTitle"
     >
 
         <div class="modal-content">
@@ -588,6 +948,7 @@
                 id="closeModal"
                 class="modal-close"
                 type="button"
+                aria-label="Close edit dialog"
             >
                 ×
             </button>
@@ -597,7 +958,7 @@
                 // EDIT SIGNAL
             </div>
 
-            <h2>
+            <h2 id="editModalTitle">
                 Edit Task
             </h2>
 
@@ -700,10 +1061,71 @@
 
 
     <!-- =====================================================
+         MODAL KONFIRMASI HAPUS (pengganti confirm() bawaan)
+    ====================================================== -->
+
+    <div
+        id="confirmModal"
+        class="modal hidden"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirmTitle"
+        aria-describedby="confirmMessage"
+    >
+
+        <div class="modal-content confirm-content">
+
+            <div class="section-label">
+                // PURGE PROTOCOL
+            </div>
+
+            <h2 id="confirmTitle">
+                Delete Task?
+            </h2>
+
+            <p
+                id="confirmMessage"
+                class="confirm-message"
+            >
+                Delete this task from the matrix?
+            </p>
+
+
+            <div class="confirm-actions">
+
+                <button
+                    type="button"
+                    id="confirmCancel"
+                    class="confirm-cancel"
+                >
+                    ABORT
+                </button>
+
+                <button
+                    type="button"
+                    id="confirmAccept"
+                    class="confirm-accept"
+                >
+                    DELETE
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
          SUPABASE
     ====================================================== -->
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
+        integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+    ></script>
 
     <script src="script.js"></script>
 
