@@ -3127,6 +3127,66 @@ async function loadTasks() {
 // RENDER TASK
 // =========================================================
 
+// =========================================================
+// TASK GROUP DROPDOWN
+//  Status buka/tutup tiap matakuliah disimpan di
+//  browser supaya pilihan user bertahan setelah
+//  reload.
+// =========================================================
+
+const TASK_GROUP_KEY =
+    "ghost_matrix_task_groups_collapsed";
+
+
+function loadCollapsedSubjects() {
+
+    try {
+
+        const raw =
+            localStorage.getItem(TASK_GROUP_KEY);
+
+        const list = raw ? JSON.parse(raw) : [];
+
+        return Array.isArray(list) ? list : [];
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        return [];
+
+    }
+
+}
+
+
+function toggleCollapsedSubject(subject, collapsed) {
+
+    const list =
+        new Set(loadCollapsedSubjects());
+
+
+    if (collapsed) {
+
+        list.add(subject);
+
+    }
+    else {
+
+        list.delete(subject);
+
+    }
+
+
+    localStorage.setItem(
+        TASK_GROUP_KEY,
+        JSON.stringify(Array.from(list))
+    );
+
+}
+
+
 function renderTasks() {
 
     taskContainer.innerHTML = "";
@@ -3196,18 +3256,37 @@ function renderTasks() {
         );
 
 
+    const collapsedSubjects =
+        new Set(loadCollapsedSubjects());
+
+
     sortedGroups.forEach(([subject, items]) => {
+
+        const collapsed =
+            collapsedSubjects.has(subject);
+
 
         const group =
             document.createElement("div");
 
-        group.className = "task-group";
+        group.className =
+            "task-group" +
+            (collapsed
+                ? " task-group-collapsed"
+                : "");
 
+
+        // Header = tombol dropdown
 
         const header =
-            document.createElement("div");
+            document.createElement("button");
 
+        header.type = "button";
         header.className = "task-group-header";
+        header.setAttribute(
+            "aria-expanded",
+            String(!collapsed)
+        );
 
 
         const title =
@@ -3227,20 +3306,62 @@ function renderTasks() {
             ` // NEXT: ${formatDate(items[0].deadline)}`;
 
 
+        const chevron =
+            document.createElement("span");
+
+        chevron.className = "task-group-chevron";
+        chevron.textContent = "▾";
+        chevron.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+
         header.appendChild(title);
         header.appendChild(meta);
+        header.appendChild(chevron);
 
-        group.appendChild(header);
+
+        const cardsWrap =
+            document.createElement("div");
+
+        cardsWrap.className = "task-group-cards";
 
 
         items.forEach((task) => {
 
-            group.appendChild(
+            cardsWrap.appendChild(
                 createTaskCard(task)
             );
 
         });
 
+
+        header.addEventListener(
+            "click",
+            () => {
+
+                const nowCollapsed =
+                    group.classList.toggle(
+                        "task-group-collapsed"
+                    );
+
+                header.setAttribute(
+                    "aria-expanded",
+                    String(!nowCollapsed)
+                );
+
+                toggleCollapsedSubject(
+                    subject,
+                    nowCollapsed
+                );
+
+            }
+        );
+
+
+        group.appendChild(header);
+        group.appendChild(cardsWrap);
 
         taskContainer.appendChild(group);
 
