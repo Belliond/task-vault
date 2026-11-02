@@ -1304,15 +1304,13 @@ nav {
 
     display: flex;
 
-    align-items: center;
+    flex-direction: column;
 
-    flex-wrap: wrap;
-
-    gap: 8px 14px;
+    gap: 9px;
 
     width: 100%;
 
-    padding: 0 20px;
+    padding: 14px 20px;
 
     /* Sengaja TANPA kotak outline seperti kartu tugas:
        banner terang + strip aksen tebal = hierarki jelas */
@@ -1347,23 +1345,23 @@ nav {
 }
 
 
-/* Area klik buka/tutup grup (tanpa chip kelas) */
+/* Baris 1: judul matakuliah ......... chevron
+   (chevron selalu di ujung kanan, sejajar
+   antar-baris) */
 
 .task-group-toggle {
-
-    flex: 1 1 auto;
 
     display: flex;
 
     align-items: center;
 
-    flex-wrap: wrap;
+    justify-content: space-between;
 
-    gap: 8px 14px;
+    gap: 14px;
 
-    min-width: 0;
+    width: 100%;
 
-    padding: 15px 0;
+    padding: 0;
 
     border: none;
 
@@ -1385,6 +1383,24 @@ nav {
     outline: 2px solid var(--green);
 
     outline-offset: 2px;
+
+}
+
+
+/* Baris 2: meta (rata kiri) ..... chip kelas (rata
+   kanan) — posisi sama di setiap baris */
+
+.task-group-info {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    flex-wrap: wrap;
+
+    gap: 8px 14px;
 
 }
 
@@ -1445,8 +1461,6 @@ nav {
 
 
 .task-group-meta {
-
-    margin-left: auto;
 
     color: var(--green);
 
@@ -2900,7 +2914,7 @@ nav {
 
     .task-group-header {
 
-        padding: 0 15px;
+        padding: 13px 15px;
 
     }
 

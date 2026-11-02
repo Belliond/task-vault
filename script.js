@@ -3457,6 +3457,29 @@ function renderTasks() {
         title.textContent = subject;
 
 
+        const chevron =
+            document.createElement("span");
+
+        chevron.className = "task-group-chevron";
+        chevron.textContent = "▾";
+        chevron.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+
+        // Baris 1: judul ................ chevron
+        toggle.appendChild(title);
+        toggle.appendChild(chevron);
+
+
+        // Baris 2: meta (kiri) ......... chip (kanan)
+        const info =
+            document.createElement("div");
+
+        info.className = "task-group-info";
+
+
         const meta =
             document.createElement("span");
 
@@ -3484,22 +3507,11 @@ function renderTasks() {
                   }`;
 
 
-        const chevron =
-            document.createElement("span");
+        info.appendChild(meta);
 
-        chevron.className = "task-group-chevron";
-        chevron.textContent = "▾";
-        chevron.setAttribute(
-            "aria-hidden",
-            "true"
-        );
-
-
-        toggle.appendChild(title);
-        toggle.appendChild(meta);
-        toggle.appendChild(chevron);
 
         header.appendChild(toggle);
+        header.appendChild(info);
 
 
         // Chip filter kelas — hanya bila matkul ini
@@ -3568,7 +3580,7 @@ function renderTasks() {
             });
 
 
-            header.appendChild(classes);
+            info.appendChild(classes);
 
         }
 
@@ -3588,9 +3600,23 @@ function renderTasks() {
         });
 
 
-        toggle.addEventListener(
+        // Klik di mana pun pada banner (kecuali chip
+        // filter) membuka/menutup grup
+
+        header.addEventListener(
             "click",
-            () => {
+            (event) => {
+
+                if (
+                    event.target.closest?.(
+                        ".class-chip"
+                    )
+                ) {
+
+                    return;
+
+                }
+
 
                 const nowCollapsed =
                     group.classList.toggle(
