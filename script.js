@@ -70,6 +70,13 @@ const taskForm =
 const taskContainer =
     document.getElementById("taskContainer");
 
+
+const classFilter =
+    document.getElementById("classFilter");
+
+const classFilterList =
+    document.getElementById("classFilterList");
+
 const emptyTask =
     document.getElementById("emptyTask");
 
@@ -3128,6 +3135,172 @@ async function loadTasks() {
 // =========================================================
 
 // =========================================================
+// FILTER KELAS
+//  Kode kelas (RA/RB/RC/RD, dst.) menempel di judul
+//  tugas, mis. "Worksheet 3 (RD)" atau "… MINGGU 9 RD".
+//  Chip filter dibangun dari kode yang benar-benar ada
+//  di data. Pilihan disimpan di browser.
+// =========================================================
+
+const CLASS_FILTER_KEY =
+    "ghost_matrix_class_filter";
+
+
+function extractClassCode(title) {
+
+    const match =
+        String(title || "").match(
+            /\bR[A-Z]\b/i
+        );
+
+
+    return match
+        ? match[0].toUpperCase()
+        : "";
+
+}
+
+
+function loadClassFilter() {
+
+    try {
+
+        const value =
+            localStorage.getItem(CLASS_FILTER_KEY);
+
+        return value || "ALL";
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        return "ALL";
+
+    }
+
+}
+
+
+function saveClassFilter(code) {
+
+    localStorage.setItem(
+        CLASS_FILTER_KEY,
+        code
+    );
+
+}
+
+
+function renderClassFilter() {
+
+    const counts = new Map();
+
+    tasks.forEach((task) => {
+
+        const code =
+            extractClassCode(task.course);
+
+
+        if (code) {
+
+            counts.set(
+                code,
+                (counts.get(code) || 0) + 1
+            );
+
+        }
+
+    });
+
+
+    const codes =
+        Array.from(counts.keys()).sort();
+
+
+    // Tidak ada kode kelas di data -> sembunyikan
+    // seluruh bar filter
+
+    if (codes.length === 0) {
+
+        classFilter.classList.add("hidden");
+        classFilterList.innerHTML = "";
+
+        return;
+
+    }
+
+
+    classFilter.classList.remove("hidden");
+
+
+    // Pilihan tersimpan sudah tidak ada di data
+    // -> kembali ke ALL
+
+    let active = loadClassFilter();
+
+    if (active !== "ALL" && !counts.has(active)) {
+
+        active = "ALL";
+        saveClassFilter("ALL");
+
+    }
+
+
+    classFilterList.innerHTML = "";
+
+
+    const entries = [
+        ["ALL", tasks.length],
+        ...codes.map(
+            (code) => [code, counts.get(code)]
+        )
+    ];
+
+
+    entries.forEach(([code, count]) => {
+
+        const chip =
+            document.createElement("button");
+
+        chip.type = "button";
+        chip.dataset.code = code;
+
+        chip.className =
+            "class-chip" +
+            (code === active
+                ? " active"
+                : "");
+
+        chip.setAttribute(
+            "aria-pressed",
+            String(code === active)
+        );
+
+        chip.textContent =
+            `${code} · ${count}`;
+
+
+        chip.addEventListener(
+            "click",
+            () => {
+
+                saveClassFilter(code);
+
+                renderTasks();
+
+            }
+        );
+
+
+        classFilterList.appendChild(chip);
+
+    });
+
+}
+
+
+// =========================================================
 // TASK GROUP DROPDOWN
 //  Status buka/tutup tiap matakuliah disimpan di
 //  browser supaya pilihan user bertahan setelah
@@ -3191,8 +3364,45 @@ function renderTasks() {
 
     taskContainer.innerHTML = "";
 
+    renderClassFilter();
+
 
     if (tasks.length === 0) {
+
+        taskContainer.appendChild(emptyTask);
+
+        return;
+
+    }
+
+
+    // Terapkan filter kelas. Tugas tanpa kode kelas
+    // (Laporan Praktikum, pengumuman, dst.) selalu
+    // tampil di semua filter.
+
+    const activeFilter = loadClassFilter();
+
+
+    const visibleTasks =
+        activeFilter === "ALL"
+            ? tasks
+            : tasks.filter((task) => {
+
+                const code =
+                    extractClassCode(
+                        task.course
+                    );
+
+
+                return (
+                    code === "" ||
+                    code === activeFilter
+                );
+
+            });
+
+
+    if (visibleTasks.length === 0) {
 
         taskContainer.appendChild(emptyTask);
 
@@ -3207,7 +3417,7 @@ function renderTasks() {
 
     const groups = new Map();
 
-    tasks.forEach((task) => {
+    visibleTasks.forEach((task) => {
 
         const subject =
             String(task.class_name || "").trim() ||
