@@ -70,13 +70,6 @@ const taskForm =
 const taskContainer =
     document.getElementById("taskContainer");
 
-
-const classFilter =
-    document.getElementById("classFilter");
-
-const classFilterList =
-    document.getElementById("classFilterList");
-
 const emptyTask =
     document.getElementById("emptyTask");
 
@@ -3135,15 +3128,16 @@ async function loadTasks() {
 // =========================================================
 
 // =========================================================
-// FILTER KELAS
+// FILTER KELAS PER MATA KULIAH
 //  Kode kelas (RA/RB/RC/RD, dst.) menempel di judul
 //  tugas, mis. "Worksheet 3 (RD)" atau "… MINGGU 9 RD".
-//  Chip filter dibangun dari kode yang benar-benar ada
-//  di data. Pilihan disimpan di browser.
+//  Karena kelas user bisa berbeda tiap matkul, filternya
+//  menempel di header tiap grup — bukan global.
+//  Pilihan disimpan sebagai { "Nama Matkul": "RD" }.
 // =========================================================
 
 const CLASS_FILTER_KEY =
-    "ghost_matrix_class_filter";
+    "ghost_matrix_class_group_filters";
 
 
 function extractClassCode(title) {
@@ -3161,141 +3155,76 @@ function extractClassCode(title) {
 }
 
 
-function loadClassFilter() {
+function loadGroupFilters() {
 
     try {
 
-        const value =
+        const raw =
             localStorage.getItem(CLASS_FILTER_KEY);
 
-        return value || "ALL";
+        const parsed = raw ? JSON.parse(raw) : null;
+
+
+        return (
+            parsed &&
+            typeof parsed === "object" &&
+            !Array.isArray(parsed)
+                ? parsed
+                : {}
+        );
 
     }
     catch (error) {
 
         console.error(error);
 
-        return "ALL";
+        return {};
 
     }
 
 }
 
 
-function saveClassFilter(code) {
+// Pilihan untuk satu matkul. Kode yang sudah tidak
+// ada di grup dianggap ALL.
 
-    localStorage.setItem(
-        CLASS_FILTER_KEY,
-        code
+function getGroupFilter(subject, codes) {
+
+    const stored =
+        loadGroupFilters()[subject];
+
+
+    return (
+        stored && codes.includes(stored)
+            ? stored
+            : "ALL"
     );
 
 }
 
 
-function renderClassFilter() {
+function setGroupFilter(subject, code) {
 
-    const counts = new Map();
-
-    tasks.forEach((task) => {
-
-        const code =
-            extractClassCode(task.course);
+    const filters =
+        loadGroupFilters();
 
 
-        if (code) {
+    if (code === "ALL") {
 
-            counts.set(
-                code,
-                (counts.get(code) || 0) + 1
-            );
+        delete filters[subject];
 
-        }
+    }
+    else {
 
-    });
-
-
-    const codes =
-        Array.from(counts.keys()).sort();
-
-
-    // Tidak ada kode kelas di data -> sembunyikan
-    // seluruh bar filter
-
-    if (codes.length === 0) {
-
-        classFilter.classList.add("hidden");
-        classFilterList.innerHTML = "";
-
-        return;
+        filters[subject] = code;
 
     }
 
 
-    classFilter.classList.remove("hidden");
-
-
-    // Pilihan tersimpan sudah tidak ada di data
-    // -> kembali ke ALL
-
-    let active = loadClassFilter();
-
-    if (active !== "ALL" && !counts.has(active)) {
-
-        active = "ALL";
-        saveClassFilter("ALL");
-
-    }
-
-
-    classFilterList.innerHTML = "";
-
-
-    const entries = [
-        ["ALL", tasks.length],
-        ...codes.map(
-            (code) => [code, counts.get(code)]
-        )
-    ];
-
-
-    entries.forEach(([code, count]) => {
-
-        const chip =
-            document.createElement("button");
-
-        chip.type = "button";
-        chip.dataset.code = code;
-
-        chip.className =
-            "class-chip" +
-            (code === active
-                ? " active"
-                : "");
-
-        chip.setAttribute(
-            "aria-pressed",
-            String(code === active)
-        );
-
-        chip.textContent =
-            `${code} · ${count}`;
-
-
-        chip.addEventListener(
-            "click",
-            () => {
-
-                saveClassFilter(code);
-
-                renderTasks();
-
-            }
-        );
-
-
-        classFilterList.appendChild(chip);
-
-    });
+    localStorage.setItem(
+        CLASS_FILTER_KEY,
+        JSON.stringify(filters)
+    );
 
 }
 
@@ -3364,45 +3293,8 @@ function renderTasks() {
 
     taskContainer.innerHTML = "";
 
-    renderClassFilter();
-
 
     if (tasks.length === 0) {
-
-        taskContainer.appendChild(emptyTask);
-
-        return;
-
-    }
-
-
-    // Terapkan filter kelas. Tugas tanpa kode kelas
-    // (Laporan Praktikum, pengumuman, dst.) selalu
-    // tampil di semua filter.
-
-    const activeFilter = loadClassFilter();
-
-
-    const visibleTasks =
-        activeFilter === "ALL"
-            ? tasks
-            : tasks.filter((task) => {
-
-                const code =
-                    extractClassCode(
-                        task.course
-                    );
-
-
-                return (
-                    code === "" ||
-                    code === activeFilter
-                );
-
-            });
-
-
-    if (visibleTasks.length === 0) {
 
         taskContainer.appendChild(emptyTask);
 
@@ -3417,7 +3309,7 @@ function renderTasks() {
 
     const groups = new Map();
 
-    visibleTasks.forEach((task) => {
+    tasks.forEach((task) => {
 
         const subject =
             String(task.class_name || "").trim() ||
@@ -3476,6 +3368,58 @@ function renderTasks() {
             collapsedSubjects.has(subject);
 
 
+        // Kode kelas yang ada di matkul ini
+
+        const codeCounts = new Map();
+
+        items.forEach((task) => {
+
+            const code =
+                extractClassCode(task.course);
+
+
+            if (code) {
+
+                codeCounts.set(
+                    code,
+                    (codeCounts.get(code) || 0) + 1
+                );
+
+            }
+
+        });
+
+
+        const codes =
+            Array.from(codeCounts.keys()).sort();
+
+
+        const active =
+            getGroupFilter(subject, codes);
+
+
+        // Tugas tanpa kode kelas (Laporan Praktikum,
+        // pengumuman, dst.) selalu tampil
+
+        const visible =
+            active === "ALL"
+                ? items
+                : items.filter((task) => {
+
+                    const code =
+                        extractClassCode(
+                            task.course
+                        );
+
+
+                    return (
+                        code === "" ||
+                        code === active
+                    );
+
+                });
+
+
         const group =
             document.createElement("div");
 
@@ -3486,14 +3430,21 @@ function renderTasks() {
                 : "");
 
 
-        // Header = tombol dropdown
+        // Header = banner berisi tombol buka/tutup
+        // + chip filter kelas khusus matkul ini
 
         const header =
+            document.createElement("div");
+
+        header.className = "task-group-header";
+
+
+        const toggle =
             document.createElement("button");
 
-        header.type = "button";
-        header.className = "task-group-header";
-        header.setAttribute(
+        toggle.type = "button";
+        toggle.className = "task-group-toggle";
+        toggle.setAttribute(
             "aria-expanded",
             String(!collapsed)
         );
@@ -3510,10 +3461,27 @@ function renderTasks() {
             document.createElement("span");
 
         meta.className = "task-group-meta";
+
+
+        const filtered =
+            active !== "ALL" &&
+            visible.length !== items.length;
+
+
         meta.textContent =
-            `${items.length} TASK` +
-            `${items.length > 1 ? "S" : ""}` +
-            ` // NEXT: ${formatDate(items[0].deadline)}`;
+            filtered
+                ? `${visible.length}/` +
+                  `${items.length} TASKS // ` +
+                  `NEXT: ${
+                      formatDate(
+                          visible[0].deadline
+                      )
+                  }`
+                : `${items.length} TASK` +
+                  `${items.length > 1 ? "S" : ""}` +
+                  ` // NEXT: ${
+                      formatDate(items[0].deadline)
+                  }`;
 
 
         const chevron =
@@ -3527,9 +3495,82 @@ function renderTasks() {
         );
 
 
-        header.appendChild(title);
-        header.appendChild(meta);
-        header.appendChild(chevron);
+        toggle.appendChild(title);
+        toggle.appendChild(meta);
+        toggle.appendChild(chevron);
+
+        header.appendChild(toggle);
+
+
+        // Chip filter kelas — hanya bila matkul ini
+        // punya kode kelas di datanya
+
+        if (codes.length > 0) {
+
+            const classes =
+                document.createElement("div");
+
+            classes.className =
+                "task-group-classes";
+
+
+            const entries = [
+                ["ALL", items.length],
+                ...codes.map(
+                    (code) => [
+                        code,
+                        codeCounts.get(code)
+                    ]
+                )
+            ];
+
+
+            entries.forEach(([code, count]) => {
+
+                const chip =
+                    document.createElement("button");
+
+                chip.type = "button";
+                chip.dataset.code = code;
+
+                chip.className =
+                    "class-chip" +
+                    (code === active
+                        ? " active"
+                        : "");
+
+                chip.setAttribute(
+                    "aria-pressed",
+                    String(code === active)
+                );
+
+                chip.textContent =
+                    `${code} · ${count}`;
+
+
+                chip.addEventListener(
+                    "click",
+                    () => {
+
+                        setGroupFilter(
+                            subject,
+                            code
+                        );
+
+                        renderTasks();
+
+                    }
+                );
+
+
+                classes.appendChild(chip);
+
+            });
+
+
+            header.appendChild(classes);
+
+        }
 
 
         const cardsWrap =
@@ -3538,7 +3579,7 @@ function renderTasks() {
         cardsWrap.className = "task-group-cards";
 
 
-        items.forEach((task) => {
+        visible.forEach((task) => {
 
             cardsWrap.appendChild(
                 createTaskCard(task)
@@ -3547,7 +3588,7 @@ function renderTasks() {
         });
 
 
-        header.addEventListener(
+        toggle.addEventListener(
             "click",
             () => {
 
@@ -3556,7 +3597,7 @@ function renderTasks() {
                         "task-group-collapsed"
                     );
 
-                header.setAttribute(
+                toggle.setAttribute(
                     "aria-expanded",
                     String(!nowCollapsed)
                 );

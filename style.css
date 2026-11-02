@@ -1312,7 +1312,7 @@ nav {
 
     width: 100%;
 
-    padding: 15px 20px;
+    padding: 0 20px;
 
     /* Sengaja TANPA kotak outline seperti kartu tugas:
        banner terang + strip aksen tebal = hierarki jelas */
@@ -1328,10 +1328,6 @@ nav {
             rgba(0, 255, 156, 0.045) 55%,
             rgba(0, 255, 156, 0.008)
         );
-
-    cursor: pointer;
-
-    text-align: left;
 
     transition: 0.2s;
 
@@ -1351,11 +1347,72 @@ nav {
 }
 
 
-.task-group-header:focus-visible {
+/* Area klik buka/tutup grup (tanpa chip kelas) */
+
+.task-group-toggle {
+
+    flex: 1 1 auto;
+
+    display: flex;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 8px 14px;
+
+    min-width: 0;
+
+    padding: 15px 0;
+
+    border: none;
+
+    background: transparent;
+
+    color: inherit;
+
+    font: inherit;
+
+    text-align: left;
+
+    cursor: pointer;
+
+}
+
+
+.task-group-toggle:focus-visible {
 
     outline: 2px solid var(--green);
 
     outline-offset: 2px;
+
+}
+
+
+/* Chip filter kelas — di dalam header tiap matkul */
+
+.task-group-classes {
+
+    display: flex;
+
+    flex-wrap: wrap;
+
+    justify-content: flex-end;
+
+    gap: 6px;
+
+    margin-left: auto;
+
+}
+
+
+.task-group-classes .class-chip {
+
+    padding: 7px 11px;
+
+    font-size: 11px;
+
+    letter-spacing: 1px;
 
 }
 
@@ -1450,60 +1507,12 @@ nav {
 
 
 /* =========================================================
-   FILTER KELAS
+   CHIP FILTER KELAS (di header tiap mata kuliah)
 ========================================================= */
-
-.class-filter {
-
-    display: flex;
-
-    align-items: center;
-
-    flex-wrap: wrap;
-
-    gap: 10px 14px;
-
-    margin-top: 26px;
-
-    padding: 14px 16px;
-
-    border: 1px dashed rgba(77, 255, 178, 0.3);
-
-    background: rgba(0, 255, 156, 0.03);
-
-}
-
-
-.class-filter-label {
-
-    color: var(--green);
-
-    font-size: 11px;
-
-    font-weight: bold;
-
-    letter-spacing: 3px;
-
-    text-shadow:
-        0 0 10px rgba(0, 255, 156, 0.25);
-
-}
-
-
-.class-chip-list {
-
-    display: flex;
-
-    flex-wrap: wrap;
-
-    gap: 8px;
-
-}
-
 
 .class-chip {
 
-    padding: 9px 15px;
+    padding: 7px 12px;
 
     border: 1px solid rgba(77, 255, 178, 0.3);
 
@@ -1511,11 +1520,11 @@ nav {
 
     color: #a6c3ba;
 
-    font-size: 12px;
+    font-size: 11px;
 
     font-weight: bold;
 
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
 
     cursor: pointer;
 
@@ -1555,19 +1564,6 @@ nav {
     outline: 2px solid var(--green);
 
     outline-offset: 2px;
-
-}
-
-
-.class-filter-hint {
-
-    flex: 1 1 100%;
-
-    color: #6a877e;
-
-    font-size: 11px;
-
-    letter-spacing: 1px;
 
 }
 
@@ -2904,7 +2900,20 @@ nav {
 
     .task-group-header {
 
-        padding: 13px 15px;
+        padding: 0 15px;
+
+    }
+
+
+    /* Chip kelas turun ke barisnya sendiri di HP */
+
+    .task-group-classes {
+
+        flex: 1 1 100%;
+
+        justify-content: flex-start;
+
+        margin-left: 0;
 
     }
 
