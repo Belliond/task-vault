@@ -1862,7 +1862,7 @@ const CLASSROOM_SCOPES =
 // Halaman GitHub Pages dipakai sebagai tujuan redirect
 // (Google menerima https sebagai redirect URI).
 const CLASSROOM_REDIRECT =
-    "https://virst132109-glitch.github.io/task-vault/";
+    "https://belliond.github.io/task-vault/";
 
 
 function loadClassroomClient() {
