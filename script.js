@@ -4062,6 +4062,24 @@ async function muatDaftarFilter() {
 }
 
 
+// Apakah SEMUA pilihan pada satu daftar dilepas?
+//
+// Bentuknya: "hanya" kosong TAPI "kecuali" terisi — artinya
+// tidak ada satu pun yang dicentang. Kalau kondisi ini
+// tersimpan, sync sumber itu akan gagal setiap 4 jam karena
+// semua kelas/matkul tersaring keluar.
+function semuaDilepas(hasil) {
+
+    return Boolean(
+        hasil &&
+        hasil.berubah &&
+        !pecahDaftar(hasil.only).length &&
+        pecahDaftar(hasil.exclude).length
+    );
+
+}
+
+
 // Satu tombol menyimpan KEEMPAT nilai: filter Classroom dan
 // filter Moodle sekaligus.
 async function simpanFilterAutoSync() {
@@ -4135,6 +4153,28 @@ async function simpanFilterAutoSync() {
         };
 
         autoSyncDirty = false;
+
+        // Kalau SATU daftar dilepas semua centangnya, sync
+        // sumber itu akan gagal setiap 4 jam ("semua tersaring").
+        // Lebih baik diberitahu sekarang daripada baru ketahuan
+        // dari email kegagalan GitHub Actions.
+        const semuaDilepasSekarang = [
+            semuaDilepas(kelas) ? "Classroom" : "",
+            semuaDilepas(matkul) ? "Moodle" : ""
+        ].filter(Boolean);
+
+        if (semuaDilepasSekarang.length) {
+
+            setAutoSyncStatus(
+                "Tersimpan — tetapi SEMUA pilihan " +
+                semuaDilepasSekarang.join(" dan ") +
+                " dilepas. Sync sumber itu akan gagal setiap 4 jam " +
+                "sampai minimal satu dicentang lagi.",
+                "error"
+            );
+            return;
+
+        }
 
         setAutoSyncStatus(
             "Tersimpan. Sync otomatis berikutnya (tiap 4 jam) akan " +

@@ -91,7 +91,8 @@ const kode = [
     potong("renderPicker"),
     potong("tandaiBelumDisimpan"),
     potong("susunFilterDariCentang"),
-    "return { kelasDipakai, susunFilterDariCentang, renderPicker, setSettings: (s) => { autoSyncSettings = s; } };"
+    potong("semuaDilepas"),
+    "return { kelasDipakai, susunFilterDariCentang, renderPicker, semuaDilepas, setSettings: (s) => { autoSyncSettings = s; } };"
 ].join("\n\n");
 
 const api = new Function(kode)();
@@ -209,6 +210,34 @@ cek("belum termuat: berubah=false", hasilKosong.berubah, false);
 const hasilNull = api.susunFilterDariCentang(null, [], "classroom", { classroom_only: "abc" });
 cek("daftar null: only dipertahankan", hasilNull.only, "abc");
 cek("daftar null: berubah=false", hasilNull.berubah, false);
+
+// ---- 4. semuaDilepas -------------------------------------------
+
+console.log("\n=== semuaDilepas (semua centang dilepas) ===");
+
+cek(
+    "semua dilepas terdeteksi",
+    api.semuaDilepas({ only: "", exclude: "1016, 968", berubah: true }),
+    true
+);
+
+cek(
+    "sebagian dilepas bukan 'semua'",
+    api.semuaDilepas({ only: "968", exclude: "1016", berubah: true }),
+    false
+);
+
+cek(
+    "semua dicentang bukan 'semua dilepas'",
+    api.semuaDilepas({ only: "", exclude: "", berubah: true }),
+    false
+);
+
+cek(
+    "daftar belum termuat tidak dianggap dilepas",
+    api.semuaDilepas({ only: "", exclude: "", berubah: false }),
+    false
+);
 
 // ---- hasil ------------------------------------------------------
 
