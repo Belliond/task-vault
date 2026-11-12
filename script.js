@@ -3848,39 +3848,74 @@ function renderAutoSyncPicker() {
 }
 
 
-// Ambil daftar kelas dari Google Classroom memakai token
-// yang tersimpan di browser (dari bagian manual di bawah).
+// Ambil daftar kelas dari DATABASE, bukan dari Google.
+//
+// Dulu daftar diambil dari token OAuth di browser, sehingga
+// user harus menghubungkan akun manual dulu setiap kali token
+// (~1 jam) kedaluwarsa — hanya untuk melihat daftar kelas.
+// Sekarang server menyimpan daftar kelas tiap kali sync
+// berjalan, dan halaman ini cukup membacanya.
 async function muatKelasUntukFilter() {
 
     if (!autoSyncCourseList) {
         return;
     }
 
-    setAutoSyncStatus("Memuat daftar kelas dari Google Classroom…");
+    if (!supabaseClient) {
+        setAutoSyncStatus("Database belum terhubung.", "error");
+        return;
+    }
+
+    setAutoSyncStatus("Memuat daftar kelas…");
 
     try {
 
-        if (!classroomTokenValid()) {
-            throw new Error(
-                "Belum terhubung ke Google Classroom. Hubungkan dulu di " +
-                "bagian MANUAL di bawah, lalu kembali ke sini."
-            );
+        const { data, error } = await supabaseClient
+            .from("classroom_courses")
+            .select("course_id, name, section, course_state, seen_at")
+            .order("name", { ascending: true });
+
+        if (error) {
+            throw new Error(error.message);
         }
 
-        const data = await classroomRestAll(
-            "/v1/courses?studentId=me&courseStates=ACTIVE&courseStates=PROVISIONED",
-            "courses"
-        );
-
         autoSyncCourses = (data || [])
-            .filter((c) => c.id)
-            .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+            .filter((c) => c.course_id)
+            .map((c) => ({
+                id: c.course_id,
+                name: c.name || c.section || `Classroom ${c.course_id}`
+            }));
 
         await loadAutoSyncSettings();
         renderAutoSyncPicker();
 
+        if (!autoSyncCourses.length) {
+            setAutoSyncStatus(
+                "Belum ada daftar kelas. Daftar ini terisi otomatis oleh " +
+                "sync pertama (tiap 4 jam), atau jalankan sync manual sekali " +
+                "dari GitHub Actions.",
+                "error"
+            );
+            return;
+        }
+
+        // Sebutkan kapan daftar terakhir diperbarui supaya
+        // jelas umurnya.
+        const terbaru = (data || [])
+            .map((c) => c.seen_at)
+            .filter(Boolean)
+            .sort()
+            .pop();
+
+        const kapan = terbaru
+            ? new Date(terbaru).toLocaleString("id-ID", {
+                dateStyle: "medium",
+                timeStyle: "short"
+            })
+            : "tidak diketahui";
+
         setAutoSyncStatus(
-            `${autoSyncCourses.length} kelas dimuat. ` +
+            `${autoSyncCourses.length} kelas (diperbarui ${kapan}). ` +
             `Yang tidak dicentang tidak akan disinkronkan.`,
             "success"
         );
@@ -3888,7 +3923,10 @@ async function muatKelasUntukFilter() {
     }
     catch (error) {
 
-        setAutoSyncStatus(error.message, "error");
+        setAutoSyncStatus(
+            "Gagal memuat daftar kelas: " + error.message,
+            "error"
+        );
 
     }
 
@@ -4048,13 +4086,10 @@ function initAutoSync() {
         );
     }
 
-    // Muat pengaturan lebih dulu supaya centang langsung
-    // benar kalau daftar kelas sudah ada.
-    loadAutoSyncSettings().then(() => {
-        if (autoSyncCourses.length) {
-            renderAutoSyncPicker();
-        }
-    });
+    // Muat pengaturan DAN daftar kelas sekaligus saat halaman
+    // dibuka. Tidak perlu menghubungkan akun Google dulu —
+    // daftarnya sudah tersimpan di database oleh sync server.
+    muatKelasUntukFilter();
 
     tampilkanSyncTerakhir();
 

@@ -571,6 +571,59 @@ async function supabaseGet({ url, key }, query) {
 }
 
 
+// Simpan daftar kelas yang terlihat server ke database.
+//
+// Halaman web memakai ini untuk menampilkan pilihan filter,
+// supaya user tidak perlu menghubungkan akun Google dulu hanya
+// untuk melihat daftar kelas. Token OAuth di browser hanya
+// berlaku ~1 jam; daftar kelas tidak boleh bergantung padanya.
+async function simpanDaftarKelas({ url, key }, courses) {
+
+    if (!courses?.length) {
+        return;
+    }
+
+    const baris = courses.map((c) => ({
+        course_id: String(c.id),
+        name: String(c.name || ""),
+        section: String(c.section || ""),
+        course_state: String(c.courseState || ""),
+        seen_at: new Date().toISOString()
+    }));
+
+    try {
+
+        await ambilJson(
+            rapikanUrl(url) + "/rest/v1/classroom_courses?on_conflict=course_id",
+            {
+                method: "POST",
+                headers: {
+                    apikey: key,
+                    Authorization: "Bearer " + key,
+                    "Content-Type": "application/json",
+                    // Gabungkan bila sudah ada, jangan gagal.
+                    Prefer: "resolution=merge-duplicates,return=minimal"
+                },
+                body: JSON.stringify(baris)
+            }
+        );
+
+        console.log(`Daftar   : ${baris.length} kelas disimpan untuk halaman web`);
+
+    }
+    catch (error) {
+
+        // Jangan gagalkan sync hanya karena daftar kelas gagal
+        // disimpan; tugas tetap yang utama.
+        console.log(
+            "Daftar   : gagal disimpan (" + error.message.slice(0, 120) + ")"
+        );
+
+    }
+
+}
+
+
 // Baca pengaturan filter yang diubah dari halaman web.
 //
 // Tabel ini bukan rahasia — isinya cuma daftar kelas yang
@@ -1289,6 +1342,12 @@ async function syncClassroom({ classroom, supabase, hariIni, dryRun, env }) {
             "Kalau kelasnya diarsipkan, sync memang tidak mengambilnya."
         );
     }
+
+    // Daftar kelas disimpan supaya panel filter di halaman web
+    // bisa menampilkannya tanpa perlu token OAuth di browser.
+    // Tanpa ini, user harus "hubungkan manual" dulu setiap kali
+    // token browser kedaluwarsa hanya untuk melihat daftar.
+    await simpanDaftarKelas(supabase, semuaKelas);
 
     // Filter kelas opsional.
     //
