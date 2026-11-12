@@ -36,9 +36,10 @@ const supabaseClient =
 
 
 const CONFIG_HELP =
-    "Configuration missing. Copy .env.example to .env, " +
-    "fill in your Supabase URL and publishable key, then " +
-    "run `npm run env:build` and reload this page.";
+    "This site is not connected to its database yet. The deploy is " +
+    "missing the SUPABASE_URL and SUPABASE_KEY secrets, so config.js " +
+    "was never generated. Locally: copy .env.example to .env, fill in " +
+    "both values, then run `npm run env:build` and reload.";
 
 
 // =========================================================
@@ -3414,7 +3415,19 @@ function renderLoadingState() {
 }
 
 
+// Pesan kegagalan terakhir, atau null kalau data berhasil dimuat.
+// Dipakai bersama oleh halaman Tasks, direktori mata kuliah di
+// Beranda, dan ringkasan kalender supaya ketiganya tidak saling
+// bertentangan: dulu hanya #taskContainer yang diberi pesan,
+// sehingga Beranda tetap menampilkan "Loading course list"
+// selamanya saat config.js hilang (mis. di GitHub Pages yang
+// belum punya secret SUPABASE_URL).
+let loadFailureMessage = null;
+
+
 function renderLoadError(message) {
+
+    loadFailureMessage = message;
 
     taskContainer.innerHTML = `
         <div class="empty-task">
@@ -3423,6 +3436,27 @@ function renderLoadError(message) {
             <p>${escapeHtml(message)}</p>
         </div>
     `;
+
+
+    // Beranda dan kalender juga harus berhenti menampilkan
+    // placeholder loading. Keduanya bukan halaman terpisah,
+    // jadi tidak ikut tersentuh oleh renderLoadError di atas.
+    updateStatistics();
+    renderCourseDirectory();
+    renderCalendar();
+
+    if (calendarDayList && !calendarSelectedDate) {
+
+        calendarDayList.innerHTML = "";
+
+        calendarDayList.appendChild(
+            buildEmptyState(
+                "Data unavailable",
+                message
+            )
+        );
+
+    }
 
 }
 
@@ -3471,6 +3505,9 @@ async function loadTasks({ silent = false } = {}) {
 
         loadInFlight = false;
 
+        // Bukan silent: ini kegagalan total, dan pengguna sedang
+        // berada di Beranda. Tanpa ini, Beranda akan tertahan di
+        // "Loading course list" tanpa penjelasan apa pun.
         renderLoadError(
             CONFIG_MISSING
                 ? CONFIG_HELP
@@ -3528,8 +3565,10 @@ async function loadTasks({ silent = false } = {}) {
             console.error(error);
 
             // Refresh latar belakang yang gagal tidak boleh
-            // merusak daftar yang sudah tampil.
-            if (!silent) {
+            // merusak daftar yang sudah tampil. Tetapi kalau
+            // belum ada data sama sekali (mis. boot gagal),
+            // pengguna harus melihat penjelasannya.
+            if (!silent || tasks.length === 0) {
 
                 renderLoadError(error.message);
 
@@ -3541,6 +3580,10 @@ async function loadTasks({ silent = false } = {}) {
 
 
         tasks = data || [];
+
+        // Data berhasil dimuat: bersihkan penanda kegagalan agar
+        // pesan lama tidak tertinggal di Beranda.
+        loadFailureMessage = null;
 
 
         updateStatistics();
@@ -3556,7 +3599,7 @@ async function loadTasks({ silent = false } = {}) {
         // loading berputar selamanya tanpa penjelasan.
         console.error(error);
 
-        if (!silent) {
+        if (!silent || tasks.length === 0) {
 
             renderLoadError(
                 error?.message ||
@@ -4230,6 +4273,23 @@ function renderCourseDirectory() {
     courseDirectory.innerHTML = "";
 
 
+    // Kalau pemuatan data gagal, jangan biarkan placeholder
+    // "Loading course list" dari HTML bertahan selamanya —
+    // pengunjung tidak akan tahu ada yang salah.
+    if (loadFailureMessage) {
+
+        courseDirectory.appendChild(
+            buildEmptyState(
+                "Could not load courses",
+                loadFailureMessage
+            )
+        );
+
+        return;
+
+    }
+
+
     if (tasks.length === 0) {
 
         courseDirectory.appendChild(
@@ -4579,15 +4639,26 @@ function renderCalendar() {
 
     if (calendarMonthCount) {
 
-        calendarMonthCount.textContent =
-            monthTaskCount === 0
-                ? "NO DEADLINES"
-                : `${monthTaskCount} DEADLINE` +
-                  `${monthTaskCount > 1 ? "S" : ""} THIS MONTH`;
+        // Saat data gagal dimuat, "NO DEADLINES" akan menyesatkan:
+        // seolah memang tidak ada tugas. Bedakan keduanya.
+        if (loadFailureMessage) {
+
+            calendarMonthCount.textContent = "DATA UNAVAILABLE";
+
+        }
+        else {
+
+            calendarMonthCount.textContent =
+                monthTaskCount === 0
+                    ? "NO DEADLINES"
+                    : `${monthTaskCount} DEADLINE` +
+                      `${monthTaskCount > 1 ? "S" : ""} THIS MONTH`;
+
+        }
 
         calendarMonthCount.classList.toggle(
             "is-empty",
-            monthTaskCount === 0
+            monthTaskCount === 0 || Boolean(loadFailureMessage)
         );
 
     }
@@ -5826,6 +5897,18 @@ async function deleteTask(task) {
 // =========================================================
 
 function updateStatistics() {
+
+    // Saat data gagal dimuat, angka 0 akan menyesatkan: seolah
+    // memang tidak ada tugas. Tampilkan tanda hubung.
+    if (loadFailureMessage) {
+
+        totalTasks.textContent = "—";
+        upcomingTasks.textContent = "—";
+
+        return;
+
+    }
+
 
     totalTasks.textContent =
         tasks.length;

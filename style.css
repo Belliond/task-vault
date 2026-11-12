@@ -2752,6 +2752,25 @@ button {
     text-align: center;
 
     border: var(--border-w) dashed var(--border);
+    border-radius: var(--radius);
+
+    /* Latar panel: sejak panel dibuat semi-transparan, kotak tanpa
+       latar membuat teks foto/dekorasi menembus dan mengganggu
+       keterbacaan pesan kosong. */
+    background: var(--panel);
+
+}
+
+
+/* Di Beranda, .empty-task adalah anak langsung grid .course-directory
+   sehingga hanya menempati SATU kolom (sepertiga lebar) dan pesannya
+   memanjang ke bawah. Rentangkan penuh selebar grid. */
+
+.course-directory > .empty-task {
+
+    grid-column: 1 / -1;
+
+    padding: 56px 30px;
 
 }
 

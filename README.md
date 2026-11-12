@@ -155,6 +155,24 @@ saat deploy.
 3. Push ke `main`. Workflow membangun `config.js`, memverifikasinya, lalu
    menerbitkan situs.
 
+### Kalau situs terbit tapi kosong
+
+Gejalanya: Beranda menampilkan **"Could not load courses"**, kartu statistik
+menampilkan `—`, dan badge kalender berbunyi **DATA UNAVAILABLE**. Artinya
+`config.js` tidak ada, jadi aplikasi tidak punya URL/key Supabase.
+
+1. Cek `https://<user>.github.io/<repo>/config.js`. Kalau **404**, file itu
+   memang tidak pernah dibuat.
+2. Buka **Actions → Deploy to GitHub Pages**. Kalau gagal di step
+   *Check required secrets*, berarti `SUPABASE_URL` / `SUPABASE_KEY` belum
+   diisi — lihat langkah 1 di atas.
+3. Pastikan **Settings → Pages → Source** sudah **GitHub Actions**. Kalau
+   masih "Deploy from a branch", situs terbit dari branch tanpa `config.js`.
+4. Setelah secret diisi, jalankan **Re-run all jobs** (atau push commit baru).
+
+Aplikasi sengaja membedakan "tidak ada tugas" dari "data gagal dimuat", supaya
+halaman kosong tidak terbaca sebagai "memang tidak ada deadline".
+
 ---
 
 ## Setup database

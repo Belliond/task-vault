@@ -52,6 +52,21 @@ jobs:
         with:
           node-version: 20
 
+      - name: Check required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          # Tanpa dua secret ini, config.js tidak bisa dibuat dan situs
+          # akan terbit tanpa data. Gagal lebih awal dengan pesan yang
+          # menunjuk ke tempat pengisiannya.
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Secret SUPABASE_URL dan/atau SUPABASE_KEY belum diisi."
+            echo "::error::Buka Settings -> Secrets and variables -> Actions,"
+            echo "::error::lalu tambahkan keduanya (nilai ada di .env lokal)."
+            exit 1
+          fi
+
       - name: Generate config.js from secrets
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
