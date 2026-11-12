@@ -1240,9 +1240,7 @@
                         <p class="sync-note">
                             Kirim chat WhatsApp otomatis saat deadline sudah
                             dekat. Berjalan di server (pg_cron), jadi tetap
-                            terkirim walau situs sedang ditutup. Memakai
-                            <strong>CallMeBot</strong> — jalur gratis untuk
-                            nomor sendiri, satu arah.
+                            terkirim walau situs sedang ditutup.
                         </p>
 
 
@@ -1260,10 +1258,190 @@
                         </div>
 
 
+                        <!-- ==========================================
+                             PILIH JALUR PENGIRIMAN
+                             CallMeBot = gratis, tidak resmi, tapi
+                             pendaftaran barunya sedang ditutup.
+                             Meta = resmi, nomor test gratis, perlu
+                             setup sekali di Meta for Developers.
+                        ========================================== -->
+
+                        <div class="form-group">
+
+                            <label for="reminderProvider">
+                                JALUR PENGIRIMAN
+                            </label>
+
+                            <select id="reminderProvider">
+                                <option value="meta">
+                                    WhatsApp Cloud API resmi (nomor test gratis)
+                                </option>
+                                <option value="callmebot">
+                                    CallMeBot (gratis, tidak resmi)
+                                </option>
+                            </select>
+
+                        </div>
+
+
+                        <!-- ---------- PENGATURAN META ---------- -->
+
+                        <div
+                            id="reminderMetaFields"
+                            class="reminder-provider-fields"
+                        >
+
+                            <div class="reminder-row">
+
+                                <div class="form-group">
+
+                                    <label for="reminderMetaPhoneId">
+                                        PHONE NUMBER ID
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="reminderMetaPhoneId"
+                                        placeholder="123456789012345"
+                                        autocomplete="off"
+                                        inputmode="numeric"
+                                    />
+
+                                    <small class="input-hint">
+                                        Bukan nomor telepon. Ambil dari
+                                        Meta for Developers → WhatsApp →
+                                        API Setup, di bawah nomor pengirim.
+                                    </small>
+
+                                </div>
+
+                                <div class="form-group">
+
+                                    <label for="reminderMetaLang">
+                                        BAHASA TEMPLATE
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="reminderMetaLang"
+                                        placeholder="id"
+                                        autocomplete="off"
+                                    />
+
+                                    <small class="input-hint">
+                                        Kode bahasa template. <code>en_US</code>
+                                        untuk <code>hello_world</code>.
+                                    </small>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="reminder-row">
+
+                                <div class="form-group">
+
+                                    <label for="reminderMetaTemplate">
+                                        NAMA TEMPLATE
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        id="reminderMetaTemplate"
+                                        placeholder="deadline_reminder"
+                                        autocomplete="off"
+                                    />
+
+                                </div>
+
+                                <div class="form-group">
+
+                                    <label for="reminderMetaParams">
+                                        JUMLAH VARIABEL
+                                    </label>
+
+                                    <select id="reminderMetaParams">
+                                        <option value="0">
+                                            0 — tanpa variabel (hello_world)
+                                        </option>
+                                        <option value="4" selected>
+                                            4 — kapan, tugas, kelas, tanggal
+                                        </option>
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="reminderMetaToken">
+                                    ACCESS TOKEN
+                                </label>
+
+                                <input
+                                    type="password"
+                                    id="reminderMetaToken"
+                                    placeholder="Kosongkan untuk mempertahankan yang lama"
+                                    autocomplete="off"
+                                />
+
+                                <small class="input-hint">
+                                    Token sementara dari API Setup hanya
+                                    bertahan &lt;24 jam. Untuk pemakaian
+                                    jangka panjang, buat System User token
+                                    dengan masa berlaku <em>Never</em>.
+                                    Disimpan di Supabase Vault dan tidak
+                                    pernah dikirim ke browser.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- ---------- PENGATURAN CALLMEBOT ---------- -->
+
+                        <div
+                            id="reminderCallMeBotFields"
+                            class="reminder-provider-fields hidden"
+                        >
+
+                            <div class="form-group">
+
+                                <label for="reminderApiKey">
+                                    CALLMEBOT API KEY
+                                </label>
+
+                                <input
+                                    type="password"
+                                    id="reminderApiKey"
+                                    placeholder="Kosongkan untuk mempertahankan yang lama"
+                                    autocomplete="off"
+                                />
+
+                                <small class="input-hint">
+                                    Dapatkan dengan mengirim pesan
+                                    <code>I allow callmebot to send me messages</code>
+                                    ke bot CallMeBot. Kalau halaman resmi
+                                    CallMeBot menampilkan nomor bertanda
+                                    bintang, pendaftaran sedang ditutup dan
+                                    jalur ini tidak bisa dipakai.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- ---------- BERLAKU UNTUK KEDUA JALUR ---------- -->
+
                         <div class="form-group">
 
                             <label for="reminderPhone">
-                                WHATSAPP NUMBER
+                                NOMOR WHATSAPP TUJUAN
                             </label>
 
                             <input
@@ -1277,29 +1455,6 @@
                             <small class="input-hint">
                                 Format internasional tanpa "+" dan tanpa "0"
                                 di depan. Contoh: 6281234567890
-                            </small>
-
-                        </div>
-
-
-                        <div class="form-group">
-
-                            <label for="reminderApiKey">
-                                CALLMEBOT API KEY
-                            </label>
-
-                            <input
-                                type="password"
-                                id="reminderApiKey"
-                                placeholder="Kosongkan untuk mempertahankan yang lama"
-                                autocomplete="off"
-                            />
-
-                            <small class="input-hint">
-                                Dapatkan dengan mengirim pesan
-                                <code>I allow callmebot to send me messages</code>
-                                ke bot CallMeBot. Kunci disimpan di Supabase
-                                Vault dan tidak pernah dikirim ke browser.
                             </small>
 
                         </div>

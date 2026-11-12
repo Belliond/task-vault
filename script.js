@@ -3410,6 +3410,30 @@ const reminderPhone =
 const reminderApiKey =
     document.getElementById("reminderApiKey");
 
+const reminderProvider =
+    document.getElementById("reminderProvider");
+
+const reminderMetaFields =
+    document.getElementById("reminderMetaFields");
+
+const reminderCallMeBotFields =
+    document.getElementById("reminderCallMeBotFields");
+
+const reminderMetaPhoneId =
+    document.getElementById("reminderMetaPhoneId");
+
+const reminderMetaTemplate =
+    document.getElementById("reminderMetaTemplate");
+
+const reminderMetaLang =
+    document.getElementById("reminderMetaLang");
+
+const reminderMetaParams =
+    document.getElementById("reminderMetaParams");
+
+const reminderMetaToken =
+    document.getElementById("reminderMetaToken");
+
 const reminderHour =
     document.getElementById("reminderHour");
 
@@ -3492,6 +3516,19 @@ function formatReminderDays(days) {
 }
 
 
+// Menampilkan hanya kolom yang relevan untuk jalur terpilih.
+// Tanpa ini, pengguna melihat kolom API key CallMeBot padahal
+// memakai Cloud API, dan sebaliknya.
+function applyReminderProvider() {
+
+    const meta = reminderProvider?.value === "meta";
+
+    reminderMetaFields?.classList.toggle("hidden", !meta);
+    reminderCallMeBotFields?.classList.toggle("hidden", meta);
+
+}
+
+
 function renderReminderChannel(data) {
 
     if (!data) {
@@ -3506,10 +3543,15 @@ function renderReminderChannel(data) {
 
     setReminderBadge(Boolean(data.enabled));
 
+    const provider = data.provider === "meta" ? "meta" : "callmebot";
+
     if (data.phone_masked) {
 
+        const label = provider === "meta" ? "Cloud API" : "CallMeBot";
+
         setReminderStatus(
-            `${data.enabled ? "Active" : "Paused"} • ${data.phone_masked} • ` +
+            `${data.enabled ? "Active" : "Paused"} • ${label} • ` +
+            `${data.phone_masked} • ` +
             `${formatReminderDays(days)} at ${String(data.send_hour).padStart(2, "0")}:00 WIB`,
             data.enabled ? "success" : ""
         );
@@ -3524,9 +3566,24 @@ function renderReminderChannel(data) {
     // Jangan timpa apa yang sedang diketik pengguna.
     if (reminderLoaded) return;
 
+    reminderProvider.value = provider;
+    applyReminderProvider();
+
     reminderEnabled.checked = Boolean(data.enabled);
 
     reminderHour.value = String(data.send_hour ?? 8);
+
+    reminderMetaPhoneId.value = data.meta_phone_id || "";
+    reminderMetaTemplate.value = data.meta_template || "deadline_reminder";
+    reminderMetaLang.value = data.meta_lang || "id";
+
+    const params = String(data.meta_param_count ?? 4);
+
+    if ([...reminderMetaParams.options].some((o) => o.value === params)) {
+
+        reminderMetaParams.value = params;
+
+    }
 
     const preset = days.sort((a, b) => b - a).join(",");
 
@@ -3640,6 +3697,52 @@ async function saveReminderChannel() {
             .map((n) => Number(n))
             .filter((n) => Number.isFinite(n));
 
+        const provider = reminderProvider.value === "meta"
+            ? "meta"
+            : "callmebot";
+
+        // Validasi sisi klien supaya kesalahan umum ketahuan
+        // sebelum menyentuh database.
+        if (provider === "meta") {
+
+            const phoneId = reminderMetaPhoneId.value.trim();
+            const template = reminderMetaTemplate.value.trim();
+
+            if (!phoneId) {
+
+                setReminderStatus(
+                    "Phone number ID wajib diisi untuk Cloud API.",
+                    "error"
+                );
+
+                reminderMetaPhoneId.focus();
+                return;
+
+            }
+
+            if (!/^[0-9]+$/.test(phoneId)) {
+
+                setReminderStatus(
+                    "Phone number ID hanya berisi angka — itu bukan " +
+                    "nomor telepon, melainkan ID dari API Setup.",
+                    "error"
+                );
+
+                reminderMetaPhoneId.focus();
+                return;
+
+            }
+
+            if (!template) {
+
+                setReminderStatus("Nama template wajib diisi.", "error");
+                reminderMetaTemplate.focus();
+                return;
+
+            }
+
+        }
+
         const { error } = await supabaseClient.rpc(
             "reminder_channel_save",
             {
@@ -3647,13 +3750,20 @@ async function saveReminderChannel() {
                 p_api_key: reminderApiKey.value.trim() || null,
                 p_enabled: reminderEnabled.checked,
                 p_days: days,
-                p_hour: Number(reminderHour.value)
+                p_hour: Number(reminderHour.value),
+                p_provider: provider,
+                p_meta_phone_id: reminderMetaPhoneId.value.trim() || null,
+                p_meta_template: reminderMetaTemplate.value.trim() || null,
+                p_meta_lang: reminderMetaLang.value.trim() || null,
+                p_meta_param_count: Number(reminderMetaParams.value),
+                p_meta_token: reminderMetaToken.value.trim() || null
             }
         );
 
         if (error) throw new Error(error.message);
 
         reminderApiKey.value = "";
+        reminderMetaToken.value = "";
 
         // Paksa render ulang dari server.
         reminderLoaded = false;
@@ -3836,6 +3946,12 @@ if (reminderSave) {
 if (reminderTest) {
 
     reminderTest.addEventListener("click", sendReminderTest);
+
+}
+
+if (reminderProvider) {
+
+    reminderProvider.addEventListener("change", applyReminderProvider);
 
 }
 

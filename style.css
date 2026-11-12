@@ -1524,6 +1524,29 @@ button {
 }
 
 
+/* Blok kolom yang hanya tampil untuk jalur terpilih
+   (Cloud API vs CallMeBot). Diberi jarak atas supaya tidak
+   menempel ke select "JALUR PENGIRIMAN". */
+
+.reminder-provider-fields {
+
+    margin-top: 4px;
+
+}
+
+.reminder-provider-fields .reminder-row {
+
+    margin-bottom: 0;
+
+}
+
+.reminder-provider-fields.hidden {
+
+    display: none;
+
+}
+
+
 /* Select di dalam kartu ini memakai gaya yang sama dengan
    input pada umumnya. Ditulis eksplisit karena <select> tidak
    mewarisi tampilan <input> di semua browser. */

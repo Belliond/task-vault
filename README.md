@@ -429,8 +429,9 @@ Karena itu:
 
 | Bagian | Tempat | Alasan |
 |---|---|---|
-| Nomor + jadwal | tabel `reminder_channel` | Bukan rahasia, tapi tetap di server |
-| API key CallMeBot | **Supabase Vault** | Rahasia; tidak pernah dikirim ke browser |
+| Nomor + jadwal + jalur | tabel `reminder_channel` | Bukan rahasia, tapi tetap di server |
+| API key CallMeBot | **Supabase Vault** (`callmebot_apikey`) | Rahasia; tidak pernah dikirim ke browser |
+| Access token Meta | **Supabase Vault** (`meta_wa_token`) | Rahasia; tidak pernah dikirim ke browser |
 | Penjadwal | `pg_cron` (tiap jam) | Berjalan tanpa browser |
 | Pengirim HTTP | `pg_net` | Panggilan keluar dari dalam Postgres |
 | Riwayat | tabel `reminder_log` | Sekaligus penjaga anti-dobel |
@@ -440,10 +441,24 @@ terakhir. RPC `run_deadline_reminders()` dan `refresh_reminder_status()`
 sengaja **tidak** bisa dipanggil `anon` — keduanya memegang API key dan bisa
 dipakai memicu spam.
 
-### Kenapa CallMeBot
+### Dua jalur pengiriman
 
-WhatsApp Cloud API resmi **tidak gratis** untuk pesan yang kita mulai
-sendiri. Sejak 1 Oktober 2026 Meta menagih per pesan:
+Panel punya pemilih **JALUR PENGIRIMAN**. Keduanya berbagi satu pintu
+pengiriman, `kirim_whatsapp()`, yang memilih badan request berdasarkan kolom
+`reminder_channel.provider`.
+
+| | WhatsApp Cloud API (resmi) | CallMeBot (tidak resmi) |
+|---|---|---|
+| Nomor pengirim | nomor test milik Meta (`+1 555...`) | bot CallMeBot |
+| Nomor tujuan | maks 5 nomor terverifikasi | nomor pemilik API key |
+| Biaya | Rp 0 selama memakai nomor test | Rp 0 |
+| Template | wajib, harus disetujui | teks bebas |
+| Status | resmi, stabil | pendaftaran sedang ditutup |
+
+#### Kenapa Cloud API, bukan berbayar?
+
+WhatsApp Cloud API resmi **tidak gratis** untuk pesan yang kita mulai sendiri.
+Sejak 1 Oktober 2026 Meta menagih per pesan:
 
 - **Utility template** — jenis yang wajib dipakai kalau bisnis yang memulai
   chat — selalu berbayar, tarif Indonesia sekitar **USD 0.0287/pesan**.
@@ -451,13 +466,58 @@ sendiri. Sejak 1 Oktober 2026 Meta menagih per pesan:
   mengirim pesan — 1.000 gratis/bulan, tapi tidak bisa dipakai untuk
   pengingat otomatis.
 
-CallMeBot adalah satu-satunya jalur WhatsApp yang benar-benar gratis untuk
-pemakaian pribadi. Konsekuensinya harus disadari: **tidak resmi**, hanya bisa
-mengirim ke nomor sendiri, satu arah (tidak bisa dibalas), dan ada batas
-kirim harian. Kalau suatu saat pindah ke Cloud API resmi, cukup ganti badan
-fungsi `run_deadline_reminders()` — bagian lain tidak berubah.
+Pengecualiannya adalah **nomor test** yang dibuat otomatis saat WhatsApp
+ditambahkan ke sebuah app di Meta for Developers. Pesan yang dikirim dari
+nomor test tidak ditagih, dan tidak perlu kartu kredit, verifikasi bisnis,
+maupun review nama tampilan. Batasannya: hanya bisa mengirim ke maksimal
+**5 nomor** yang didaftarkan manual, dan nomor pengirimnya bukan nomor sendiri.
+Untuk pengingat pribadi, batasan itu tidak terasa.
 
-### Cara mengaktifkan
+### Setup WhatsApp Cloud API (sekali saja, ~20 menit)
+
+1. Buka <https://developers.facebook.com/apps/> → **Create app** → pilih
+   use case **Connect with customers through WhatsApp**.
+2. Masuk **WhatsApp → API Setup**. Di situ sudah tersedia nomor test dan
+   **Phone Number ID** (deretan angka panjang, **bukan** nomor telepon).
+3. Di bagian **To**, tambahkan nomor WhatsApp Anda, lalu masukkan kode OTP
+   yang dikirim ke WhatsApp Anda. Maksimal 5 nomor.
+4. Tekan **Generate access token** → salin token `EAAG...`.
+   Token ini **hanya bertahan <24 jam**. Untuk pemakaian jangka panjang, buat
+   **System User** di Business Settings dan pilih masa berlaku *Never*.
+5. Uji dulu dengan template bawaan: isi panel dengan `hello_world`,
+   bahasa `en_US`, jumlah variabel `0`. Tekan **SEND TEST**. Kalau pesan
+   masuk, kredensial sudah benar.
+6. Buat template sendiri: **WhatsApp → Message templates → Create template**
+   → kategori **Utility**, nama `deadline_reminder`, bahasa **Indonesian
+   (id)**, body dengan 4 variabel:
+
+   ```
+   Halo! Pengingat tugas: {{1}} adalah deadline untuk {{2}} ({{3}}), {{4}}.
+   ```
+
+   Tunggu statusnya **Approved** (biasanya beberapa menit).
+7. Isi panel: nama template `deadline_reminder`, bahasa `id`, jumlah variabel
+   `4`, nomor tujuan, lalu **SAVE REMINDER** dan **SEND TEST**.
+
+Urutan variabel body template **tetap**: `{{1}}` kapan, `{{2}}` tugas,
+`{{3}}` kelas, `{{4}}` tanggal.
+
+#### Kenapa CallMeBot masih ada di panel
+
+CallMeBot gratis dan tanpa setup, tapi **tidak resmi**, hanya bisa mengirim ke
+nomor sendiri, satu arah (tidak bisa dibalas), dan ada batas kirim harian.
+Saat fitur ini dibuat, pendaftaran barunya sudah **ditutup** — halaman resmi
+menampilkan nomor bot bertanda bintang (`+34*********`) dengan keterangan
+*"The bot is currently full. Please check back in a few days; once slots are
+available, the phone number will be visible."* Nomor lama dari halaman versi
+Spanyol/Jerman (`+34 644 37 67 94`) tidak membalas walau frasa aktivasi sudah
+benar.
+
+Jalur ini dipertahankan supaya kalau CallMeBot membuka slot lagi, tidak ada
+kode yang perlu ditulis ulang. Kalau halaman resminya masih menampilkan nomor
+bertanda bintang, jangan dipakai — bukan kesalahan konfigurasi.
+
+### Cara mengaktifkan CallMeBot
 
 1. Simpan nomor bot CallMeBot sebagai kontak, lalu kirim pesan **persis**
    seperti ini (satu baris, tanpa tanda kutip):
@@ -469,43 +529,49 @@ fungsi `run_deadline_reminders()` — bagian lain tidak berubah.
    Frasa ini dicocokkan persis oleh bot. Salah ketik satu kata — misalnya
    `calme` alih-alih `callmebot` — dan bot tidak akan menjawab sama sekali.
 
-2. Balasannya berisi API key. Kalau tidak datang dalam 2 menit, coba lagi
-   setelah 24 jam (batas anti-spam dari CallMeBot).
-
-   Nomor bot bisa berubah sewaktu-waktu. Cek nomor yang berlaku di
-   <https://www.callmebot.com/blog/free-api-whatsapp-messages/>. Kalau
-   halaman itu menampilkan nomor bertanda bintang (`+34*********`) dengan
-   keterangan *"The bot is currently full"*, artinya pendaftaran baru sedang
-   ditutup dan API key tidak akan dikirim sampai slot terbuka lagi — bukan
-   kesalahan konfigurasi.
+2. Balasannya berisi API key. Kalau tidak datang dalam 2 menit, cek dulu
+   apakah pendaftaran sedang ditutup (lihat di atas).
 
 3. Sudah pernah mendaftar tapi lupa API key-nya? Kirim `Recover APIKey` ke
    bot yang sama.
 
-4. Buka halaman **SYNC** → isi nomor (format `6281234567890`, tanpa `+` dan
-   tanpa `0` di depan) dan API key → **SAVE REMINDER**.
+4. Buka halaman **SYNC** → pilih jalur **CallMeBot** → isi nomor (format
+   `6281234567890`, tanpa `+` dan tanpa `0` di depan) dan API key →
+   **SAVE REMINDER**.
 
 5. Tekan **SEND TEST**. Statusnya berubah dari *"Menunggu konfirmasi..."*
    menjadi hasil sebenarnya: hijau kalau gateway menerima, merah dengan
-   alasan dari CallMeBot kalau ditolak.
+   alasan dari gateway kalau ditolak.
 
 Jadwal bawaan: **H-3, H-1, dan hari H pada 08:00 WIB**. Bisa diubah ke
-H-1/hari H atau hari H saja.
+H-1/hari H atau hari H saja. Berlaku untuk kedua jalur.
 
 ### Detail yang mudah salah
 
-- **CallMeBot membalas HTTP 201 walaupun gagal.** Pesan errornya ada di body
-  (`ERROR: apikey can not be empty...`). Karena itu `refresh_reminder_status()`
-  dan `reminder_last_test()` memeriksa isi respons, bukan hanya kode HTTP —
-  tanpa ini UI akan melaporkan "sent" untuk pesan yang sebenarnya ditolak.
+- **Dua gateway menilai keberhasilan dengan cara berbeda.** CallMeBot membalas
+  HTTP 201 walaupun gagal (pesan `ERROR: ...` di body), sedangkan Graph API
+  membalas non-2xx dengan JSON `{"error":{"message":"..."}}`. Karena itu ada
+  `gateway_ok()` dan `gateway_error()` yang dipakai bersama oleh
+  `refresh_reminder_status()`, `reminder_last_test()`, dan UI — kode HTTP saja
+  tidak cukup.
+- **Template tanpa variabel tidak boleh mengirim `components`.** Mengirim
+  `components: []` untuk template 0 variabel ditolak dengan error `132000`.
+  Karena itu ada kolom `meta_param_count`; nilainya `0` untuk `hello_world`.
+- **Phone Number ID bukan nomor telepon.** Yang dipakai di URL Graph API
+  adalah deretan angka dari API Setup, bukan `+1 555...`. Tertukar keduanya
+  menghasilkan error `404`/`100`.
+- **Nomor tujuan harus terdaftar di API Setup.** Kalau tidak, Graph API
+  membalas error `131030`. Token kedaluwarsa menghasilkan `190`; nama atau
+  bahasa template salah menghasilkan `132001`.
 - **SEND TEST tidak bisa menunggu di dalam fungsi database.** `pg_net`
-  asinkron: `net.http_get()` hanya menjadwalkan request lalu langsung
+  asinkron: `net.http_post()` hanya menjadwalkan request lalu langsung
   kembali. Menunggu dengan `pg_sleep()` juga tidak mungkin karena peran
   `anon` punya `statement_timeout = 3s`. Karena itu hasilnya diambil
   terpisah oleh `reminder_last_test()`, yang dipanggil browser tiap detik
   sampai maksimal ~15 detik.
-- **Pesan harus di-percent-encode.** Dikirim lewat query string GET, jadi
-  `&`, `#`, dan baris baru akan memotong URL. Ada `url_encode()` untuk itu.
+- **Pesan CallMeBot harus di-percent-encode.** Dikirim lewat query string GET,
+  jadi `&`, `#`, dan baris baru akan memotong URL. Ada `url_encode()` untuk
+  itu.
 - **Anti-dobel** lewat `unique (task_id, offset_days)`. Cron yang berjalan
   dua kali tidak akan mengirim pesan yang sama dua kali.
 - **Deadline diubah → log dihapus.** Trigger `tasks_clear_reminders`
@@ -517,20 +583,19 @@ H-1/hari H atau hari H saja.
 
 ### Batasan yang perlu disadari
 
-CallMeBot gratis, tapi **tidak resmi** dan tidak punya jaminan:
-
-- Hanya bisa mengirim ke nomor pemilik API key, satu arah (tidak bisa dibalas).
-- Ada batas kirim harian (~140 pesan).
-- Pendaftaran bisa ditutup saat kapasitas penuh (lihat langkah 2 di atas).
-- Nomor bot bisa berganti tanpa pemberitahuan.
+- **Cloud API nomor test**: hanya 5 nomor terverifikasi, nomor pengirim bukan
+  milik sendiri, dan ini lingkungan test — bukan untuk produksi massal.
+  Token sementara dari API Setup mati dalam <24 jam.
+- **CallMeBot**: tidak resmi, satu arah, batas ~140 pesan/hari, pendaftaran
+  bisa ditutup, nomor bot bisa berganti tanpa pemberitahuan.
 
 Kalau pengingat ini penting untuk nilai akademik, jangan jadikan satu-satunya
 pengingat. Fitur ini pelengkap, bukan pengganti kalender.
 
 ### Biaya
 
-Rp 0. Tidak ada kartu kredit, tidak ada akun Meta Business, tidak ada
-template yang perlu disetujui.
+Rp 0 untuk kedua jalur: nomor test Meta tidak ditagih, dan CallMeBot gratis.
+Tidak ada kartu kredit yang diminta.
 
 ---
 
@@ -569,15 +634,20 @@ Konsekuensi yang perlu diterima:
 - Tidak ada isolasi antar pengguna — ini memang tujuannya.
 - Satu orang iseng bisa mengosongkan ledger. Tidak ada rate limit.
 - Tidak ada backup otomatis. Ekspor data secara berkala bila penting.
-- **Nomor WhatsApp dan API key CallMeBot tidak boleh masuk frontend.**
-  Keduanya hanya ada di database: nomor di `reminder_channel`, API key di
-  Supabase Vault. Yang dibaca browser cuma nomor tersamarkan. Kalau suatu
+- **Nomor WhatsApp, API key CallMeBot, dan access token Meta tidak boleh masuk
+  frontend.** Ketiganya hanya ada di database: nomor dan pengaturan jalur di
+  `reminder_channel`, sedangkan API key dan token di Supabase Vault
+  (`callmebot_apikey`, `meta_wa_token`). Yang dibaca browser cuma nomor
+  tersamarkan dan penanda `has_api_key` / `has_meta_token`. Kalau suatu
   saat menambah fitur yang butuh rahasia baru, pola ini yang dipakai —
   bukan `localStorage` dan bukan `config.js`.
-- **Fungsi `security definer` harus dicabut dari `anon`.** `run_deadline_reminders()`
-  dan `refresh_reminder_status()` memegang API key dari Vault; kalau bisa
-  dipanggil dari browser, siapa pun yang menemukan URL + publishable key
-  bisa memicu pengiriman WhatsApp tanpa batas.
+- **Fungsi `security definer` harus dicabut dari `anon`.** `kirim_whatsapp()`,
+  `run_deadline_reminders()`, `refresh_reminder_status()`, `gateway_ok()`, dan
+  `gateway_error()` memegang token dari Vault; kalau bisa dipanggil dari
+  browser, siapa pun yang menemukan URL + publishable key bisa memicu
+  pengiriman WhatsApp tanpa batas. Yang boleh dipanggil browser hanya
+  `reminder_channel_get()`, `reminder_channel_save()`, `reminder_send_test()`,
+  dan `reminder_last_test()`.
 
 Kalau nanti butuh multi-user yang aman, aktifkan RLS + Supabase Auth dan
 tambahkan kembali kolom `user_id`.
