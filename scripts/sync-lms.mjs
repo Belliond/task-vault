@@ -932,7 +932,7 @@ async function main() {
 
         try {
 
-            await syncClassroom({ classroom, supabase, hariIni, dryRun });
+            await syncClassroom({ classroom, supabase, hariIni, dryRun, env });
 
         }
         catch (error) {
@@ -1186,7 +1186,53 @@ async function syncMoodle({
 //  GOOGLE CLASSROOM
 // =========================================================
 
-async function syncClassroom({ classroom, supabase, hariIni, dryRun }) {
+// Saring daftar kelas Classroom sesuai pengaturan.
+//
+// Dipisah sebagai fungsi murni supaya bisa diuji tanpa
+// jaringan: kesalahan di sini tidak memunculkan error, hanya
+// membuat tugas dari kelas yang salah ikut masuk — jenis
+// kesalahan yang paling sulit disadari.
+//
+// Pencocokan dilakukan case-insensitive, dan bisa berupa:
+//   - id angka      ("843941141691")
+//   - potongan nama ("PBO RA 2026")
+export function saringKelasClassroom({ courses, hanyaIds, kecuali }) {
+
+    const daftarId = new Set(
+        (hanyaIds || []).map((s) => String(s).trim()).filter(Boolean)
+    );
+
+    const daftarKecuali = (kecuali || [])
+        .map((s) => String(s).trim().toLowerCase())
+        .filter(Boolean);
+
+    const cocokKecuali = (c) => {
+        const id = String(c.id);
+        const nama = String(c.name || "").toLowerCase();
+        const bagian = String(c.section || "").toLowerCase();
+        return daftarKecuali.some(
+            (p) => p === id || nama.includes(p) || bagian.includes(p)
+        );
+    };
+
+    let dipakai = courses || [];
+
+    if (daftarId.size) {
+        dipakai = dipakai.filter((c) => daftarId.has(String(c.id)));
+    }
+
+    if (daftarKecuali.length) {
+        dipakai = dipakai.filter((c) => !cocokKecuali(c));
+    }
+
+    const dibuang = (courses || []).filter((c) => !dipakai.includes(c));
+
+    return { dipakai, dibuang };
+
+}
+
+
+async function syncClassroom({ classroom, supabase, hariIni, dryRun, env }) {
 
     console.log("Classroom: googleapis.com (OAuth refresh token)");
 
@@ -1197,16 +1243,51 @@ async function syncClassroom({ classroom, supabase, hariIni, dryRun }) {
     console.log(`Token    : diperbarui (${accessToken.length} karakter, berlaku ~1 jam)`);
 
     // 2. Kelas yang diikuti
-    const courses = await ambilKelasClassroom(accessToken);
+    const semuaKelas = await ambilKelasClassroom(accessToken);
 
-    if (courses.length === 0) {
+    if (semuaKelas.length === 0) {
         throw new Error(
             "Tidak ada kelas Classroom aktif pada akun ini. " +
             "Kalau kelasnya diarsipkan, sync memang tidak mengambilnya."
         );
     }
 
-    console.log(`Kelas    : ${courses.length} aktif`);
+    // Filter kelas opsional.
+    //
+    // Kelas lama yang masih ACTIVE di Google (mis. dari semester
+    // lalu) tetap ikut terbawa kalau tidak dibatasi. Sync manual
+    // di halaman web punya pemilih matkul, jadi perilakunya
+    // terasa berbeda. CLASSROOM_EXCLUDE_COURSES menutup celah
+    // itu tanpa harus mengarsipkan kelas di Google.
+    const { dipakai: courses, dibuang } = saringKelasClassroom({
+        courses: semuaKelas,
+        hanyaIds: String(env.CLASSROOM_COURSE_IDS || "")
+            .split(",").map((s) => s.trim()).filter(Boolean),
+        kecuali: String(env.CLASSROOM_EXCLUDE_COURSES || "")
+            .split(",").map((s) => s.trim()).filter(Boolean)
+    });
+
+    if (dibuang.length) {
+
+        console.log(
+            `Kelas    : ${courses.length} dipakai, ${dibuang.length} disaring keluar`
+        );
+
+        for (const c of dibuang) {
+            console.log(`           - dilewati: ${c.name || c.id} (id ${c.id})`);
+        }
+
+        if (courses.length === 0) {
+            throw new Error(
+                "Semua kelas tersaring keluar. Periksa CLASSROOM_COURSE_IDS / " +
+                "CLASSROOM_EXCLUDE_COURSES di .env atau GitHub Secrets."
+            );
+        }
+
+    }
+    else {
+        console.log(`Kelas    : ${courses.length} aktif`);
+    }
 
     // 3. Course work tiap kelas
     const coursework = [];

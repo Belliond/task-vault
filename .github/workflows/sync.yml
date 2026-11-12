@@ -26,6 +26,7 @@ name: Sync LMS
 #      CLASSROOM_SYNC_CLIENT_ID       opsional, untuk sync Classroom
 #      CLASSROOM_SYNC_CLIENT_SECRET   opsional
 #      CLASSROOM_SYNC_REFRESH_TOKEN   opsional
+#      CLASSROOM_EXCLUDE_COURSES      opsional, mis. "PBO RA 2026"
 #
 #  Client Classroom untuk sync HARUS bertipe "Desktop app" dan
 #  HARUS berbeda dari CLASSROOM_CLIENT_ID milik situs. Client
@@ -92,6 +93,8 @@ jobs:
         env:
           MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
           CLASSROOM_SYNC_REFRESH_TOKEN: ${{ secrets.CLASSROOM_SYNC_REFRESH_TOKEN }}
+          CLASSROOM_EXCLUDE_COURSES: ${{ secrets.CLASSROOM_EXCLUDE_COURSES }}
+          CLASSROOM_COURSE_IDS: ${{ secrets.CLASSROOM_COURSE_IDS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |

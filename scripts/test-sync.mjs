@@ -15,6 +15,7 @@ import {
     tanggalWibDariUtc,
     susunBarisClassroom,
     cariUsangClassroom,
+    saringKelasClassroom,
     petikToken
 } from "./sync-lms.mjs";
 
@@ -220,6 +221,84 @@ cek(
     "17:00 UTC -> 16 Nov",
     tanggalWib(Date.UTC(2026, 10, 15, 17, 0, 0) / 1000),
     "2026-11-16"
+);
+
+console.log("\n=== saringKelasClassroom ===");
+
+// Kelas lama yang masih ACTIVE di Google pernah ikut tersync
+// dan memunculkan "PBO RA 2026" di halaman web. Filter ini
+// yang mencegahnya terulang.
+const kelasUji = [
+    { id: "876689741003", name: "Kriptografi" },
+    { id: "843941141691", name: "PBO RA 2026" },
+    { id: "850975217403", name: "Praktikum PBO RA" }
+];
+
+cek(
+    "tanpa filter: semua dipakai",
+    saringKelasClassroom({ courses: kelasUji }).dipakai.map((c) => c.name),
+    ["Kriptografi", "PBO RA 2026", "Praktikum PBO RA"]
+);
+
+cek(
+    "kecuali potongan nama persis",
+    saringKelasClassroom({ courses: kelasUji, kecuali: ["PBO RA 2026"] })
+        .dipakai.map((c) => c.name),
+    ["Kriptografi", "Praktikum PBO RA"]
+);
+
+// Pencocokan harus case-insensitive: user mengetik huruf kecil.
+cek(
+    "kecuali nama huruf kecil tetap kena",
+    saringKelasClassroom({ courses: kelasUji, kecuali: ["pbo ra 2026"] })
+        .dipakai.map((c) => c.name),
+    ["Kriptografi", "Praktikum PBO RA"]
+);
+
+// "PBO RA" TIDAK boleh ikut membuang "Praktikum PBO RA".
+cek(
+    "potongan nama tidak membuang kelas lain yang mirip",
+    saringKelasClassroom({ courses: kelasUji, kecuali: ["PBO RA 2026"] })
+        .dipakai.length,
+    2
+);
+
+cek(
+    "kecuali berdasarkan id",
+    saringKelasClassroom({ courses: kelasUji, kecuali: ["843941141691"] })
+        .dipakai.map((c) => c.id),
+    ["876689741003", "850975217403"]
+);
+
+cek(
+    "hanyaIds: ambil satu kelas saja",
+    saringKelasClassroom({ courses: kelasUji, hanyaIds: ["876689741003"] })
+        .dipakai.map((c) => c.name),
+    ["Kriptografi"]
+);
+
+cek(
+    "hanyaIds dan kecuali dipakai bersama",
+    saringKelasClassroom({
+        courses: kelasUji,
+        hanyaIds: ["876689741003", "843941141691"],
+        kecuali: ["PBO RA 2026"]
+    }).dipakai.map((c) => c.name),
+    ["Kriptografi"]
+);
+
+cek(
+    "daftar dibuang ikut dilaporkan",
+    saringKelasClassroom({ courses: kelasUji, kecuali: ["PBO RA 2026"] })
+        .dibuang.map((c) => c.name),
+    ["PBO RA 2026"]
+);
+
+cek(
+    "string kosong diabaikan, bukan mencocokkan semua",
+    saringKelasClassroom({ courses: kelasUji, kecuali: ["", "  "] })
+        .dipakai.length,
+    3
 );
 
 console.log(
