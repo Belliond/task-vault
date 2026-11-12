@@ -475,21 +475,38 @@ async function main() {
     //   ada spasi / baris baru         -> ikut tersalin dari halaman
     //   ada tanda kutip                -> ikut tersalin pembungkusnya
     //   diawali "Bearer "              -> yang disalin token akses, bukan wstoken
-    const bentukToken = {
-        panjang: moodle.token.length,
-        spasi: /\s/.test(moodle.token),
-        kutip: /["']/.test(moodle.token),
-        bearer: /^bearer\s/i.test(moodle.token),
-        hanyaAlfanumerik: /^[A-Za-z0-9]+$/.test(moodle.token)
+    const ciri = (nilai) => {
+
+        const t = String(nilai);
+
+        if (/^https?:\/\//i.test(t)) return "URL, bukan token";
+        if (/^ey[A-Za-z0-9_-]+\./.test(t)) return "JWT (token akses OAuth), bukan wstoken";
+        if (/^(gh[pousr]_|github_pat_)/.test(t)) return "token GitHub, bukan token Moodle";
+        if (/^sb_(publishable|secret)_/.test(t)) return "kunci Supabase, bukan token Moodle";
+        if (/^bearer\s/i.test(t)) return "token akses 'Bearer ...', bukan wstoken";
+        if (/^[A-Za-z0-9]{32}$/.test(t)) return "bentuk token Moodle normal (32 karakter)";
+        if (/^[A-Za-z0-9]+$/.test(t)) {
+            return `hanya huruf/angka tapi ${t.length} karakter ` +
+                "(token Moodle seharusnya 32)";
+        }
+
+        return "ada karakter tak biasa (spasi, tanda kutip, atau simbol)";
+
     };
 
     console.log(
-        `Token    : ${bentukToken.panjang} karakter` +
-        (bentukToken.spasi ? ", MENGANDUNG SPASI/BARIS BARU" : "") +
-        (bentukToken.kutip ? ", MENGANDUNG TANDA KUTIP" : "") +
-        (bentukToken.bearer ? ", DIAWALI 'Bearer'" : "") +
-        (bentukToken.hanyaAlfanumerik ? ", bentuk normal" : ", ada karakter tak biasa")
+        `Token    : ${moodle.token.length} karakter — ` + ciri(moodle.token)
     );
+
+    if (moodle.token.length !== 32) {
+
+        console.log(
+            "           Token Moodle (wstoken) selalu 32 karakter huruf/angka. " +
+            "Kalau bukan 32, hampir pasti yang tersimpan bukan tokennya."
+        );
+
+    }
+
 
 
     // 1. Validasi token + id user
