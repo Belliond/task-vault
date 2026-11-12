@@ -8,6 +8,8 @@ JS, tanpa build step), data di **Supabase**, tugas bisa ditarik otomatis dari
 index.html          Markup (navbar, halaman-halaman, 3 modal)
 script.js           Seluruh logika aplikasi
 style.css           Tema + responsif
+three-bg.js         Latar 3D kinetik (Three.js, opsional)
+pointer-tilt.js     Efek tilt kartu/navbar mengikuti kursor
 config.js           DI-GENERATE dari .env (tidak di-commit)
 .env                Kredensial lokal (tidak di-commit)
 .env.example        Template .env (di-commit)
@@ -285,6 +287,18 @@ localhost otomatis terpakai sebagai redirect URI. Tambahkan URL itu ke
 
 ---
 
+## Notifikasi popup
+
+`showToast()` di `script.js` menampilkan notifikasi singkat (sukses, error,
+peringatan) sebagai popup **di tengah layar**, bukan di pojok. Container
+`.toast-container` memakai `position: fixed; inset: 0` dengan flex
+`center/center`, dan `pointer-events: none` supaya tidak pernah menghalangi
+klik ke elemen di bawahnya. Toast muncul dengan animasi membesar dari
+tengah (`translateY(10px) scale(0.92)` → `scale(1)`), bukan meluncur dari
+samping.
+
+---
+
 ## Latar 3D (three-bg.js)
 
 Seluruh halaman punya lapisan bentuk geometris yang mengapung dan
@@ -295,12 +309,32 @@ yang perlu di-`npm install`.
 | Berkas | Isi |
 |---|---|
 | `three-bg.js` | Modul latar 3D (mandiri, tidak menyentuh logika aplikasi) |
+| `pointer-tilt.js` | Efek tilt kartu/navbar mengikuti kursor |
 | `<canvas id="bg3dStage">` | Elemen sasaran di `index.html`, `aria-hidden`, anak langsung `<body>` |
 
 Bentuknya adalah terjemahan 3D dari bahasa visual Dark Neobrutalism:
 isi warna solid, garis tepi tebal, dan hard shadow tanpa blur. Tiap
 objek terdiri dari empat lapisan — hard shadow, isi, outline, dan garis
 lipatan.
+
+**Lapisan biner.** Selain 6 bentuk besar, ada **126 sprite** teks `0`/`1`
+yang tersebar di seluruh layar (`GLYPH_COUNT`). Sprite dipakai, bukan mesh
+bidang, karena selalu menghadap kamera tanpa perlu dirotasi manual dan
+satu tekstur 64×64 bisa dipakai bersama. Sebarannya memakai PRNG
+deterministik (seed tetap) supaya tata letak tidak berubah tiap reload.
+Glyph mengapung pelan **dan** bergeser saat kursor bergerak; nilai
+`depth` per sprite membuat lapisan depan bergerak lebih jauh daripada
+lapisan belakang sehingga muncul kesan parallax.
+
+**Efek tilt (`pointer-tilt.js`).** Kartu (`.course-card`, `.task-card`,
+`.stat-card`, `.calendar-card`, `.sync-card`, `.task-group-header`) dan
+navbar/nav-link sedikit "menoleh" mengikuti posisi kursor, maksimum
+1.6–6 derajat dengan `perspective(900px)`. Listener dipasang **satu kali
+di `document`** dengan `closest()`, bukan per elemen: kartu tugas dibuat
+ulang setiap kali data berubah, jadi listener per elemen akan hilang pada
+kartu baru. Tilt dilepas saat `pointerdown` agar efek `:active` tetap
+terlihat, dan tidak aktif sama sekali pada perangkat sentuh maupun saat
+`prefers-reduced-motion: reduce`.
 
 **Batas versi Three.js.** Dipin ke `0.160.1`, yaitu versi **UMD
 terakhir**. Mulai r161, `build/three.min.js` dihapus dari paket npm
@@ -313,9 +347,10 @@ tanpa pindah ke ES module.
 |---|---|
 | `THREE` gagal dimuat / CDN diblokir | Canvas disembunyikan, aplikasi jalan normal |
 | WebGL tidak tersedia | Sama seperti di atas |
-| `prefers-reduced-motion: reduce` | Bentuk tetap tampil, tetapi diam (satu frame) |
+| `prefers-reduced-motion: reduce` | Bentuk tetap tampil, tetapi diam (satu frame); tilt nonaktif |
 | Tab tidak aktif / canvas off-screen | Animasi dijeda |
-| Lebar < 700px | 3 objek (bukan 6), `pixelRatio` ≤ 1.25, ~30 fps |
+| Lebar < 700px | 3 objek (bukan 6), ~53 glyph (bukan 126), `pixelRatio` ≤ 1.25, ~30 fps |
+| Perangkat sentuh | Tilt nonaktif (tidak ada hover) |
 
 `pointer-events: none` dan `aria-hidden="true"` membuat lapisan ini
 tidak pernah menangkap klik maupun masuk pohon aksesibilitas.

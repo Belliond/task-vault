@@ -244,15 +244,26 @@ button {
 }
 
 
+/* Notifikasi popup di TENGAH layar.
+   Sebelumnya menempel di pojok kanan-atas sehingga mudah
+   terlewat, terutama di layar lebar. Container direntangkan
+   penuh (inset: 0) lalu isinya dipusatkan dengan flex; ia
+   tidak menangkap klik karena pointer-events: none. */
+
 .toast-container {
 
     position: fixed;
-    top: 24px;
-    right: 24px;
+    inset: 0;
     z-index: 2000;
+
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 12px;
+
+    padding: 24px;
+
     pointer-events: none;
 
 }
@@ -261,29 +272,35 @@ button {
 .toast {
 
     min-width: 260px;
-    max-width: 420px;
-    padding: 14px 18px;
-    border: 2px solid var(--border-bright);
+    max-width: min(460px, calc(100vw - 48px));
+    padding: 16px 22px;
+
+    border: var(--border-w) solid var(--green);
     border-radius: var(--radius);
-    background: var(--panel);
+    background: var(--panel-raised);
     color: var(--text);
-    box-shadow: var(--shadow-hard);
-    border-left: 6px solid var(--green);
+    box-shadow: var(--shadow-hard-lg);
+
+    text-align: center;
     letter-spacing: 0.5px;
     font-family: var(--ff-mono);
     font-size: 14px;
-    transform: translateX(30px);
+    line-height: 1.5;
+
+    /* Muncul dari tengah: sedikit mengecil lalu membesar,
+       bukan meluncur dari samping. */
+    transform: translateY(10px) scale(0.92);
     opacity: 0;
     transition:
-        transform var(--transition),
-        opacity var(--transition);
+        transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+        opacity 0.18s ease;
 
 }
 
 
 .toast.show {
 
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
 
 }
@@ -291,24 +308,21 @@ button {
 
 .toast-success {
 
-    border-left-color: var(--green);
-    box-shadow: var(--shadow-hard);
+    border-color: var(--green);
 
 }
 
 
 .toast-error {
 
-    border-left-color: var(--danger);
-    box-shadow: var(--shadow-hard);
+    border-color: var(--danger);
 
 }
 
 
 .toast-warning {
 
-    border-left-color: #ffda66;
-    box-shadow: var(--shadow-hard);
+    border-color: #ffda66;
 
 }
 
@@ -4190,6 +4204,75 @@ button {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         scroll-behavior: auto !important;
+    }
+
+}
+
+
+/* =========================================================
+   POINTER TILT (pointer-tilt.js)
+   ---------------------------------------------------------
+   Kartu dan navbar sedikit menoleh mengikuti kursor. Sudutnya
+   kecil (maks 6 derajat) supaya tidak mengganggu keterbacaan.
+
+   Transisi transform dibuat lebih pendek daripada hover biasa:
+   saat kursor bergerak cepat, transisi panjang membuat elemen
+   terasa "tertinggal" dan bergetar. Nilai 120ms cukup untuk
+   menghaluskan gerakan tanpa terasa lambat.
+========================================================= */
+
+.course-card,
+.task-card,
+.stat-card,
+.sync-card,
+.task-group-header,
+.calendar-card,
+.nav-link,
+.schedule-table {
+
+    transform-style: preserve-3d;
+
+    transition:
+        transform 0.12s ease-out,
+        box-shadow var(--transition),
+        border-color var(--transition),
+        background var(--transition),
+        color var(--transition);
+
+}
+
+
+/* Navbar ikut diberi efek tilt, tetapi sudutnya jauh lebih
+   kecil (1.6 derajat) karena permukaannya lebar dan menempel
+   di tepi layar. Transform pada elemen sticky tetap aman:
+   posisi sticky tidak terpengaruh, dan navbar tidak punya
+   anak ber-position: fixed yang bisa terkurung. */
+
+.navbar {
+
+    transition:
+        transform 0.12s ease-out,
+        box-shadow var(--transition);
+
+}
+
+
+/* Hormati preferensi "kurangi gerak": transform dari JS tidak
+   dipasang sama sekali, tetapi bila ada sisa gaya, netralkan. */
+
+@media (prefers-reduced-motion: reduce) {
+
+    .course-card,
+    .task-card,
+    .stat-card,
+    .sync-card,
+    .task-group-header,
+    .calendar-card,
+    .nav-link,
+    .schedule-table {
+
+        transform: none !important;
+
     }
 
 }

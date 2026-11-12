@@ -302,6 +302,174 @@
 
 
     /* =====================================================
+       5b. LAPISAN BINER
+       -----------------------------------------------------
+       Teks biner "0"/"1" yang tersebar di seluruh layar untuk
+       mengisi ruang kosong antar bentuk 3D. Tanpa lapisan ini
+       latar terasa sepi karena hanya ada 6 objek besar.
+
+       Memakai THREE.Sprite, bukan mesh bidang, karena:
+         - sprite selalu tegak menghadap kamera, jadi tidak
+           perlu dirotasi manual tiap frame;
+         - satu tekstur 64x64 dipakai bersama puluhan sprite,
+           sehingga hemat memori GPU.
+
+       Posisi memakai koordinat ternormalisasi (fx/fy) supaya
+       tata letaknya tetap proporsional di layar apa pun.
+    ===================================================== */
+
+    // PRNG sederhana & deterministik: sebaran acak yang sama
+    // setiap kali halaman dimuat, sehingga tata letak tidak
+    // "berkedip" berubah antar reload.
+    function makeRng(seed) {
+
+        let state = seed;
+
+        return function () {
+
+            state = (state * 1664525 + 1013904223) % 4294967296;
+
+            return state / 4294967296;
+
+        };
+
+    }
+
+
+    function createGlyphTexture(char, cssColor) {
+
+        const size = 64;
+        const glyphCanvas = document.createElement("canvas");
+
+        glyphCanvas.width = size;
+        glyphCanvas.height = size;
+
+        const ctx = glyphCanvas.getContext("2d");
+
+        if (!ctx) return null;
+
+        ctx.font = "700 46px 'Space Mono', 'Courier New', monospace";
+        ctx.fillStyle = cssColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(char, size / 2, size / 2 + 2);
+
+        const texture = new THREE.CanvasTexture(glyphCanvas);
+
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+
+        return texture;
+
+    }
+
+
+    const GLYPH_TEXTURES = [];
+
+    [
+        ["0", "#4dffb2"],   // --green
+        ["1", "#4dffb2"],
+        ["0", "#4fe6ff"],   // --cyan
+        ["1", "#19d991"]    // --green-dark
+    ].forEach(([char, color]) => {
+
+        const texture = createGlyphTexture(char, color);
+
+        if (texture) GLYPH_TEXTURES.push(texture);
+
+    });
+
+
+    const GLYPH_COUNT = 126;
+    const GLYPH_COLUMNS = 14;
+
+    const glyphSpecs = [];
+    const glyphRng = makeRng(20261112);
+
+    const glyphRows = Math.ceil(GLYPH_COUNT / GLYPH_COLUMNS);
+
+    for (let index = 0; index < GLYPH_COUNT; index += 1) {
+
+        const column = index % GLYPH_COLUMNS;
+        const row = Math.floor(index / GLYPH_COLUMNS);
+
+        // Sebaran dasar = grid, lalu digeser acak secukupnya
+        // supaya tidak terbaca sebagai tabel.
+        const gridX = ((column + 0.5) / GLYPH_COLUMNS) * 2 - 1;
+        const gridY = ((row + 0.5) / glyphRows) * 2 - 1;
+
+        glyphSpecs.push({
+
+            fx: gridX + (glyphRng() - 0.5) * (2 / GLYPH_COLUMNS) * 0.85,
+            fy: gridY + (glyphRng() - 0.5) * (2 / glyphRows) * 0.85,
+
+            // Sebaran kedalaman: sebagian di depan bentuk 3D,
+            // sebagian di belakang, agar terasa berlapis.
+            z: -4.2 + glyphRng() * 4.4,
+
+            scale: 0.26 + glyphRng() * 0.36,
+            opacity: 0.16 + glyphRng() * 0.40,
+
+            floatAmp: 0.06 + glyphRng() * 0.16,
+            floatSpeed: 0.24 + glyphRng() * 0.52,
+            floatPhase: glyphRng() * Math.PI * 2,
+
+            // Pengali pergeseran saat kursor bergerak. Semakin
+            // besar, semakin "dekat" sprite terasa.
+            depth: 0.35 + glyphRng() * 1.5,
+
+            textureIndex: Math.floor(glyphRng() * GLYPH_TEXTURES.length)
+
+        });
+
+    }
+
+
+    const glyphs = [];
+
+    function createGlyphs() {
+
+        if (GLYPH_TEXTURES.length === 0) return;
+
+        glyphSpecs.forEach((spec) => {
+
+            const material = new THREE.SpriteMaterial({
+                map: GLYPH_TEXTURES[spec.textureIndex],
+                transparent: true,
+                opacity: spec.opacity,
+
+                // depthWrite dimatikan agar sprite transparan tidak
+                // menutupi sprite lain di belakangnya, tetapi
+                // depthTest tetap aktif supaya bentuk 3D opaque
+                // benar-benar menghalangi glyph di belakangnya.
+                depthWrite: false
+            });
+
+            const sprite = new THREE.Sprite(material);
+
+            sprite.scale.setScalar(spec.scale);
+            sprite.position.z = spec.z;
+
+            scene.add(sprite);
+
+            glyphs.push({
+                spec: spec,
+                sprite: sprite,
+                baseX: 0,
+                baseY: 0
+            });
+
+        });
+
+    }
+
+
+    createGlyphs();
+
+
+    /* =====================================================
        6. TATA LETAK & RESIZE
     ===================================================== */
 
@@ -322,6 +490,27 @@
 
         });
 
+
+        // Glyph memakai area lebih lebar dari frustum (1.15x)
+        // supaya tetap memenuhi tepi layar saat kamera bergeser
+        // mengikuti kursor.
+        glyphs.forEach((item) => {
+
+            item.baseX = item.spec.fx * halfWidth * 1.15;
+            item.baseY = item.spec.fy * halfHeight * 1.15;
+
+            item.sprite.position.set(
+                item.baseX,
+                item.baseY,
+                item.spec.z
+            );
+
+            item.sprite.scale.setScalar(
+                item.spec.scale * (narrow.matches ? 0.85 : 1)
+            );
+
+        });
+
     }
 
 
@@ -333,6 +522,17 @@
 
         shapes.forEach((item, index) => {
             item.group.visible = index < limit;
+        });
+
+
+        // Glyph dikurangi di layar sempit: 126 sprite terlalu
+        // padat di 390px dan mengganggu keterbacaan teks.
+        const glyphLimit = narrow.matches
+            ? Math.round(GLYPH_COUNT * 0.42)
+            : GLYPH_COUNT;
+
+        glyphs.forEach((item, index) => {
+            item.sprite.visible = index < glyphLimit;
         });
 
     }
@@ -401,6 +601,29 @@
 
         });
 
+
+        // Glyph: mengapung pelan (naik-turun + geser mendatar
+        // kecil) DAN ikut bergeser saat kursor bergerak. Nilai
+        // `depth` membuat lapisan depan bergerak lebih jauh
+        // daripada lapisan belakang, sehingga muncul kesan
+        // kedalaman (parallax).
+        glyphs.forEach((item) => {
+
+            const spec = item.spec;
+            const phase = elapsed * spec.floatSpeed + spec.floatPhase;
+
+            item.sprite.position.x =
+                item.baseX +
+                Math.cos(phase * 0.7) * spec.floatAmp * 0.6 +
+                pointer.x * spec.depth;
+
+            item.sprite.position.y =
+                item.baseY +
+                Math.sin(phase) * spec.floatAmp +
+                pointer.y * spec.depth;
+
+        });
+
     }
 
 
@@ -433,6 +656,11 @@
 
         shapes.forEach((item) => {
             item.group.position.y = item.baseY;
+        });
+
+        glyphs.forEach((item) => {
+            item.sprite.position.x = item.baseX;
+            item.sprite.position.y = item.baseY;
         });
 
         renderer.render(scene, camera);
