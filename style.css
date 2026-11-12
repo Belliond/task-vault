@@ -4145,7 +4145,9 @@ button {
 
     .sync-section-head {
 
-        gap: 12px;
+        flex-wrap: wrap;
+
+        gap: 10px 12px;
 
         margin: 34px 0 16px;
 
@@ -4159,6 +4161,13 @@ button {
         height: 34px;
 
         font-size: 11px;
+
+    }
+
+
+    .sync-section-text {
+
+        flex: 1 1 auto;
 
     }
 
@@ -4177,6 +4186,21 @@ button {
         font-size: 9px;
 
         letter-spacing: 1px;
+
+    }
+
+
+    /* Di layar sempit garis pengisi turun ke barisnya sendiri dan
+       memenuhi lebar. Kalau dibiarkan sebaris, sisa ruangnya cuma
+       ~30px sehingga garisnya tidak terbaca sebagai garis. */
+
+    .sync-section-rule {
+
+        flex: 1 0 100%;
+
+        min-width: 0;
+
+        margin-top: 2px;
 
     }
 
