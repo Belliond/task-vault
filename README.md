@@ -116,7 +116,13 @@ Khusus sinkronisasi otomatis Moodle (**tidak** boleh masuk browser, lihat
 ```ini
 MOODLE_TOKEN=<token web service milik user>
 MOODLE_COURSE_IDS=                         # opsional, mis. 968,970
+MOODLE_EXCLUDE_COURSES=                    # opsional, mis. 968
 ```
+
+Filter kelas/matkul **tidak perlu** diisi di sini. Atur dari halaman
+**SYNC** → **01 SINKRONISASI OTOMATIS**; pilihannya disimpan di tabel
+`sync_settings`. Kedua variabel di atas hanya untuk mengunci pengaturan dari
+sisi server (menang atas database).
 
 `SUPABASE_DB_URL` **tidak perlu diisi** — script mencari server otomatis. Isi hanya
 kalau pencarian otomatis gagal, dengan connection string dari
@@ -520,16 +526,20 @@ Kalau hasilnya wajar, jalankan lagi tanpa centang.
 ```bash
 npm run sync:dry     # tampilkan saja
 npm run sync         # tulis ke database
-npm test             # uji fungsi murni (tanggal, external_id)
+npm test             # uji fungsi murni + logika filter UI
 ```
 
 Membaca `MOODLE_TOKEN` dari `.env`, atau dari environment kalau `.env` tidak ada.
 
 ### Hal yang perlu disadari
 
-- **Semua mata kuliah ikut disinkronkan.** Di browser Anda memilih mata kuliah
-  lewat centang; di server tidak ada `localStorage`. Batasi dengan
-  `MOODLE_COURSE_IDS=968,970` bila perlu.
+- **Semua mata kuliah ikut disinkronkan, kecuali yang Anda lepas centangnya.**
+  Di browser Anda memilih mata kuliah lewat centang; di server tidak ada
+  `localStorage`. Karena itu pilihan disimpan ke tabel `sync_settings` lewat
+  halaman **SYNC** → **01 SINKRONISASI OTOMATIS**, dan skrip server membacanya.
+  `MOODLE_COURSE_IDS=968,970` / `MOODLE_EXCLUDE_COURSES=968` tetap bisa dipakai
+  di GitHub Secrets bila ingin mengunci pengaturan dari sisi server — nilainya
+  menang atas database.
 - **Deadline memakai zona `Asia/Jakarta`.** Runner GitHub berjalan di UTC,
   sedangkan kolom `deadline` bertipe `date`. Tanpa konversi, tugas yang
   deadline-nya lewat tengah malam WIB akan tercatat sehari lebih awal.
@@ -669,14 +679,25 @@ perbarui secret-nya.
 
 ### Batasan yang perlu diketahui
 
-- **Tidak ada pemilih matkul di sync otomatis.** Sync manual di halaman web
-  membiarkan Anda memilih mata kuliah; sync otomatis tidak. Semua kelas yang
-  masih `ACTIVE` di Google ikut tersync — **termasuk kelas semester lalu yang
-  belum diarsipkan**. Kelas seperti itu tetap punya tugas dengan deadline jauh
-  di masa depan, sehingga muncul di halaman web.
-  Atur lewat `CLASSROOM_EXCLUDE_COURSES` (buang) atau `CLASSROOM_COURSE_IDS`
-  (hanya ini), boleh id angka atau potongan nama, dipisah koma.
-  Baris lama milik kelas yang disaring keluar akan ikut dibersihkan.
+- **Filter kelas dan mata kuliah diatur dari halaman Sync, bukan dari secret.**
+  Buka menu **SYNC**. Di bagian **01 SINKRONISASI OTOMATIS** ada dua daftar:
+  kelas Classroom dan mata kuliah Moodle. Yang tidak dicentang akan dilewati,
+  dan tugasnya yang sudah tersimpan dihapus pada sync berikutnya. Pilihan
+  disimpan di tabel `sync_settings`, jadi berlaku untuk semua perangkat dan
+  tidak hilang saat browser dibersihkan.
+  Daftar kelas/matkul di halaman itu **tidak perlu** menghubungkan akun:
+  server menyimpannya di tabel `classroom_courses` dan `moodle_courses` setiap
+  kali sync berjalan.
+- **Secret tetap bisa dipakai untuk mengunci pengaturan dari server.**
+  `CLASSROOM_EXCLUDE_COURSES`, `CLASSROOM_COURSE_IDS`, `MOODLE_COURSE_IDS`, dan
+  `MOODLE_EXCLUDE_COURSES` — bila diisi, nilainya **menang** atas isi database.
+  Boleh id angka atau potongan nama (Classroom), dipisah koma.
+- **Classroom menyimpan id, Moodle menyimpan id angka.** `classroom_courses.course_id`
+  berisi id panjang Google (mis. `843941141691`), `moodle_courses.course_id`
+  berisi id numerik Moodle (mis. `1016`). Keduanya dibaca sebagai teks.
+- **Kelas semester lalu yang masih `ACTIVE`** tetap ikut tersync kalau tidak
+  dikecualikan. Kelas seperti itu punya tugas dengan deadline jauh di masa
+  depan, sehingga muncul di halaman web — itulah gunanya filter di atas.
 - **Deadline Classroom juga digeser ke WIB.** `dueDate`/`dueTime` dari
   Classroom API keduanya dalam UTC. Tugas yang deadline-nya 17:00 UTC jatuh
   pada 00:00 WIB keesokan harinya, dan itu yang dicatat.
