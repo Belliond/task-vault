@@ -96,6 +96,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
+          # Nilai inputs.dry_run adalah string ("true"/"false"),
+          # bukan boolean. Membandingkan dengan "true" saja penting:
+          # memakai `if [ "${{ inputs.dry_run }}" ]` akan salah,
+          # karena string "false" tetap dianggap benar oleh bash.
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             node scripts/sync-lms.mjs --dry-run
           else
