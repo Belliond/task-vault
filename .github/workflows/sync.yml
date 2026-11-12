@@ -93,8 +93,6 @@ jobs:
         env:
           MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
           CLASSROOM_SYNC_REFRESH_TOKEN: ${{ secrets.CLASSROOM_SYNC_REFRESH_TOKEN }}
-          CLASSROOM_EXCLUDE_COURSES: ${{ secrets.CLASSROOM_EXCLUDE_COURSES }}
-          CLASSROOM_COURSE_IDS: ${{ secrets.CLASSROOM_COURSE_IDS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
@@ -123,6 +121,8 @@ jobs:
           CLASSROOM_SYNC_CLIENT_ID: ${{ secrets.CLASSROOM_SYNC_CLIENT_ID }}
           CLASSROOM_SYNC_CLIENT_SECRET: ${{ secrets.CLASSROOM_SYNC_CLIENT_SECRET }}
           CLASSROOM_SYNC_REFRESH_TOKEN: ${{ secrets.CLASSROOM_SYNC_REFRESH_TOKEN }}
+          CLASSROOM_EXCLUDE_COURSES: ${{ secrets.CLASSROOM_EXCLUDE_COURSES }}
+          CLASSROOM_COURSE_IDS: ${{ secrets.CLASSROOM_COURSE_IDS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |

@@ -1259,12 +1259,21 @@ async function syncClassroom({ classroom, supabase, hariIni, dryRun, env }) {
     // di halaman web punya pemilih matkul, jadi perilakunya
     // terasa berbeda. CLASSROOM_EXCLUDE_COURSES menutup celah
     // itu tanpa harus mengarsipkan kelas di Google.
+    const mentahKecuali = String(env.CLASSROOM_EXCLUDE_COURSES || "").trim();
+    const mentahHanya = String(env.CLASSROOM_COURSE_IDS || "").trim();
+
+    // Dicetak apa adanya (bukan rahasia), supaya kalau nilainya
+    // tidak sampai ke runner — mis. lupa menaruh di blok env
+    // workflow — kelihatan di log, bukan diam-diam diabaikan.
+    console.log(
+        `Filter   : kecuali="${mentahKecuali || "(kosong)"}" ` +
+        `hanya="${mentahHanya || "(kosong)"}"`
+    );
+
     const { dipakai: courses, dibuang } = saringKelasClassroom({
         courses: semuaKelas,
-        hanyaIds: String(env.CLASSROOM_COURSE_IDS || "")
-            .split(",").map((s) => s.trim()).filter(Boolean),
-        kecuali: String(env.CLASSROOM_EXCLUDE_COURSES || "")
-            .split(",").map((s) => s.trim()).filter(Boolean)
+        hanyaIds: mentahHanya.split(",").map((s) => s.trim()).filter(Boolean),
+        kecuali: mentahKecuali.split(",").map((s) => s.trim()).filter(Boolean)
     });
 
     if (dibuang.length) {
