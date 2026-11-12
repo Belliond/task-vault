@@ -311,7 +311,7 @@
        Memakai THREE.Sprite, bukan mesh bidang, karena:
          - sprite selalu tegak menghadap kamera, jadi tidak
            perlu dirotasi manual tiap frame;
-         - satu tekstur 64x64 dipakai bersama puluhan sprite,
+         - satu tekstur dipakai bersama puluhan sprite,
            sehingga hemat memori GPU.
 
        Posisi memakai koordinat ternormalisasi (fx/fy) supaya
@@ -336,9 +336,25 @@
     }
 
 
-    function createGlyphTexture(char, cssColor) {
+    // Tekstur digambar di kanvas 128x128 (bukan 64) supaya saat
+    // diskalakan ke puluhan piksel di layar tepi hurufnya tetap
+    // tajam.
+    //
+    // Digambar TIGA lintasan:
+    //   1. halo  — teks dengan shadowBlur sedang, menghasilkan
+    //      pendar neon di sekeliling huruf;
+    //   2. inti  — teks tanpa blur, warna sangat terang;
+    //   3. tebal — inti digambar ulang dengan garis tepi tipis
+    //      berwarna inti, supaya stroke digit tidak menipis saat
+    //      sprite diskalakan ke ukuran kecil (ini yang membuat
+    //      versi pertama terlihat seperti kabut, bukan angka).
+    //
+    // Tanpa lintasan inti + tebal, digitnya hanya terbaca sebagai
+    // kabut hijau samar di atas latar gelap.
 
-        const size = 64;
+    function createGlyphTexture(char, glowColor, coreColor) {
+
+        const size = 128;
         const glyphCanvas = document.createElement("canvas");
 
         glyphCanvas.width = size;
@@ -348,11 +364,33 @@
 
         if (!ctx) return null;
 
-        ctx.font = "700 46px 'Space Mono', 'Courier New', monospace";
-        ctx.fillStyle = cssColor;
+        const x = size / 2;
+        const y = size / 2 + 4;
+
+        // 82px di kanvas 128px: digit mengisi ~64% tekstur, jauh
+        // lebih padat daripada 54/96 sebelumnya. Semakin padat,
+        // semakin besar digit saat ditampilkan pada skala yang
+        // sama — dan semakin mudah dibaca.
+        ctx.font = "700 82px 'Space Mono', 'Courier New', monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(char, size / 2, size / 2 + 2);
+        ctx.lineJoin = "round";
+
+        // Lintasan 1 — halo neon.
+        ctx.fillStyle = glowColor;
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 14;
+        ctx.fillText(char, x, y);
+
+        // Lintasan 2 — inti terang, tanpa blur.
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = coreColor;
+        ctx.fillText(char, x, y);
+
+        // Lintasan 3 — pertebal stroke inti.
+        ctx.strokeStyle = coreColor;
+        ctx.lineWidth = 3;
+        ctx.strokeText(char, x, y);
 
         const texture = new THREE.CanvasTexture(glyphCanvas);
 
@@ -366,24 +404,34 @@
     }
 
 
+    // [karakter, warna halo, warna inti]
+    // Halo berwarna pekat (memberi pendar neon), inti mint/cyan
+    // TERANG. Percobaan dengan inti hampir putih (#eafff7) terbaca
+    // jelas tetapi kehilangan identitas hijau; percobaan dengan
+    // inti hijau jenuh (#7dffc9) justru terlihat kusam karena
+    // luminansinya rendah. Mint pucat di bawah adalah jalan
+    // tengah: luminansi tinggi (terbaca) tetapi hue-nya tetap
+    // hijau/cyan (tidak jadi abu-abu).
     const GLYPH_TEXTURES = [];
 
     [
-        ["0", "#4dffb2"],   // --green
-        ["1", "#4dffb2"],
-        ["0", "#4fe6ff"],   // --cyan
-        ["1", "#19d991"]    // --green-dark
-    ].forEach(([char, color]) => {
+        ["0", "#0a6b4a", "#b6ffdf"],
+        ["1", "#0a6b4a", "#b6ffdf"],
+        ["0", "#0d6b7a", "#c4f4ff"],
+        ["1", "#0a6b4a", "#9dffcf"]
+    ].forEach(([char, glow, core]) => {
 
-        const texture = createGlyphTexture(char, color);
+        const texture = createGlyphTexture(char, glow, core);
 
         if (texture) GLYPH_TEXTURES.push(texture);
 
     });
 
 
-    const GLYPH_COUNT = 126;
-    const GLYPH_COLUMNS = 14;
+    // Jumlah glyph dinaikkan dari 126 -> 168 dan kolom 14 -> 16
+    // agar sebarannya lebih merata sekaligus lebih ramai.
+    const GLYPH_COUNT = 168;
+    const GLYPH_COLUMNS = 16;
 
     const glyphSpecs = [];
     const glyphRng = makeRng(20261112);
@@ -409,8 +457,14 @@
             // sebagian di belakang, agar terasa berlapis.
             z: -4.2 + glyphRng() * 4.4,
 
-            scale: 0.26 + glyphRng() * 0.36,
-            opacity: 0.16 + glyphRng() * 0.40,
+            // Ukuran dinyatakan sebagai FRAKSI tinggi layar, bukan
+            // satuan dunia. Satuan dunia membuat sprite di z = -4.2
+            // tampil ~3x lebih kecil daripada di z = 0.2, sehingga
+            // sebagian besar glyph jadi terlalu kecil untuk dibaca.
+            // Nilainya dikonversi ke satuan dunia di layout().
+            screenScale: 0.045 + glyphRng() * 0.05,
+
+            opacity: 0.70 + glyphRng() * 0.30,
 
             floatAmp: 0.06 + glyphRng() * 0.16,
             floatSpeed: 0.24 + glyphRng() * 0.52,
@@ -449,7 +503,6 @@
 
             const sprite = new THREE.Sprite(material);
 
-            sprite.scale.setScalar(spec.scale);
             sprite.position.z = spec.z;
 
             scene.add(sprite);
@@ -496,18 +549,27 @@
         // mengikuti kursor.
         glyphs.forEach((item) => {
 
-            item.baseX = item.spec.fx * halfWidth * 1.15;
-            item.baseY = item.spec.fy * halfHeight * 1.15;
+            const spec = item.spec;
 
-            item.sprite.position.set(
-                item.baseX,
-                item.baseY,
-                item.spec.z
-            );
+            item.baseX = spec.fx * halfWidth * 1.15;
+            item.baseY = spec.fy * halfHeight * 1.15;
 
-            item.sprite.scale.setScalar(
-                item.spec.scale * (narrow.matches ? 0.85 : 1)
-            );
+            item.sprite.position.set(item.baseX, item.baseY, spec.z);
+
+            // Konversi ukuran layar -> satuan dunia.
+            // Semakin jauh sprite dari kamera (z negatif besar),
+            // semakin besar satuan dunianya agar hasil akhir di
+            // layar tetap sama. Tanpa ini glyph di belakang tampil
+            // jauh lebih kecil dan tidak terbaca.
+            const distance = camera.position.z - spec.z;
+            const halfHeightAtDepth =
+                Math.tan((camera.fov * Math.PI) / 360) * distance;
+
+            const worldSize =
+                spec.screenScale * halfHeightAtDepth * 2 *
+                (narrow.matches ? 1.15 : 1);
+
+            item.sprite.scale.setScalar(worldSize);
 
         });
 
@@ -525,7 +587,7 @@
         });
 
 
-        // Glyph dikurangi di layar sempit: 126 sprite terlalu
+        // Glyph dikurangi di layar sempit: 168 sprite terlalu
         // padat di 390px dan mengganggu keterbacaan teks.
         const glyphLimit = narrow.matches
             ? Math.round(GLYPH_COUNT * 0.42)

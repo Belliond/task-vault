@@ -317,14 +317,34 @@ isi warna solid, garis tepi tebal, dan hard shadow tanpa blur. Tiap
 objek terdiri dari empat lapisan — hard shadow, isi, outline, dan garis
 lipatan.
 
-**Lapisan biner.** Selain 6 bentuk besar, ada **126 sprite** teks `0`/`1`
+**Lapisan biner.** Selain 6 bentuk besar, ada **168 sprite** teks `0`/`1`
 yang tersebar di seluruh layar (`GLYPH_COUNT`). Sprite dipakai, bukan mesh
 bidang, karena selalu menghadap kamera tanpa perlu dirotasi manual dan
-satu tekstur 64×64 bisa dipakai bersama. Sebarannya memakai PRNG
-deterministik (seed tetap) supaya tata letak tidak berubah tiap reload.
-Glyph mengapung pelan **dan** bergeser saat kursor bergerak; nilai
-`depth` per sprite membuat lapisan depan bergerak lebih jauh daripada
-lapisan belakang sehingga muncul kesan parallax.
+satu tekstur bisa dipakai bersama. Sebarannya memakai PRNG deterministik
+(seed tetap) supaya tata letak tidak berubah tiap reload. Glyph mengapung
+pelan **dan** bergeser saat kursor bergerak; nilai `depth` per sprite
+membuat lapisan depan bergerak lebih jauh daripada lapisan belakang
+sehingga muncul kesan parallax.
+
+Tiga hal yang menentukan glyph benar-benar terbaca — semuanya hasil
+revisi setelah versi pertama hanya tampak sebagai kabut hijau samar:
+
+| Faktor | Nilai | Alasan |
+|---|---|---|
+| Tekstur | kanvas 128×128, digit 82px | Saat sprite diskalakan ke ~40–80px di layar, tepi huruf tetap tajam |
+| Lintasan gambar | halo (shadowBlur) → inti → stroke tebal | Halo saja menghasilkan kabut; inti + stroke membuat batang digit tegas |
+| Warna | halo pekat + inti mint/cyan pucat | Inti hampir putih terbaca tetapi terlihat abu-abu; inti hijau jenuh justru kusam |
+
+Selain itu ukuran glyph dinyatakan sebagai **fraksi tinggi layar**
+(`screenScale`), lalu dikonversi ke satuan dunia per kedalaman di
+`layout()`. Sebelumnya ukuran memakai satuan dunia langsung, sehingga
+sprite di `z = -4.2` tampil sekitar tiga kali lebih kecil daripada di
+`z = 0.2` — sebagian besar glyph jadi terlalu kecil untuk dibaca.
+
+Masking canvas juga diubah: dulu pusat layar memakai `transparent 52%`
+(alpha 0), sehingga glyph di tengah terhapus sama sekali. Sekarang pusat
+hanya **dipudarkan** (alpha 0.30 → 1.00 di tepi), jadi glyph terlihat di
+seluruh layar tanpa mengganggu judul.
 
 **Efek tilt (`pointer-tilt.js`).** Kartu (`.course-card`, `.task-card`,
 `.stat-card`, `.calendar-card`, `.sync-card`, `.task-group-header`) dan
@@ -349,7 +369,7 @@ tanpa pindah ke ES module.
 | WebGL tidak tersedia | Sama seperti di atas |
 | `prefers-reduced-motion: reduce` | Bentuk tetap tampil, tetapi diam (satu frame); tilt nonaktif |
 | Tab tidak aktif / canvas off-screen | Animasi dijeda |
-| Lebar < 700px | 3 objek (bukan 6), ~53 glyph (bukan 126), `pixelRatio` ≤ 1.25, ~30 fps |
+| Lebar < 700px | 3 objek (bukan 6), ~71 glyph (bukan 168), glyph 15% lebih besar, opacity 0.85×, `pixelRatio` ≤ 1.25, ~30 fps |
 | Perangkat sentuh | Tilt nonaktif (tidak ada hover) |
 
 `pointer-events: none` dan `aria-hidden="true"` membuat lapisan ini

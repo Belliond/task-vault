@@ -4559,23 +4559,28 @@ button {
 
     opacity: 0;
 
-    /* Masking: bagian tengah dibiarkan bersih — di situlah judul
-       dan teks isi berada. Bentuk 3D hanya tampil di pinggir, dan
-       pudar secara bertahap sehingga tidak terlihat terpotong.
-       Nilai 72%/84% dengan titik jernih 52% dipilih setelah
-       menguji 4 kandidat pada 1440px, 1000px, dan 768px: area
-       jernih yang lebih kecil (52%/62%) masih menyisakan bentuk
-       di belakang judul di layar sempit, sedangkan yang lebih
-       besar (88%/96%) membuat bentuknya hampir hilang. */
+    /* Masking: dulu bagian tengah benar-benar transparan
+       (`transparent 52%`, alpha 0) supaya bentuk 3D tidak
+       menabrak judul. Akibatnya lapisan biner yang tersebar di
+       seluruh layar ikut terhapus di area tengah — persis di
+       mana mata paling sering melihat.
+
+       Sekarang tengah hanya DIPUDARKAN, bukan dihilangkan:
+       alpha 0.30 di pusat, naik ke 1.00 di tepi. Bentuk 3D besar
+       tetap tidak mengganggu judul karena opacity-nya kecil di
+       tengah, sedangkan glyph biner tetap terlihat di seluruh
+       layar. */
 
     -webkit-mask-image: radial-gradient(
-        ellipse 72% 84% at 50% 50%,
-        transparent 52%,
+        ellipse 78% 88% at 50% 50%,
+        rgba(0, 0, 0, 0.30) 0%,
+        rgba(0, 0, 0, 0.55) 45%,
         #000 100%
     );
     mask-image: radial-gradient(
-        ellipse 72% 84% at 50% 50%,
-        transparent 52%,
+        ellipse 78% 88% at 50% 50%,
+        rgba(0, 0, 0, 0.30) 0%,
+        rgba(0, 0, 0, 0.55) 45%,
         #000 100%
     );
 
@@ -4621,13 +4626,14 @@ button {
 
 
 /* Di layar kecil konten memenuhi seluruh lebar, jadi lapisan
-   ini dibuat lebih redup lagi. */
+   ini dibuat lebih redup — tetapi tidak seekstrem sebelumnya
+   (0.7 -> 0.85): pada 0.7 glyph biner praktis hilang di 390px. */
 
 @media (max-width: 700px) {
 
     .bg3d-stage.is-ready {
 
-        opacity: calc(var(--bg3d-opacity, 0.85) * 0.7);
+        opacity: calc(var(--bg3d-opacity, 0.85) * 0.85);
 
     }
 
