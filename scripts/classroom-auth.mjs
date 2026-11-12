@@ -30,8 +30,16 @@
 //      node scripts/classroom-auth.mjs
 //
 //  Yang dibutuhkan:
-//      CLASSROOM_CLIENT_ID      OAuth client tipe Desktop app
-//      CLASSROOM_CLIENT_SECRET  secret dari client yang sama
+//      CLASSROOM_SYNC_CLIENT_ID      OAuth client tipe Desktop app
+//      CLASSROOM_SYNC_CLIENT_SECRET  secret dari client yang sama
+//
+//  Kenapa namanya CLASSROOM_SYNC_*, bukan CLASSROOM_CLIENT_ID?
+//  CLASSROOM_CLIENT_ID dipakai situs untuk implicit flow
+//  (redirect ke GitHub Pages). Client tipe "Web application"
+//  MENOLAK redirect http://127.0.0.1 — sudah diuji langsung ke
+//  server Google dan hasilnya redirect_uri_mismatch. Jadi
+//  sync otomatis WAJIB memakai client Desktop app yang
+//  terpisah, dengan nama variabel yang terpisah pula.
 //
 //  Keduanya dibaca dari .env. Kalau belum ada, skrip menjelaskan
 //  cara membuatnya.
@@ -65,23 +73,32 @@ if (fs.existsSync(envPath)) {
     env = parseEnv(fs.readFileSync(envPath, "utf8"));
 }
 
-const clientId = String(env.CLASSROOM_CLIENT_ID || "").trim();
-const clientSecret = String(env.CLASSROOM_CLIENT_SECRET || "").trim();
+const clientId = String(
+    env.CLASSROOM_SYNC_CLIENT_ID || env.CLASSROOM_CLIENT_ID || ""
+).trim();
+
+const clientSecret = String(
+    env.CLASSROOM_SYNC_CLIENT_SECRET || env.CLASSROOM_CLIENT_SECRET || ""
+).trim();
 
 if (!clientId || !clientSecret) {
 
     console.error(
-        "\nCLASSROOM_CLIENT_ID dan CLASSROOM_CLIENT_SECRET belum diisi di .env.\n\n" +
+        "\nCLASSROOM_SYNC_CLIENT_ID dan CLASSROOM_SYNC_CLIENT_SECRET belum diisi di .env.\n\n" +
         "Cara membuatnya (sekali saja):\n" +
         "  1. Buka https://console.cloud.google.com/auth/clients\n" +
         "  2. Pastikan project yang benar sudah dipilih di bagian atas.\n" +
         "  3. Klik CREATE CLIENT -> Application type: Desktop app -> Create.\n" +
         "  4. Salin Client ID dan Client secret ke .env:\n" +
-        "         CLASSROOM_CLIENT_ID=...apps.googleusercontent.com\n" +
-        "         CLASSROOM_CLIENT_SECRET=...\n" +
+        "         CLASSROOM_SYNC_CLIENT_ID=...apps.googleusercontent.com\n" +
+        "         CLASSROOM_SYNC_CLIENT_SECRET=...\n" +
         "  5. Jalankan lagi: npm run classroom:auth\n\n" +
         "Tipe HARUS 'Desktop app'. Client tipe 'Web application' tidak\n" +
-        "mengizinkan redirect ke http://127.0.0.1, jadi alur ini gagal.\n"
+        "mengizinkan redirect ke http://127.0.0.1 (redirect_uri_mismatch),\n" +
+        "jadi alur ini pasti gagal.\n" +
+        "JANGAN memakai client yang sama dengan situs: situs butuh client\n" +
+        "'Web application' dengan redirect https, dan itu tidak bisa\n" +
+        "dipaksa menerima loopback.\n"
     );
 
     process.exit(1);
@@ -319,9 +336,9 @@ console.log(
     "\nTempel tiga baris ini ke .env (dan ke GitHub Secrets):\n"
 );
 
-console.log("CLASSROOM_CLIENT_ID=" + clientId);
-console.log("CLASSROOM_CLIENT_SECRET=<secret yang sudah ada di .env>");
-console.log("CLASSROOM_REFRESH_TOKEN=" + data.refresh_token);
+console.log("CLASSROOM_SYNC_CLIENT_ID=" + clientId);
+console.log("CLASSROOM_SYNC_CLIENT_SECRET=<secret yang sudah ada di .env>");
+console.log("CLASSROOM_SYNC_REFRESH_TOKEN=" + data.refresh_token);
 
 console.log(
     "\nCatatan:\n" +

@@ -23,9 +23,14 @@ name: Sync LMS
 #      SUPABASE_URL    sama dengan yang dipakai deploy
 #      SUPABASE_KEY    publishable / anon key
 #
-#      CLASSROOM_CLIENT_ID       opsional, untuk sync Classroom
-#      CLASSROOM_CLIENT_SECRET   opsional
-#      CLASSROOM_REFRESH_TOKEN   opsional
+#      CLASSROOM_SYNC_CLIENT_ID       opsional, untuk sync Classroom
+#      CLASSROOM_SYNC_CLIENT_SECRET   opsional
+#      CLASSROOM_SYNC_REFRESH_TOKEN   opsional
+#
+#  Client Classroom untuk sync HARUS bertipe "Desktop app" dan
+#  HARUS berbeda dari CLASSROOM_CLIENT_ID milik situs. Client
+#  "Web application" menolak redirect http://127.0.0.1
+#  (redirect_uri_mismatch), jadi tidak bisa dipakai di sini.
 #
 #  Kalau tiga secret Classroom kosong, bagian Classroom
 #  dilewati dan Moodle tetap berjalan. Jadi Classroom bisa
@@ -86,7 +91,7 @@ jobs:
       - name: Check required secrets
         env:
           MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
-          CLASSROOM_REFRESH_TOKEN: ${{ secrets.CLASSROOM_REFRESH_TOKEN }}
+          CLASSROOM_SYNC_REFRESH_TOKEN: ${{ secrets.CLASSROOM_SYNC_REFRESH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
@@ -95,10 +100,10 @@ jobs:
           #
           # Minimal satu sumber harus ada. Moodle dan Classroom
           # boleh berjalan sendiri-sendiri.
-          if [ -z "$MOODLE_TOKEN" ] && [ -z "$CLASSROOM_REFRESH_TOKEN" ]; then
+          if [ -z "$MOODLE_TOKEN" ] && [ -z "$CLASSROOM_SYNC_REFRESH_TOKEN" ]; then
             echo "::error::Tidak ada sumber yang bisa disinkronkan."
-            echo "::error::Isi MOODLE_TOKEN, atau CLASSROOM_CLIENT_ID +"
-            echo "::error::CLASSROOM_CLIENT_SECRET + CLASSROOM_REFRESH_TOKEN."
+            echo "::error::Isi MOODLE_TOKEN, atau CLASSROOM_SYNC_CLIENT_ID +"
+            echo "::error::CLASSROOM_SYNC_CLIENT_SECRET + CLASSROOM_SYNC_REFRESH_TOKEN."
             echo "::error::Caranya ada di README bagian 'Sync otomatis'."
             exit 1
           fi
@@ -112,9 +117,9 @@ jobs:
         env:
           MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
           MOODLE_URL: ${{ secrets.MOODLE_URL }}
-          CLASSROOM_CLIENT_ID: ${{ secrets.CLASSROOM_CLIENT_ID }}
-          CLASSROOM_CLIENT_SECRET: ${{ secrets.CLASSROOM_CLIENT_SECRET }}
-          CLASSROOM_REFRESH_TOKEN: ${{ secrets.CLASSROOM_REFRESH_TOKEN }}
+          CLASSROOM_SYNC_CLIENT_ID: ${{ secrets.CLASSROOM_SYNC_CLIENT_ID }}
+          CLASSROOM_SYNC_CLIENT_SECRET: ${{ secrets.CLASSROOM_SYNC_CLIENT_SECRET }}
+          CLASSROOM_SYNC_REFRESH_TOKEN: ${{ secrets.CLASSROOM_SYNC_REFRESH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |

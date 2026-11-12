@@ -124,6 +124,9 @@ function pick(key) {
 // harus gagal di sini, bukan setelah rahasianya terlanjur
 // terbit di GitHub Pages.
 const HANYA_SERVER = [
+    "CLASSROOM_SYNC_CLIENT_ID",
+    "CLASSROOM_SYNC_CLIENT_SECRET",
+    "CLASSROOM_SYNC_REFRESH_TOKEN",
     "CLASSROOM_CLIENT_SECRET",
     "CLASSROOM_REFRESH_TOKEN",
     "MOODLE_TOKEN",

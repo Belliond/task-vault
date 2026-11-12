@@ -42,9 +42,9 @@
 //      SUPABASE_URL             https://xxx.supabase.co
 //      SUPABASE_KEY             publishable / anon key
 //      MOODLE_COURSE_IDS        opsional, mis. "968,969"
-//      CLASSROOM_CLIENT_ID      OAuth client (Desktop app)
-//      CLASSROOM_CLIENT_SECRET  secret client yang sama
-//      CLASSROOM_REFRESH_TOKEN  hasil `npm run classroom:auth`
+//      CLASSROOM_SYNC_CLIENT_ID      OAuth client (Desktop app)
+//      CLASSROOM_SYNC_CLIENT_SECRET  secret client yang sama
+//      CLASSROOM_SYNC_REFRESH_TOKEN  hasil `npm run classroom:auth`
 // =========================================================
 
 import fs from "node:fs";
@@ -668,8 +668,8 @@ async function classroomAccessToken({ clientId, clientSecret, refreshToken }) {
 
             throw new Error(
                 "Google menolak client ID/secret (invalid_client). Pastikan\n" +
-                "CLASSROOM_CLIENT_ID dan CLASSROOM_CLIENT_SECRET berasal dari\n" +
-                "OAuth client yang sama (tipe Desktop app)."
+                "CLASSROOM_SYNC_CLIENT_ID dan CLASSROOM_SYNC_CLIENT_SECRET\n" +
+                "berasal dari OAuth client yang sama (tipe Desktop app)."
             );
 
         }
@@ -801,10 +801,32 @@ async function main() {
         token: tokenBersih || tokenMentah
     };
 
+    // Kredensial Classroom untuk SERVER memakai nama sendiri
+    // (CLASSROOM_SYNC_*), bukan CLASSROOM_CLIENT_ID.
+    //
+    // Alasannya konkret dan sudah diuji ke server Google:
+    // CLASSROOM_CLIENT_ID dipakai situs untuk implicit flow
+    // dengan redirect https, dan client bertipe "Web
+    // application" MENOLAK redirect http://127.0.0.1
+    // (redirect_uri_mismatch). Sync otomatis butuh client
+    // bertipe "Desktop app" yang berbeda. Kalau keduanya
+    // memakai nama variabel yang sama, salah satunya pasti
+    // tertimpa dan rusak diam-diam.
+    //
+    // Nama lama tetap dibaca sebagai cadangan supaya
+    // konfigurasi yang sudah ada tidak langsung mati.
+    const ambilEnv = (...nama) => {
+        for (const n of nama) {
+            const v = String(env[n] || "").trim();
+            if (v) return v;
+        }
+        return "";
+    };
+
     const classroom = {
-        clientId: String(env.CLASSROOM_CLIENT_ID || "").trim(),
-        clientSecret: String(env.CLASSROOM_CLIENT_SECRET || "").trim(),
-        refreshToken: String(env.CLASSROOM_REFRESH_TOKEN || "").trim()
+        clientId: ambilEnv("CLASSROOM_SYNC_CLIENT_ID", "CLASSROOM_CLIENT_ID"),
+        clientSecret: ambilEnv("CLASSROOM_SYNC_CLIENT_SECRET", "CLASSROOM_CLIENT_SECRET"),
+        refreshToken: ambilEnv("CLASSROOM_SYNC_REFRESH_TOKEN", "CLASSROOM_REFRESH_TOKEN")
     };
 
     const supabase = {
@@ -839,8 +861,9 @@ async function main() {
         throw new Error(
             "Tidak ada sumber yang bisa disinkronkan.\n" +
             "  Moodle    : isi MOODLE_TOKEN.\n" +
-            "  Classroom : isi CLASSROOM_CLIENT_ID, CLASSROOM_CLIENT_SECRET,\n" +
-            "              dan CLASSROOM_REFRESH_TOKEN (lihat `npm run classroom:auth`)."
+            "  Classroom : isi CLASSROOM_SYNC_CLIENT_ID,\n" +
+            "              CLASSROOM_SYNC_CLIENT_SECRET, dan\n" +
+            "              CLASSROOM_SYNC_REFRESH_TOKEN (lihat `npm run classroom:auth`)."
         );
     }
 

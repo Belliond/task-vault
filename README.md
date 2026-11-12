@@ -587,14 +587,16 @@ Konsekuensinya:
 
 ### Setup (sekali saja)
 
-**1. Buat OAuth client tipe Desktop app**
+**1. Buat OAuth client KEDUA, tipe Desktop app**
 
 <https://console.cloud.google.com/auth/clients> → **Create client** →
 Application type **Desktop app** → Create.
 
-> Tipe harus **Desktop app**. Client **Web application** yang dipakai situs
-> tidak mengizinkan redirect ke `http://127.0.0.1`, jadi alur ini akan gagal
-> dengan `redirect_uri_mismatch`.
+> Ini client **kedua**, terpisah dari client yang dipakai situs. Jangan pakai
+> ulang client situs: tipe **Web application** menolak redirect
+> `http://127.0.0.1` dengan `redirect_uri_mismatch` — sudah diuji langsung ke
+> server Google. Karena itu nama variabelnya juga berbeda (`CLASSROOM_SYNC_*`),
+> supaya keduanya tidak saling menimpa.
 
 Pastikan **Google Classroom API** sudah aktif:
 <https://console.cloud.google.com/apis/library/classroom.googleapis.com>
@@ -602,8 +604,8 @@ Pastikan **Google Classroom API** sudah aktif:
 **2. Isi `.env`**
 
 ```env
-CLASSROOM_CLIENT_ID=....apps.googleusercontent.com
-CLASSROOM_CLIENT_SECRET=...
+CLASSROOM_SYNC_CLIENT_ID=....apps.googleusercontent.com
+CLASSROOM_SYNC_CLIENT_SECRET=...
 ```
 
 **3. Ambil refresh token**
@@ -612,7 +614,7 @@ CLASSROOM_CLIENT_SECRET=...
 npm run classroom:auth
 ```
 
-Skrip membuka browser, meminta izin, lalu mencetak `CLASSROOM_REFRESH_TOKEN`.
+Skrip membuka browser, meminta izin, lalu mencetak `CLASSROOM_SYNC_REFRESH_TOKEN`.
 Sebelum mencetak, skrip **langsung menguji** token itu ke Classroom API dan
 menampilkan daftar kelas yang terlihat — jadi kalau ada yang salah (scope
 kurang, API belum aktif, akun tanpa kelas), ketahuan saat itu juga.
@@ -621,9 +623,9 @@ kurang, API belum aktif, akun tanpa kelas), ketahuan saat itu juga.
 
 | Nama | Nilai |
 |---|---|
-| `CLASSROOM_CLIENT_ID` | dari langkah 1 |
-| `CLASSROOM_CLIENT_SECRET` | dari langkah 1 |
-| `CLASSROOM_REFRESH_TOKEN` | dari langkah 3 |
+| `CLASSROOM_SYNC_CLIENT_ID` | dari langkah 1 |
+| `CLASSROOM_SYNC_CLIENT_SECRET` | dari langkah 1 |
+| `CLASSROOM_SYNC_REFRESH_TOKEN` | dari langkah 3 |
 
 **5. Buktikan dengan dry run**
 
@@ -670,14 +672,14 @@ Konsekuensi yang perlu diterima:
 - **`MOODLE_TOKEN` hanya hidup di GitHub Secrets.** Token itu tidak pernah
   dibuat menjadi `config.js` dan tidak pernah dikirim ke browser, karena
   `sync.yml` berjalan di runner GitHub, bukan di halaman.
-- **Kredensial Classroom juga hanya di server.** `CLASSROOM_CLIENT_SECRET` dan
-  `CLASSROOM_REFRESH_TOKEN` dibaca oleh `scripts/sync-lms.mjs` dari GitHub
+- **Kredensial Classroom juga hanya di server.** `CLASSROOM_SYNC_CLIENT_SECRET`
+  dan `CLASSROOM_SYNC_REFRESH_TOKEN` dibaca oleh `scripts/sync-lms.mjs` dari GitHub
   Secrets, bukan dari halaman. Yang ada di browser hanyalah OAuth Client ID
   (memang bukan rahasia) dan access token berumur ~1 jam di `localStorage`.
   Refresh token **tidak pernah** menyentuh browser.
 - **`config.js` tidak memuat kredensial apa pun.** Generator
   `scripts/build-config.mjs` hanya meneruskan nilai yang memang publik.
-  `CLASSROOM_CLIENT_SECRET` dan `CLASSROOM_REFRESH_TOKEN` sengaja tidak
+  `CLASSROOM_SYNC_CLIENT_SECRET` dan `CLASSROOM_SYNC_REFRESH_TOKEN` sengaja tidak
   diteruskan; kalau suatu saat muncul di `config.js`, itu kesalahan.
 - **Fungsi `security definer` harus dicabut dari `anon`.** Fungsi yang
   memegang rahasia server tidak boleh bisa dipanggil dari browser; kalau bisa,
