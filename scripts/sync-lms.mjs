@@ -119,6 +119,49 @@ export function hariIniWib(sekarangMs = Date.now()) {
 }
 
 
+// Ambil token 32 karakter dari nilai yang ditempel.
+//
+// Halaman Moodle menampilkan token di beberapa bentuk, dan yang
+// tersalin kadang bukan hanya tokennya: bisa berupa URL lengkap
+// (...?wstoken=xxxx), baris "token=xxxx", atau teks halaman.
+// Daripada gagal karena itu, tokennya dipetik keluar.
+//
+// Mengembalikan null kalau tidak ada pola token di dalamnya.
+export function petikToken(nilai) {
+
+    const teks = String(nilai ?? "").trim();
+
+    if (!teks) return null;
+
+    // Bentuk yang benar: tepat 32 huruf/angka.
+    if (/^[A-Za-z0-9]{32}$/.test(teks)) return teks;
+
+    // Ditulis sebagai parameter: wstoken= / authtoken= / token=
+    const berparameter = teks.match(
+        /(?:wstoken|authtoken|token)=([A-Za-z0-9]{32})/i
+    );
+
+    if (berparameter) return berparameter[1];
+
+    // 32 huruf/angka yang dibatasi pemisah (spasi, kutip, <, &, dll).
+    //
+    // Sengaja TIDAK memakai pencocokan bebas. Kalau nilainya berupa
+    // gumpalan alfanumerik panjang tanpa pemisah, tidak ada cara tahu
+    // 32 karakter mana yang dimaksud; memetik yang pertama hanya akan
+    // menghasilkan sampah yang bentuknya mirip token lalu ditolak
+    // Moodle dengan pesan yang menyesatkan. Lebih baik kembalikan
+    // null supaya nilai aslinya dilaporkan apa adanya.
+    const berbatas = teks.match(
+        /(?:^|[^A-Za-z0-9])([A-Za-z0-9]{32})(?=[^A-Za-z0-9]|$)/
+    );
+
+    if (berbatas) return berbatas[1];
+
+    return null;
+
+}
+
+
 // Susun baris siap kirim ke sync_lms_tasks().
 //
 // Aturannya sengaja sama dengan versi browser:
@@ -434,9 +477,16 @@ async function main() {
 
     }
 
+    const tokenMentah = String(env.MOODLE_TOKEN || "").trim();
+    const tokenBersih = petikToken(tokenMentah);
+
     const moodle = {
         url: rapikanUrl(env.MOODLE_URL || "https://kuliah2.itera.ac.id"),
-        token: String(env.MOODLE_TOKEN || "").trim()
+        // Kalau yang ditempel bukan token murni (mis. URL yang
+        // memuat wstoken=...), tokennya dipetik keluar. Kalau
+        // tidak ada pola token sama sekali, nilai aslinya dipakai
+        // supaya pesan galatnya tetap masuk akal.
+        token: tokenBersih || tokenMentah
     };
 
     const supabase = {
@@ -497,6 +547,18 @@ async function main() {
     console.log(
         `Token    : ${moodle.token.length} karakter — ` + ciri(moodle.token)
     );
+
+    // Kalau nilai asli lebih panjang dari token yang dipakai,
+    // berarti tokennya berhasil dipetik dari teks/URL. Ini
+    // dilaporkan supaya tidak terlihat seperti nilai ajaib.
+    if (tokenBersih && tokenBersih !== tokenMentah) {
+
+        console.log(
+            `           Dipetik dari nilai ${tokenMentah.length} karakter ` +
+            "(isi tempelan bukan token murni, tapi tokennya ada di dalamnya)."
+        );
+
+    }
 
     if (moodle.token.length !== 32) {
 
