@@ -669,6 +669,14 @@ perbarui secret-nya.
 
 ### Batasan yang perlu diketahui
 
+- **Tidak ada pemilih matkul di sync otomatis.** Sync manual di halaman web
+  membiarkan Anda memilih mata kuliah; sync otomatis tidak. Semua kelas yang
+  masih `ACTIVE` di Google ikut tersync — **termasuk kelas semester lalu yang
+  belum diarsipkan**. Kelas seperti itu tetap punya tugas dengan deadline jauh
+  di masa depan, sehingga muncul di halaman web.
+  Atur lewat `CLASSROOM_EXCLUDE_COURSES` (buang) atau `CLASSROOM_COURSE_IDS`
+  (hanya ini), boleh id angka atau potongan nama, dipisah koma.
+  Baris lama milik kelas yang disaring keluar akan ikut dibersihkan.
 - **Deadline Classroom juga digeser ke WIB.** `dueDate`/`dueTime` dari
   Classroom API keduanya dalam UTC. Tugas yang deadline-nya 17:00 UTC jatuh
   pada 00:00 WIB keesokan harinya, dan itu yang dicatat.
