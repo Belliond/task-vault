@@ -15,7 +15,8 @@ config.js           DI-GENERATE dari .env (tidak di-commit)
 .env.example        Template .env (di-commit)
 SUPABASE_SETUP.sql  Setup sekali-jalan lewat SQL Editor (cara cepat)
 supabase/           Migrasi versi terkontrol (cara yang disarankan)
-scripts/            Generator config.js dan SUPABASE_SETUP.sql
+scripts/            Generator config.js, penerap migrasi, sync Moodle
+.github/workflows/  deploy.yml (Pages) + sync.yml (sync otomatis)
 ```
 
 ## Struktur halaman
@@ -109,6 +110,14 @@ SUPABASE_DB_PASSWORD=<password database>
 SUPABASE_DB_URL=                           # opsional, biarkan kosong
 ```
 
+Khusus sinkronisasi otomatis Moodle (**tidak** boleh masuk browser, lihat
+[Sync otomatis Moodle](#sync-otomatis-moodle)):
+
+```ini
+MOODLE_TOKEN=<token web service milik user>
+MOODLE_COURSE_IDS=                         # opsional, mis. 968,970
+```
+
 `SUPABASE_DB_URL` **tidak perlu diisi** — script mencari server otomatis. Isi hanya
 kalau pencarian otomatis gagal, dengan connection string dari
 **Dashboard → tombol `Connect` → tab `Session pooler`** (harus diawali `postgresql://`,
@@ -150,6 +159,11 @@ saat deploy.
    | `MOODLE_URL` | tidak | default Site URL |
    | `CLASSROOM_CLIENT_ID` | tidak | OAuth client ID |
    | `CLASSROOM_REDIRECT` | tidak | kosong = otomatis |
+   | `MOODLE_TOKEN` | untuk sync otomatis | lihat [Sync otomatis Moodle](#sync-otomatis-moodle) |
+
+   `MOODLE_TOKEN` **tidak** dipakai `deploy.yml` — hanya oleh `sync.yml`.
+   Jangan menambahkannya ke `config.js`: apa pun yang masuk ke sana terkirim
+   ke browser.
 
 2. **Settings → Pages → Source**: pilih **GitHub Actions**
    (bukan "Deploy from a branch").
@@ -416,14 +430,22 @@ dihapus.
 
 ## Integrasi LMS
 
+Ada dua cara menarik tugas: **manual** lewat tombol di halaman SYNC, dan
+**otomatis** lewat GitHub Actions (khusus Moodle).
+
 ### Moodle
 
-Dua jalur, keduanya menyimpan token di `localStorage` browser (tidak pernah
-dikirim ke server lain):
+Token web service disimpan di `localStorage` browser dan tidak pernah dikirim
+ke server lain. Dua jalur pengambilan token:
 
 - **Username + password** → `/login/token.php` (untuk akun dengan password lokal)
-- **SSO Google** → `launch.php` → decode link `moodlemobile://token=...`
-  (untuk akun kampus yang hanya bisa login Google)
+- **Token manual** → login ke Moodle → *Preferences* → *Security keys*
+  (`/user/managetoken.php`) → salin token untuk service `moodle_mobile_app`
+
+> Jalur **SSO Google** (`launch.php`) masih ada di kode, tetapi di
+> `kuliah2.itera.ac.id` alamat itu membalas **404** — plugin mobile tidak
+> tersedia. Untuk akun yang hanya bisa login lewat Google, ambil token lewat
+> halaman *Security keys* setelah login di browser.
 
 ### Google Classroom
 
@@ -434,6 +456,91 @@ OAuth 2.0 *implicit flow*, client-side. Butuh OAuth Client ID milik sendiri:
 3. *Authorized JavaScript origins*: `https://belliond.github.io`
 4. *Authorized redirect URIs*: `https://belliond.github.io/task-vault/`
 5. OAuth consent screen → **Test users** → tambahkan akun yang akan sync
+
+> **Batas yang perlu diketahui:** selama publishing status masih *Testing*,
+> Google membuat refresh token kedaluwarsa **7 hari**. Sync Classroom lewat
+> OAuth karena itu belum bisa sepenuhnya otomatis — token harus diperbarui
+> berkala. Pindah ke *In production* butuh verifikasi Google untuk scope
+> sensitif, yang prosesnya berminggu-minggu.
+
+---
+
+## Sync otomatis Moodle
+
+Tombol SYNC hanya berjalan kalau ada orang membuka situs dan mengkliknya. Agar
+tugas baru masuk sendiri, `scripts/sync-lms.mjs` menjalankan pekerjaan yang sama
+di server, dijadwalkan oleh `.github/workflows/sync.yml`.
+
+### Cara kerjanya
+
+1. `core_webservice_get_site_info` → memvalidasi token sekaligus mengambil `userid`
+2. `core_enrol_get_users_courses` → daftar mata kuliah yang diikuti
+3. `mod_assign_get_assignments` → tugas per mata kuliah (20 mata kuliah per permintaan)
+4. Kirim semuanya dalam satu panggilan ke `sync_lms_tasks(rows)`
+
+Fungsi database itu sudah ada sejak migrasi `20261105000000`. Ia **tidak**
+menimpa `status` maupun `dismissed_at`, jadi tugas yang sudah Anda tandai
+selesai atau sembunyikan tidak kembali menjadi *Pending* setiap kali sync jalan.
+
+### Kenapa GitHub Actions, bukan cron di database
+
+Database proyek ini memang punya `pg_cron` dan `pg_net`, dan keduanya terbukti
+bisa memanggil keluar. Tetapi menunggu balasan HTTP **di dalam satu transaksi
+Postgres tidak berhasil**: transaksi memakai snapshot tetap, sehingga baris
+balasan yang ditulis `pg_net` di latar belakang tidak pernah terlihat. Sudah
+diuji — hasilnya selalu `TIMEOUT`. Menunggunya butuh tiga fase cron terpisah
+yang rapuh dan sulit diperiksa. Runner GitHub Actions lebih sederhana dan log
+setiap jalannya bisa dibaca langsung.
+
+### Setup (sekali saja)
+
+**1. Ambil token Moodle**
+
+1. Buka `https://kuliah2.itera.ac.id/user/managetoken.php` (login dulu)
+2. Pada service `moodle_mobile_app`, klik **Request token** / salin token yang ada
+
+**2. Isi Secrets di GitHub**
+
+Settings → Secrets and variables → Actions → **New repository secret**:
+
+| Nama | Nilai |
+|---|---|
+| `MOODLE_TOKEN` | token dari langkah 1 |
+| `MOODLE_URL` | `https://kuliah2.itera.ac.id` |
+| `SUPABASE_URL` | sama dengan yang dipakai deploy |
+| `SUPABASE_KEY` | publishable / anon key |
+
+**3. Jalankan sekali untuk membuktikan**
+
+Tab **Actions** → **Sync LMS** → **Run workflow** → centang *dry run* dulu.
+Dry run menampilkan daftar tugas yang akan ditulis tanpa menyentuh database.
+Kalau hasilnya wajar, jalankan lagi tanpa centang.
+
+### Menjalankan lokal
+
+```bash
+npm run sync:dry     # tampilkan saja
+npm run sync         # tulis ke database
+```
+
+Membaca `MOODLE_TOKEN` dari `.env`, atau dari environment kalau `.env` tidak ada.
+
+### Hal yang perlu disadari
+
+- **Semua mata kuliah ikut disinkronkan.** Di browser Anda memilih mata kuliah
+  lewat centang; di server tidak ada `localStorage`. Batasi dengan
+  `MOODLE_COURSE_IDS=968,970` bila perlu.
+- **Deadline memakai zona `Asia/Jakarta`.** Runner GitHub berjalan di UTC,
+  sedangkan kolom `deadline` bertipe `date`. Tanpa konversi, tugas yang
+  deadline-nya lewat tengah malam WIB akan tercatat sehari lebih awal.
+- **Jadwal setiap 4 jam** pada menit `:17`, bukan `:00`. GitHub memperingatkan
+  bahwa jadwal di awal jam paling sering tertunda atau dilewati saat beban
+  tinggi. `workflow_dispatch` tidak terkena penundaan ini.
+- **Jadwal berhenti sendiri setelah 60 hari tanpa aktivitas repo.** GitHub
+  mengirim email pemberitahuan, dan tombol *Run workflow* tetap bisa dipakai
+  kapan saja.
+- **Tugas yang sudah lewat deadline dihapus** dari database saat sync, sama
+  seperti perilaku tombol SYNC di browser. Baris Classroom tidak pernah disentuh.
 
 ---
 
@@ -451,8 +558,11 @@ Konsekuensi yang perlu diterima:
 - Tidak ada backup otomatis. Ekspor data secara berkala bila penting.
 - **Rahasia tidak boleh masuk frontend.** Tidak ada token atau API key di
   `script.js`, `config.js`, maupun `localStorage`. Kalau suatu saat menambah
-  fitur yang butuh rahasia, simpan di server (mis. Supabase Vault) dan kirim
-  ke browser hanya nilai yang tersamarkan.
+  fitur yang butuh rahasia, simpan di server (mis. GitHub Secrets atau Supabase
+  Vault) dan kirim ke browser hanya nilai yang tersamarkan.
+- **`MOODLE_TOKEN` hanya hidup di GitHub Secrets.** Token itu tidak pernah
+  dibuat menjadi `config.js` dan tidak pernah dikirim ke browser, karena
+  `sync.yml` berjalan di runner GitHub, bukan di halaman.
 - **Fungsi `security definer` harus dicabut dari `anon`.** Fungsi yang
   memegang rahasia server tidak boleh bisa dipanggil dari browser; kalau bisa,
   siapa pun yang menemukan URL + publishable key dapat memicunya tanpa batas.

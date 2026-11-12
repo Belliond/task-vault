@@ -1,0 +1,612 @@
+#!/usr/bin/env node
+// =========================================================
+//  SINKRONISASI OTOMATIS MOODLE -> SUPABASE
+//
+//  Kenapa ada skrip ini, padahal halaman SYNC sudah bisa
+//  menarik tugas dari Moodle?
+//
+//  Karena tombol SYNC hanya berjalan kalau ada orang yang
+//  membuka situs lalu mengkliknya. Skrip ini memindahkan
+//  pekerjaan yang sama ke server, sehingga tugas baru masuk
+//  sendiri tanpa perlu ada yang membuka browser.
+//
+//  Yang dipakai ulang dari sisi browser:
+//    - urutan panggilan Moodle (site_info -> courses ->
+//      mod_assign_get_assignments)
+//    - bentuk external_id "assign:<courseId>:<assignId>"
+//    - fungsi database sync_lms_tasks(), yang sudah menjaga
+//      status pilihan user dan dismissed_at agar tidak
+//      tertimpa sync
+//
+//  Bedanya dengan versi browser: TIDAK ada pemilih mata
+//  kuliah, karena localStorage tidak ada di server. Semua
+//  mata kuliah yang diikuti ikut disinkronkan. Kalau ingin
+//  membatasi, isi MOODLE_COURSE_IDS (lihat README).
+//
+//  Pemakaian:
+//      node scripts/sync-lms.mjs --dry-run   hanya tampilkan
+//      node scripts/sync-lms.mjs             tulis ke database
+//
+//  Variabel yang dibaca (dari .env atau environment):
+//      MOODLE_URL          https://kuliah2.itera.ac.id
+//      MOODLE_TOKEN        token web service milik user
+//      SUPABASE_URL        https://xxx.supabase.co
+//      SUPABASE_KEY        publishable / anon key
+//      MOODLE_COURSE_IDS   opsional, mis. "968,969"
+// =========================================================
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    ".."
+);
+
+// Zona waktu kampus. Penting: server GitHub berjalan di UTC,
+// sedangkan kolom tasks.deadline bertipe date tanpa jam. Kalau
+// konversinya memakai UTC, tugas yang deadline-nya lewat
+// tengah malam WIB akan tercatat sehari lebih awal.
+const ZONA = "Asia/Jakarta";
+
+
+// =========================================================
+//  BAGIAN MURNI (tanpa jaringan) — mudah diuji
+// =========================================================
+
+export function parseEnv(teks) {
+
+    const hasil = {};
+
+    for (const baris of String(teks).split(/\r?\n/)) {
+
+        const bersih = baris.trim();
+
+        if (!bersih || bersih.startsWith("#")) continue;
+
+        const pisah = bersih.indexOf("=");
+
+        if (pisah < 0) continue;
+
+        const kunci = bersih.slice(0, pisah).trim();
+        let nilai = bersih.slice(pisah + 1).trim();
+
+        // Buang kutip pembungkus kalau ada.
+        if (
+            (nilai.startsWith('"') && nilai.endsWith('"')) ||
+            (nilai.startsWith("'") && nilai.endsWith("'"))
+        ) {
+            nilai = nilai.slice(1, -1);
+        }
+
+        hasil[kunci] = nilai;
+
+    }
+
+    return hasil;
+
+}
+
+
+// Tanggal kalender WIB (YYYY-MM-DD) dari Unix detik.
+// Moodle mengirim duedate dalam UTC, jadi harus digeser.
+export function tanggalWib(unixDetik) {
+
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: ZONA,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    });
+
+    return fmt.format(new Date(Number(unixDetik) * 1000));
+
+}
+
+
+export function hariIniWib(sekarangMs = Date.now()) {
+
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: ZONA,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    });
+
+    return fmt.format(new Date(sekarangMs));
+
+}
+
+
+// Susun baris siap kirim ke sync_lms_tasks().
+//
+// Aturannya sengaja sama dengan versi browser:
+//   - tugas tanpa deadline dilewati (duedate 0)
+//   - tugas yang deadline-nya sudah lewat dilewati, supaya
+//     tidak muncul lagi setiap kali sync berjalan
+//   - mata kuliah yang tidak ikut dipilih dilewati
+export function susunBaris({
+    courses,
+    namaMatkul,
+    idTerpilih,
+    hariIni
+}) {
+
+    const baris = [];
+    let tanpaDeadline = 0;
+    let kedaluwarsa = 0;
+
+    for (const course of courses || []) {
+
+        const idCourse = String(course.id);
+
+        if (idTerpilih && !idTerpilih.has(idCourse)) continue;
+
+        for (const tugas of course.assignments || []) {
+
+            const duedate = Number(tugas.duedate) || 0;
+
+            if (duedate <= 0) {
+                tanpaDeadline += 1;
+                continue;
+            }
+
+            const tanggal = tanggalWib(duedate);
+
+            // Deadline hari ini masih dianggap aktif.
+            if (tanggal < hariIni) {
+                kedaluwarsa += 1;
+                continue;
+            }
+
+            baris.push({
+                course: String(tugas.name || "-"),
+                class_name: namaMatkul[idCourse] || "-",
+                deadline: tanggal,
+                category: "Moodle",
+                source: "moodle",
+                external_id: `assign:${idCourse}:${tugas.id}`,
+                synced_at: new Date().toISOString()
+            });
+
+        }
+
+    }
+
+    return { baris, tanpaDeadline, kedaluwarsa };
+
+}
+
+
+// Tentukan baris Moodle yang sudah tidak relevan.
+//
+// Dua alasan sebuah baris dianggap usang:
+//   1. deadline-nya sudah lewat
+//   2. mata kuliahnya tidak lagi ikut disinkronkan (hanya
+//      kalau daftar mata kuliah dibatasi lewat MOODLE_COURSE_IDS)
+//
+// Baris dari sumber lain (classroom) tidak pernah disentuh.
+export function cariUsang({ existing, idTerpilih, hariIni }) {
+
+    const usang = [];
+
+    for (const row of existing || []) {
+
+        const bagian = String(row.external_id || "").split(":");
+
+        if (bagian[0] !== "assign") continue;
+
+        const idCourse = bagian[1];
+
+        if (idTerpilih && !idTerpilih.has(String(idCourse))) {
+
+            usang.push(row);
+            continue;
+
+        }
+
+        const tanggal = String(row.deadline || "").slice(0, 10);
+
+        if (tanggal !== "" && tanggal < hariIni) {
+
+            usang.push(row);
+
+        }
+
+    }
+
+    return usang;
+
+}
+
+
+// =========================================================
+//  BAGIAN JARINGAN
+// =========================================================
+
+function rapikanUrl(url) {
+
+    return String(url || "").trim().replace(/\/+$/, "");
+
+}
+
+
+async function ambilJson(url, opsi = {}, percobaan = 2) {
+
+    let terakhir = null;
+
+    for (let i = 1; i <= percobaan; i++) {
+
+        try {
+
+            const res = await fetch(url, {
+                ...opsi,
+                signal: AbortSignal.timeout(30000)
+            });
+
+            const teks = await res.text();
+
+            let data = null;
+
+            try {
+                data = JSON.parse(teks);
+            }
+            catch {
+                // Bukan JSON: biasanya halaman error HTML dari
+                // portal kampus (login, blokir, maintenance).
+                throw new Error(
+                    `Balasan bukan JSON (HTTP ${res.status}): ` +
+                    teks.replace(/\s+/g, " ").slice(0, 160)
+                );
+            }
+
+            if (!res.ok) {
+
+                throw new Error(
+                    `HTTP ${res.status}: ` +
+                    JSON.stringify(data).slice(0, 200)
+                );
+
+            }
+
+            return data;
+
+        }
+        catch (error) {
+
+            terakhir = error;
+
+            if (i < percobaan) {
+
+                await new Promise((r) => setTimeout(r, 3000 * i));
+
+            }
+
+        }
+
+    }
+
+    throw terakhir;
+
+}
+
+
+async function moodleRest({ url, token }, params) {
+
+    const body = new URLSearchParams({
+        wstoken: token,
+        moodlewsrestformat: "json",
+        ...params
+    });
+
+    const data = await ambilJson(
+        rapikanUrl(url) + "/webservice/rest/server.php",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: body.toString()
+        }
+    );
+
+    if (data && data.errorcode) {
+
+        throw new Error(
+            `Moodle menolak permintaan (${data.errorcode}): ` +
+            `${data.message || "-"}`
+        );
+
+    }
+
+    return data;
+
+}
+
+
+async function supabaseRpc({ url, key }, rows) {
+
+    return ambilJson(
+        rapikanUrl(url) + "/rest/v1/rpc/sync_lms_tasks",
+        {
+            method: "POST",
+            headers: {
+                apikey: key,
+                Authorization: "Bearer " + key,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ rows })
+        }
+    );
+
+}
+
+
+async function supabaseGet({ url, key }, query) {
+
+    return ambilJson(
+        rapikanUrl(url) + "/rest/v1/tasks?" + query,
+        {
+            headers: {
+                apikey: key,
+                Authorization: "Bearer " + key
+            }
+        }
+    );
+
+}
+
+
+async function supabaseDelete({ url, key }, idList) {
+
+    const daftar = idList.map((id) => `"${id}"`).join(",");
+
+    const res = await fetch(
+        rapikanUrl(url) +
+        "/rest/v1/tasks?id=in.(" + encodeURIComponent(daftar) + ")",
+        {
+            method: "DELETE",
+            headers: {
+                apikey: key,
+                Authorization: "Bearer " + key,
+                Prefer: "return=representation"
+            },
+            signal: AbortSignal.timeout(30000)
+        }
+    );
+
+    const teks = await res.text();
+
+    if (!res.ok) {
+
+        throw new Error(
+            `Gagal menghapus baris usang (HTTP ${res.status}): ` +
+            teks.slice(0, 200)
+        );
+
+    }
+
+    try {
+        return JSON.parse(teks).length;
+    }
+    catch {
+        return idList.length;
+    }
+
+}
+
+
+// =========================================================
+//  ALUR UTAMA
+// =========================================================
+
+async function main() {
+
+    const dryRun = process.argv.includes("--dry-run");
+
+    // .env hanya dipakai saat dijalankan lokal. Di GitHub
+    // Actions nilainya datang dari Secrets, dan file .env
+    // tidak ada di runner.
+    let env = { ...process.env };
+
+    const envPath = path.join(ROOT, ".env");
+
+    if (fs.existsSync(envPath)) {
+
+        env = { ...parseEnv(fs.readFileSync(envPath, "utf8")), ...env };
+
+    }
+
+    const moodle = {
+        url: rapikanUrl(env.MOODLE_URL || "https://kuliah2.itera.ac.id"),
+        token: String(env.MOODLE_TOKEN || "").trim()
+    };
+
+    const supabase = {
+        url: String(env.SUPABASE_URL || "").trim(),
+        key: String(env.SUPABASE_KEY || "").trim()
+    };
+
+    if (!moodle.token) {
+        throw new Error(
+            "MOODLE_TOKEN kosong. Isi di .env (lokal) atau " +
+            "Settings -> Secrets and variables -> Actions (GitHub)."
+        );
+    }
+
+    if (!supabase.url || !supabase.key) {
+        throw new Error("SUPABASE_URL / SUPABASE_KEY kosong.");
+    }
+
+    const batasi = String(env.MOODLE_COURSE_IDS || "").trim();
+
+    const idTerpilih = batasi
+        ? new Set(batasi.split(",").map((s) => s.trim()).filter(Boolean))
+        : null;
+
+    const hariIni = hariIniWib();
+
+    console.log(`Moodle   : ${moodle.url}`);
+    console.log(`Supabase : ${supabase.url}`);
+    console.log(`Tanggal  : ${hariIni} (${ZONA})`);
+    console.log(`Mode     : ${dryRun ? "DRY-RUN (tidak menulis)" : "TULIS"}`);
+
+    // 1. Validasi token + id user
+    const siteInfo = await moodleRest(moodle, {
+        wsfunction: "core_webservice_get_site_info"
+    });
+
+    console.log(`Login    : ${siteInfo.username || "?"} (userid ${siteInfo.userid})`);
+
+    // 2. Mata kuliah yang diikuti
+    const courses = await moodleRest(moodle, {
+        wsfunction: "core_enrol_get_users_courses",
+        userid: siteInfo.userid
+    });
+
+    if (!Array.isArray(courses) || courses.length === 0) {
+        throw new Error("Tidak ada mata kuliah pada akun Moodle ini.");
+    }
+
+    const namaMatkul = {};
+
+    for (const course of courses) {
+        namaMatkul[String(course.id)] =
+            course.fullname || course.shortname || `Course ${course.id}`;
+    }
+
+    const dipakai = idTerpilih
+        ? courses.filter((c) => idTerpilih.has(String(c.id)))
+        : courses;
+
+    console.log(`Matkul   : ${dipakai.length} dari ${courses.length} diikuti`);
+
+    if (dipakai.length === 0) {
+        throw new Error(
+            "MOODLE_COURSE_IDS tidak cocok dengan mata kuliah mana pun."
+        );
+    }
+
+    // 3. Assignment, dibagi 20 mata kuliah per permintaan
+    const coursesWithAssignments = [];
+
+    for (let i = 0; i < dipakai.length; i += 20) {
+
+        const kelompok = dipakai.slice(i, i + 20);
+
+        const params = { wsfunction: "mod_assign_get_assignments" };
+
+        kelompok.forEach((course, index) => {
+            params[`courseids[${index}]`] = course.id;
+        });
+
+        const hasil = await moodleRest(moodle, params);
+
+        for (const course of hasil.courses || []) {
+            coursesWithAssignments.push(course);
+        }
+
+    }
+
+    // 4. Saring + bentuk baris
+    const { baris, tanpaDeadline, kedaluwarsa } = susunBaris({
+        courses: coursesWithAssignments,
+        namaMatkul,
+        idTerpilih,
+        hariIni
+    });
+
+    console.log(
+        `Tugas    : ${baris.length} aktif ` +
+        `(dilewati: ${tanpaDeadline} tanpa deadline, ` +
+        `${kedaluwarsa} sudah lewat)`
+    );
+
+    if (dryRun) {
+
+        console.log("\nContoh baris:");
+        console.log(JSON.stringify(baris.slice(0, 3), null, 1));
+
+        const existing = await supabaseGet(
+            supabase,
+            "select=id,external_id,deadline&source=eq.moodle"
+        );
+
+        const usang = cariUsang({ existing, idTerpilih, hariIni });
+
+        console.log(
+            `\nAkan menghapus ${usang.length} baris usang dari ` +
+            `${existing.length} baris Moodle yang ada.`
+        );
+
+        if (usang.length) {
+            console.log(JSON.stringify(usang.slice(0, 3), null, 1));
+        }
+
+        return;
+
+    }
+
+    // 5. Tulis (satu permintaan untuk semua tugas)
+    if (baris.length === 0) {
+
+        console.log("Tidak ada tugas aktif untuk ditulis.");
+
+    }
+    else {
+
+        const [hasil] = await supabaseRpc(supabase, baris);
+
+        console.log(
+            `Tersimpan: ${hasil?.created ?? 0} baru, ` +
+            `${hasil?.updated ?? 0} diperbarui`
+        );
+
+    }
+
+    // 6. Bersihkan baris usang
+    const existing = await supabaseGet(
+        supabase,
+        "select=id,external_id,deadline&source=eq.moodle"
+    );
+
+    const usang = cariUsang({ existing, idTerpilih, hariIni });
+
+    if (usang.length) {
+
+        const jumlah = await supabaseDelete(
+            supabase,
+            usang.map((row) => row.id)
+        );
+
+        console.log(`Dihapus : ${jumlah} baris usang`);
+
+    }
+    else {
+
+        console.log("Dihapus : 0 baris usang");
+
+    }
+
+    console.log("Selesai.");
+
+}
+
+
+// Hanya jalankan kalau dipanggil langsung, supaya fungsi di
+// atas bisa diimpor oleh skrip uji.
+if (
+    process.argv[1] &&
+    path.resolve(process.argv[1]) ===
+    path.resolve(fileURLToPath(import.meta.url))
+) {
+
+    main().catch((error) => {
+
+        console.error("\nGAGAL: " + (error.message || error));
+        process.exit(1);
+
+    });
+
+}

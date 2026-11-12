@@ -1,0 +1,116 @@
+name: Sync LMS
+
+# =========================================================
+#  Menarik tugas dari Moodle ke database tanpa perlu ada
+#  orang membuka situs dan menekan tombol SYNC.
+#
+#  Kenapa GitHub Actions, bukan cron di dalam database?
+#  Database proyek ini memang punya pg_cron + pg_net, dan
+#  keduanya sudah diuji bisa memanggil keluar. Tapi menunggu
+#  balasan HTTP di dalam satu transaksi Postgres TIDAK
+#  berhasil: transaksi memakai snapshot tetap, sehingga baris
+#  balasan yang ditulis pg_net di latar belakang tidak pernah
+#  terlihat (diuji: hasilnya selalu TIMEOUT). Menunggunya
+#  butuh 3 fase cron terpisah yang rapuh dan sulit diperiksa.
+#  Runner Actions jauh lebih sederhana dan hasilnya kelihatan
+#  di log setiap kali jalan.
+#
+#  Secret yang perlu diisi di:
+#  Settings -> Secrets and variables -> Actions
+#
+#      MOODLE_TOKEN    token web service milik user
+#      MOODLE_URL      opsional, default kuliah2.itera.ac.id
+#      SUPABASE_URL    sama dengan yang dipakai deploy
+#      SUPABASE_KEY    publishable / anon key
+#
+#  Token TIDAK pernah masuk ke situs, config.js, atau
+#  localStorage. Hanya ada di runner dan di database.
+# =========================================================
+
+on:
+  schedule:
+    # Menit :17, bukan :00 atau :30. GitHub memperingatkan
+    # bahwa jadwal pada awal setiap jam paling sering tertunda
+    # atau bahkan dilewati saat beban tinggi.
+    #
+    # Setiap 4 jam: 00:17, 04:17, 08:17, 12:17, 16:17, 20:17
+    # (UTC). Tugas kuliah tidak berubah tiap menit, jadi ini
+    # sudah lebih dari cukup.
+    - cron: "17 */4 * * *"
+
+  # Bisa dijalankan manual dari tab Actions. Ini juga jalur
+  # yang dipakai untuk membuktikan sync benar-benar bekerja,
+  # tanpa menunggu jadwal.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Hanya tampilkan, jangan tulis ke database"
+        type: boolean
+        default: false
+
+# Jadwal yang tertunda tidak boleh menumpuk.
+concurrency:
+  group: sync-lms
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check required secrets
+        env:
+          MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          # Gagal lebih awal dengan pesan yang menunjuk ke tempat
+          # pengisiannya, bukan error samar di tengah jalan.
+          if [ -z "$MOODLE_TOKEN" ]; then
+            echo "::error::Secret MOODLE_TOKEN belum diisi."
+            echo "::error::Buka Settings -> Secrets and variables -> Actions,"
+            echo "::error::lalu tambahkan MOODLE_TOKEN (cara ambilnya ada di README)."
+            exit 1
+          fi
+
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Secret SUPABASE_URL dan/atau SUPABASE_KEY belum diisi."
+            exit 1
+          fi
+
+      - name: Run sync
+        env:
+          MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
+          MOODLE_URL: ${{ secrets.MOODLE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            node scripts/sync-lms.mjs --dry-run
+          else
+            node scripts/sync-lms.mjs
+          fi
+
+      # Ringkasan supaya hasilnya terbaca langsung di halaman
+      # ringkasan run, tanpa perlu membuka log.
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Sync LMS"
+            echo ""
+            echo "- Jadwal : \`${{ github.event.schedule || 'manual' }}\`"
+            echo "- Mode   : \`${{ inputs.dry_run == true && 'dry-run' || 'tulis' }}\`"
+            echo "- Status : \`${{ job.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
