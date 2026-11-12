@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Privacy Policy — Ghost Task Matrix</title>
+
+    <meta
+        name="description"
+        content="Kebijakan privasi Ghost Task Matrix: data apa yang diakses, untuk apa, dan bagaimana disimpan."
+    >
+    <meta name="theme-color" content="#030b09">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="index, follow">
+
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+        rel="stylesheet"
+    >
+
+    <style>
+        /* Halaman ini sengaja berdiri sendiri: tanpa build step,
+           tanpa config.js, dan tanpa JavaScript. Tujuannya hanya
+           satu — menjadi URL kebijakan privasi yang benar-benar
+           bisa dibuka publik, seperti yang diminta Google saat
+           aplikasi OAuth dipindah ke status "In production". */
+
+        :root {
+            --bg: #030b09;
+            --panel: #0a1512;
+            --line: #16302a;
+            --text: #d7e6e1;
+            --muted: #8fa8a1;
+            --accent: #35e0a1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 3rem 1.25rem 5rem;
+            background:
+                radial-gradient(80rem 40rem at 50% -10%, #0d2b22 0%, transparent 70%),
+                var(--bg);
+            color: var(--text);
+            font-family: "Space Grotesk", system-ui, sans-serif;
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        main {
+            max-width: 46rem;
+            margin: 0 auto;
+        }
+
+        .eyebrow {
+            font-family: "Space Mono", monospace;
+            font-size: .72rem;
+            letter-spacing: .22em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin: 0 0 .75rem;
+        }
+
+        h1 {
+            font-size: clamp(1.7rem, 5vw, 2.4rem);
+            line-height: 1.2;
+            margin: 0 0 .5rem;
+            letter-spacing: -.02em;
+        }
+
+        .updated {
+            font-family: "Space Mono", monospace;
+            font-size: .78rem;
+            color: var(--muted);
+            margin: 0 0 2.5rem;
+        }
+
+        h2 {
+            font-size: 1.05rem;
+            margin: 2.5rem 0 .75rem;
+            padding-bottom: .5rem;
+            border-bottom: 1px solid var(--line);
+            letter-spacing: -.01em;
+        }
+
+        p, li { color: var(--text); }
+
+        ul { padding-left: 1.15rem; }
+
+        li { margin: .4rem 0; }
+
+        strong { color: #fff; font-weight: 600; }
+
+        code {
+            font-family: "Space Mono", monospace;
+            font-size: .85em;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: .3rem;
+            padding: .1rem .35rem;
+        }
+
+        a { color: var(--accent); }
+
+        .note {
+            margin: 2.5rem 0 0;
+            padding: 1rem 1.15rem;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-left: 2px solid var(--accent);
+            border-radius: .4rem;
+            font-size: .92rem;
+            color: var(--muted);
+        }
+
+        footer {
+            margin-top: 3.5rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--line);
+            font-family: "Space Mono", monospace;
+            font-size: .75rem;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+<main>
+
+    <p class="eyebrow">Ghost Task Matrix</p>
+    <h1>Privacy Policy</h1>
+    <p class="updated">Terakhir diperbarui: 13 November 2026</p>
+
+    <p>
+        Ghost Task Matrix adalah aplikasi pengelola tugas kuliah yang berjalan
+        sepenuhnya di browser. Halaman ini menjelaskan data apa yang diakses
+        aplikasi, untuk apa data itu dipakai, dan di mana disimpan.
+    </p>
+
+    <h2>1. Data yang diakses</h2>
+
+    <p>Aplikasi hanya mengakses data yang diperlukan untuk menampilkan tugas:</p>
+
+    <ul>
+        <li>
+            <strong>Google Classroom</strong> — daftar kelas yang Anda ikuti
+            (<code>classroom.courses.readonly</code>) dan daftar tugas beserta
+            tanggal pengumpulannya (<code>classroom.coursework.me.readonly</code>).
+        </li>
+        <li>
+            <strong>Moodle kampus</strong> — daftar mata kuliah dan daftar
+            tugas, melalui token web service milik akun Anda sendiri.
+        </li>
+    </ul>
+
+    <p>
+        Aplikasi <strong>tidak</strong> membaca email, file di Google Drive,
+        kontak, nilai, atau isi pengumpulan tugas Anda. Aplikasi juga tidak
+        pernah mengubah, menghapus, atau mengumpulkan tugas apa pun — semua
+        izin yang diminta bersifat baca-saja.
+    </p>
+
+    <h2>2. Cara data dipakai</h2>
+
+    <p>
+        Data hanya dipakai untuk satu hal: menampilkan daftar tugas dan
+        deadline di halaman aplikasi, lalu menyimpannya ke database agar tidak
+        perlu diambil ulang setiap kali halaman dibuka.
+    </p>
+
+    <p>
+        Data <strong>tidak</strong> dijual, tidak dibagikan, tidak dipakai
+        untuk iklan, dan tidak dipakai untuk melatih model apa pun.
+    </p>
+
+    <h2>3. Di mana data disimpan</h2>
+
+    <ul>
+        <li>
+            <strong>Browser Anda</strong> — token akses Google disimpan di
+            <code>localStorage</code> dan berlaku sekitar satu jam.
+        </li>
+        <li>
+            <strong>Database</strong> — judul tugas, nama kelas, dan tanggal
+            deadline disimpan di Supabase. Isinya hanya data tugas, bukan isi
+            akun Google atau Moodle Anda.
+        </li>
+    </ul>
+
+    <p>
+        Aplikasi ini dipakai secara pribadi dan tidak memiliki sistem akun
+        pengguna. Siapa pun yang memiliki tautan aplikasi dapat melihat daftar
+        tugas yang tersimpan di database.
+    </p>
+
+    <h2>4. Token dan kredensial</h2>
+
+    <p>
+        Token Moodle dan refresh token Google hanya disimpan di sisi server
+        (GitHub Secrets) dan tidak pernah dikirim ke browser. Yang tersimpan di
+        browser hanyalah token akses berumur pendek.
+    </p>
+
+    <h2>5. Mencabut akses</h2>
+
+    <p>Anda dapat menghentikan akses aplikasi kapan saja:</p>
+
+    <ul>
+        <li>
+            <strong>Google</strong> — buka
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">
+                myaccount.google.com/permissions</a>,
+            pilih aplikasi ini, lalu klik <em>Remove access</em>.
+        </li>
+        <li>
+            <strong>Moodle</strong> — buka halaman <em>Security keys</em> di
+            akun Moodle Anda dan hapus token yang dipakai.
+        </li>
+        <li>
+            <strong>Browser</strong> — hapus data situs ini untuk membuang
+            token yang tersimpan di <code>localStorage</code>.
+        </li>
+    </ul>
+
+    <h2>6. Data pihak ketiga</h2>
+
+    <p>
+        Aplikasi memakai layanan berikut, masing-masing dengan kebijakan
+        privasinya sendiri:
+    </p>
+
+    <ul>
+        <li>Google Classroom API — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a></li>
+        <li>Supabase — <a href="https://supabase.com/privacy" target="_blank" rel="noopener">supabase.com/privacy</a></li>
+        <li>GitHub Pages — <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub Privacy Statement</a></li>
+    </ul>
+
+    <p>
+        Penggunaan data yang diterima dari Google API oleh aplikasi ini tunduk
+        pada
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">
+            Google API Services User Data Policy</a>,
+        termasuk ketentuan <em>Limited Use</em>.
+    </p>
+
+    <h2>7. Perubahan</h2>
+
+    <p>
+        Perubahan pada kebijakan ini akan diperbarui di halaman yang sama,
+        dengan tanggal pembaruan di bagian atas.
+    </p>
+
+    <h2>8. Kontak</h2>
+
+    <p>
+        Pertanyaan tentang kebijakan ini dapat dikirim ke
+        <a href="mailto:krisna.124140152@student.itera.ac.id">krisna.124140152@student.itera.ac.id</a>.
+    </p>
+
+    <p class="note">
+        Ringkasnya: aplikasi hanya membaca daftar tugas Anda, menyimpannya
+        supaya bisa ditampilkan, dan tidak melakukan apa pun selain itu.
+    </p>
+
+    <footer>
+        <a href="./">← Kembali ke Ghost Task Matrix</a>
+    </footer>
+
+</main>
+</body>
+</html>
