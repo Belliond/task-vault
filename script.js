@@ -3543,7 +3543,13 @@ function renderReminderChannel(data) {
 
     setReminderBadge(Boolean(data.enabled));
 
-    const provider = data.provider === "meta" ? "meta" : "callmebot";
+    // Belum pernah dikonfigurasi (nomor kosong) → tawarkan jalur
+    // resmi lebih dulu, karena CallMeBot sedang menutup
+    // pendaftaran baru. Kalau sudah pernah disimpan, hormati
+    // pilihan pengguna apa adanya.
+    const provider = data.phone_masked
+        ? (data.provider === "meta" ? "meta" : "callmebot")
+        : "meta";
 
     if (data.phone_masked) {
 
