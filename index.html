@@ -36,66 +36,444 @@
 
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
+    <!-- Space Grotesk = heading & teks isi, Space Mono = label/badge/harga.
+         preconnect lebih dulu supaya DNS+TLS handshake tidak menahan render. -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+    >
+
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
     <!-- =====================================================
-         HALAMAN AWAL
+         LATAR 3D KINETIK
+         Canvas ini MENETAP sebagai anak <body>; three-bg.js tidak
+         lagi memindah-mindahkannya ke <section> yang tampil.
+         Dulu itu perlu karena tiap halaman punya latar foto
+         opaque yang menutupi canvas di belakangnya. Sekarang latar
+         foto dipasang sekali di <body>, jadi satu canvas dengan
+         position: fixed terlihat di semua halaman.
+
+         aria-hidden + pointer-events: none -> murni dekorasi,
+         tidak pernah masuk pohon aksesibilitas.
     ====================================================== -->
 
-    <section id="homePage" class="page home-page">
+    <canvas id="bg3dStage" class="bg3d-stage" aria-hidden="true"></canvas>
 
-        <div class="home-overlay"></div>
+    <!-- =====================================================
+         NAVBAR
+         Satu navbar untuk seluruh aplikasi. Sebelumnya navigasi
+         berupa sidebar vertikal di dalam dashboard, dengan halaman
+         hero terpisah di depannya. Sekarang aplikasi langsung
+         terbuka di Beranda dan navbar menempel di atas.
+    ====================================================== -->
 
-        <div class="binary-field" aria-hidden="true">
-            <span>01001101 10101001 00110110 11100010 01011010 10010101 01101100 11001001</span>
-            <span>10110010 01001101 11100010 00110110 10011001 01101011 00101101 11010100</span>
-            <span>00101101 11001010 01100101 10010110 01001001 10110100 11110000 00011011</span>
-            <span>11010110 00110010 10101101 01001011 11100101 00011110 10011010 01100001</span>
-            <span>01101001 10010110 01011100 11101000 00110101 11001101 10110010 01001010</span>
-            <span>11100010 00110110 10011001 01101011 00101101 11010100 01001101 10101001</span>
-            <span>10010101 01101100 11001001 00101101 11001010 01100101 10010110 01001001</span>
-            <span>01001010 11100101 00011110 10011010 01100001 11010110 00110010 10101101</span>
-            <span>10101001 00110110 11100010 01011010 10010101 01101100 11001001 00101101</span>
-            <span>01101011 00101101 11010100 01001101 10101001 00110110 11100010 01011010</span>
-            <span>10011010 01100001 11010110 00110010 10101101 01001011 11100101 00011110</span>
-            <span>11001001 00101101 11001010 01100101 10010110 01001001 10110100 11110000</span>
+    <header class="navbar" id="appNavbar">
+
+        <div class="navbar-inner">
+
+            <!-- Blok merek "</> ANON GRID" dihapus atas permintaan:
+                 navbar sekarang murni navigasi + status. -->
+
+            <nav class="navbar-nav" aria-label="Main navigation">
+
+                <button
+                    class="nav-link active"
+                    id="homeMenu"
+                    type="button"
+                    aria-current="page"
+                >
+                    <span aria-hidden="true">⌂</span>
+                    HOME
+                </button>
+
+                <button
+                    class="nav-link"
+                    id="listMenu"
+                    type="button"
+                >
+                    <span aria-hidden="true">▣</span>
+                    TASKS
+                </button>
+
+                <button
+                    class="nav-link"
+                    id="scheduleMenu"
+                    type="button"
+                >
+                    <span aria-hidden="true">▤</span>
+                    SCHEDULE
+                </button>
+
+                <button
+                    class="nav-link"
+                    id="syncMenu"
+                    type="button"
+                >
+                    <span aria-hidden="true">⇄</span>
+                    SYNC
+                </button>
+
+            </nav>
+
+
+            <div class="navbar-actions">
+
+                <span
+                    id="realtimeBadge"
+                    class="realtime-badge hidden"
+                    title="Changes from other users appear automatically"
+                >
+                    LIVE SYNC
+                </span>
+
+                <!-- Tombol "+ ADD TASK" dihapus dari navbar: form
+                     tambah tugas sudah tersedia di halaman Tasks
+                     (dan di halaman detail mata kuliah). -->
+
+            </div>
+
         </div>
 
-        <div class="error-field" aria-hidden="true">
-            <span>ERROR // ERROR // SYSTEM FAILURE</span>
-            <span>ACCESS DENIED // ERROR 0x13</span>
-            <span>CRITICAL ERROR // SIGNAL LOST</span>
-            <span>ERROR // UNAUTHORIZED NODE</span>
-            <span>SYSTEM FAILURE // ERROR</span>
-            <span>ERROR // TRACE DETECTED</span>
-            <span>FATAL ERROR // CONNECTION LOST</span>
-            <span>ERROR // CORE BREACH</span>
-        </div>
+    </header>
+
+
+    <!-- =====================================================
+         KONTEN UTAMA
+         Semua halaman adalah <section> di dalam <main> ini.
+         Hanya satu yang terlihat pada satu waktu (class .hidden).
+    ====================================================== -->
+
+    <main class="main-content" id="mainContent" tabindex="-1">
+
+
+        <!-- =================================================
+             BERANDA
+             Bagian paling atas: dua kartu statistik. Di
+             bawahnya: daftar mata kuliah.
+        ================================================== -->
+
+        <section id="homePage" class="page-view home-page">
+
+        <!-- Dekorasi biner/error TIDAK diulang di sini. Dulu halaman
+             hero punya salinan sendiri, dan sejak latar dipindah ke
+             body, salinan itu jadi duplikat: .page-decor sudah
+             menampilkannya untuk semua halaman. Elemen ber-rotasi +
+             scale di dalam section tanpa overflow:hidden juga
+             melebarkan halaman (scroll samping 285px di 1440px). -->
 
         <div class="home-content">
 
-            <div class="terminal-line">
-                <div class="binary-code binary-top">01001001 10110100 00101101 11001010 01100101 10010110</div>
-                WARNING!!! <span>SYSTEM ALERT!!!</span>
-                <div class="binary-code binary-bottom">10110010 01001101 11100010 00110110 10011001 01101011</div>
+            <div class="page-header">
+
+                <div>
+
+                    <div class="section-label">
+                        // MISSION CONTROL
+                    </div>
+
+                    <h1>
+                        Course Matrix
+                    </h1>
+
+                    <p>
+                        Every course you have, and how many tasks are still open.
+                    </p>
+
+                </div>
+
             </div>
 
-            <div class="terminal-status">
-                 SYSTEM STATUS: ONLINE
+
+            <!-- STATISTIK: dua kartu sesuai permintaan.
+                 Kartu OVERDUE dihapus. -->
+
+            <div class="stats stats-home">
+
+                <div class="stat-card">
+
+                    <div class="stat-header">
+                        TOTAL TASKS
+                        <span>01</span>
+                    </div>
+
+                    <div
+                        id="totalTasks"
+                        class="stat-number"
+                    >
+                        0
+                    </div>
+
+                    <p>
+                        All tasks
+                    </p>
+
+                </div>
+
+
+                <div class="stat-card">
+
+                    <div class="stat-header">
+                        PRIORITY
+                        <span>02</span>
+                    </div>
+
+                    <div
+                        id="upcomingTasks"
+                        class="stat-number"
+                    >
+                        0
+                    </div>
+
+                    <p>
+                        Due in ≤ 3 days
+                    </p>
+
+                </div>
+
             </div>
 
-            <h1>ANONYMOUS</h1>
 
-            <button id="enterDashboard" class="main-button">
-                ENTER MATRIX
-                <span>→</span>
-            </button>
+            <div class="task-section-header">
 
-            <div class="quote">
-                "NO SYSTEM IS TRULY SAFE"
+                <div>
+
+                    <div class="section-label">
+                        // COURSE DIRECTORY
+                    </div>
+
+                    <h2>
+                        Mata Kuliah
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <!-- Daftar mata kuliah. Tiap kartu membuka halaman
+                 tugas khusus matkul itu. Diisi oleh script.js. -->
+
+            <div
+                id="courseDirectory"
+                class="course-directory"
+            >
+
+                <div class="empty-task">
+
+                    <div class="empty-icon">
+                        _
+                    </div>
+
+                    <h3>
+                        Loading course list
+                    </h3>
+
+                    <p>
+                        Reading the task database.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- =============================================
+                 KALENDER DEADLINE
+                 Dipindah dari navbar ke bagian paling bawah
+                 Beranda. Grid bulanan: tanggal yang punya
+                 deadline diberi penanda; klik tanggal untuk
+                 melihat tugasnya.
+            ============================================== -->
+
+            <div class="calendar-block">
+
+                <div class="task-section-header">
+
+                    <div>
+
+                        <div class="section-label">
+                            // DEADLINE GRID
+                        </div>
+
+                        <h2>
+                            Deadline Calendar
+                        </h2>
+
+                        <p class="calendar-intro">
+                            Every deadline, laid out by date. Pick a
+                            highlighted day to open its task list.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="calendar-card">
+
+                    <!-- Kepala kalender: judul bulan besar + kontrol.
+                         Bukan tabel: sel tanggal punya aksen, hover,
+                         dan penanda status berwarna. -->
+
+                    <div class="calendar-head">
+
+                        <div class="calendar-title">
+
+                            <span class="calendar-title-label">
+                                // MONTH VIEW
+                            </span>
+
+                            <h3
+                                id="calendarMonthLabel"
+                                aria-live="polite"
+                            >
+                                —
+                            </h3>
+
+                            <span
+                                id="calendarMonthCount"
+                                class="calendar-month-count"
+                            >
+                                NO DEADLINES
+                            </span>
+
+                        </div>
+
+
+                        <div class="calendar-controls">
+
+                            <button
+                                id="calendarToday"
+                                class="calendar-today"
+                                type="button"
+                            >
+                                TODAY
+                            </button>
+
+                            <button
+                                id="calendarPrev"
+                                class="calendar-nav"
+                                type="button"
+                                aria-label="Previous month"
+                            >
+                                ‹
+                            </button>
+
+                            <button
+                                id="calendarNext"
+                                class="calendar-nav"
+                                type="button"
+                                aria-label="Next month"
+                            >
+                                ›
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="calendar-weekdays" aria-hidden="true">
+                        <span>MON</span>
+                        <span>TUE</span>
+                        <span>WED</span>
+                        <span>THU</span>
+                        <span>FRI</span>
+                        <span>SAT</span>
+                        <span>SUN</span>
+                    </div>
+
+
+                    <div
+                        id="calendarGrid"
+                        class="calendar-grid"
+                        role="grid"
+                        aria-label="Task deadlines by date"
+                    >
+
+                        <!-- Diisi oleh script.js -->
+
+                    </div>
+
+
+                    <!-- Legenda: warna titik tidak pernah menjadi
+                         satu-satunya penanda (sel juga memakai
+                         teks jumlah tugas), jadi tetap aksesibel. -->
+
+                    <div class="calendar-legend">
+
+                        <span class="calendar-legend-item">
+                            <span class="calendar-dot pending" aria-hidden="true"></span>
+                            PENDING
+                        </span>
+
+                        <span class="calendar-legend-item">
+                            <span class="calendar-dot progress" aria-hidden="true"></span>
+                            IN PROGRESS
+                        </span>
+
+                        <span class="calendar-legend-item">
+                            <span class="calendar-dot completed" aria-hidden="true"></span>
+                            COMPLETED
+                        </span>
+
+                        <span class="calendar-legend-item">
+                            <span class="calendar-dot overdue" aria-hidden="true"></span>
+                            OVERDUE
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <div class="task-section-header calendar-day-header">
+
+                    <div>
+
+                        <div class="section-label">
+                            // SELECTED DAY
+                        </div>
+
+                        <h2 id="calendarDayTitle">
+                            Pick a date
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="calendarDayList"
+                    class="task-container"
+                >
+
+                    <div class="empty-task">
+
+                        <div class="empty-icon">
+                            _
+                        </div>
+
+                        <h3>
+                            No date selected
+                        </h3>
+
+                        <p>
+                            Choose a highlighted date above to see its tasks.
+                        </p>
+
+                    </div>
+
+                </div>
+
             </div>
 
         </div>
@@ -107,146 +485,37 @@
          DASHBOARD
     ====================================================== -->
 
-    <section id="dashboardPage" class="page dashboard-page hidden">
+        <!-- Dekorasi latar yang dulu menempel di dashboard.
+             Sekarang dipakai bersama oleh semua halaman. -->
 
-        <div class="binary-field" aria-hidden="true">
-            <span>01001101 10101001 00110110 11100010 01011010 10010101 01101100</span>
-            <span>10110010 01001101 11100010 00110110 10011001 01101011 00101101</span>
-            <span>00101101 11001010 01100101 10010110 01001001 10110100 11110000</span>
-            <span>11010110 00110010 10101101 01001011 11100101 00011110 10011010</span>
-            <span>01101001 10010110 01011100 11101000 00110101 11001101 10110010</span>
-            <span>11100010 00110110 10011001 01101011 00101101 11010100 01001101</span>
+        <div class="page-decor" aria-hidden="true">
+
+            <div class="binary-field">
+                <span>01001101 10101001 00110110 11100010 01011010 10010101 01101100</span>
+                <span>10110010 01001101 11100010 00110110 10011001 01101011 00101101</span>
+                <span>00101101 11001010 01100101 10010110 01001001 10110100 11110000</span>
+                <span>11010110 00110010 10101101 01001011 11100101 00011110 10011010</span>
+                <span>01101001 10010110 01011100 11101000 00110101 11001101 10110010</span>
+                <span>11100010 00110110 10011001 01101011 00101101 11010100 01001101</span>
+            </div>
+
+            <div class="error-field">
+                <span>ERROR // SYSTEM FAILURE</span>
+                <span>ACCESS DENIED // ERROR 0x13</span>
+                <span>CRITICAL ERROR // SIGNAL LOST</span>
+                <span>UNAUTHORIZED NODE // ERROR</span>
+                <span>FATAL ERROR // CORE BREACH</span>
+                <span>ERROR // TRACE DETECTED</span>
+            </div>
+
         </div>
-
-        <div class="error-field" aria-hidden="true">
-            <span>ERROR // SYSTEM FAILURE</span>
-            <span>ACCESS DENIED // ERROR 0x13</span>
-            <span>CRITICAL ERROR // SIGNAL LOST</span>
-            <span>UNAUTHORIZED NODE // ERROR</span>
-            <span>FATAL ERROR // CORE BREACH</span>
-            <span>ERROR // TRACE DETECTED</span>
-        </div>
-
-        <!-- SIDEBAR -->
-        <aside class="sidebar">
-
-            <div class="logo">
-
-                <div class="logo-symbol">
-                    &lt;/&gt;
-                </div>
-
-                <div>
-                    <h2>ANON</h2>
-                    <span>GRID</span>
-                </div>
-
-            </div>
-
-
-            <div class="system-status">
-
-                <div class="status-dot"></div>
-
-                <div>
-                    <small>SYSTEM STATUS</small>
-                    <strong>ONLINE</strong>
-                </div>
-
-            </div>
-
-
-            <div class="menu-title">
-                // MENU
-            </div>
-
-
-            <nav>
-
-                <button
-                    class="menu-button active"
-                    id="listMenu"
-                    type="button"
-                >
-                    <span>▣</span>
-                    Task List
-                </button>
-
-
-                <button
-                    class="menu-button"
-                    id="scheduleMenu"
-                    type="button"
-                >
-                    <span>▤</span>
-                    Schedule
-                </button>
-
-
-                <button
-                    class="menu-button"
-                    id="addMenu"
-                    type="button"
-                >
-                    <span>＋</span>
-                    Add / Remove
-                </button>
-
-
-                <button
-                    class="menu-button"
-                    id="syncMenu"
-                    type="button"
-                >
-                    <span>⇄</span>
-                    Sync LMS
-                </button>
-
-            </nav>
-
-
-            <div class="sidebar-footer">
-
-                <span>SECURE OPS NODE</span>
-
-                <small>v2.1.0</small>
-
-            </div>
-
-        </aside>
 
 
         <!-- =================================================
-             KONTEN UTAMA
+             LIST TUGAS (SEMUA MATA KULIAH)
         ================================================== -->
 
-        <main class="main-content" id="mainContent" tabindex="-1">
-
-
-            <!-- TOP BAR -->
-
-            <div class="top-bar">
-
-                <span>
-                    ~/anonymous/ops
-                </span>
-
-                <div class="online-status">
-
-                    <div class="status-dot"></div>
-
-                    SYSTEM ONLINE
-
-                </div>
-
-            </div>
-
-
-            <!-- =================================================
-                 LIST TUGAS
-            ================================================== -->
-
-            <section id="taskListSection">
+        <section id="taskListSection" class="page-view hidden">
 
                 <div class="page-header">
 
@@ -278,73 +547,9 @@
 
                 <!-- STATISTIK -->
 
-                <div class="stats">
-
-
-                    <div class="stat-card">
-
-                        <div class="stat-header">
-                            TOTAL TASKS
-                            <span>01</span>
-                        </div>
-
-                        <div
-                            id="totalTasks"
-                            class="stat-number"
-                        >
-                            0
-                        </div>
-
-                        <p>
-                            All tasks
-                        </p>
-
-                    </div>
-
-
-                    <div class="stat-card">
-
-                        <div class="stat-header">
-                            PRIORITY
-                            <span>02</span>
-                        </div>
-
-                        <div
-                            id="upcomingTasks"
-                            class="stat-number"
-                        >
-                            0
-                        </div>
-
-                        <p>
-                            Due in ≤ 3 days
-                        </p>
-
-                    </div>
-
-
-                    <div class="stat-card">
-
-                        <div class="stat-header">
-                            OVERDUE
-                            <span>03</span>
-                        </div>
-
-                        <div
-                            id="overdueTasks"
-                            class="stat-number"
-                        >
-                            0
-                        </div>
-
-                        <p>
-                            Past deadline
-                        </p>
-
-                    </div>
-
-
-                </div>
+                <!-- Statistik tidak lagi diulang di sini: kartu TOTAL TASKS
+                     dan PRIORITY sudah ada di Beranda, dan kartu OVERDUE
+                     dihapus sesuai permintaan. -->
 
 
                 <!-- JUDUL DATABASE -->
@@ -404,7 +609,7 @@
 
             <section
                 id="scheduleSection"
-                class="hidden"
+                class="page-view hidden"
             >
 
                 <div class="page-header">
@@ -480,151 +685,61 @@
 
 
             <!-- =================================================
-                 ADD / DELETE
+                 DETAIL MATA KULIAH
+                 Dibuka dari daftar mata kuliah di Beranda.
+                 Menampilkan seluruh tugas milik satu matkul.
             ================================================== -->
 
             <section
-                id="addTaskSection"
-                class="hidden"
+                id="courseDetailSection"
+                class="page-view hidden"
             >
 
                 <div class="page-header">
 
                     <div>
 
+                        <button
+                            id="courseBackButton"
+                            class="back-button"
+                            type="button"
+                        >
+                            <span aria-hidden="true">←</span>
+                            ALL COURSES
+                        </button>
+
                         <div class="section-label">
-                            // TASK CONTROL
+                            // COURSE FILE
                         </div>
 
-                        <h2>
-                            Manage Tasks
+                        <h2 id="courseDetailTitle">
+                            Course
                         </h2>
 
-                        <p>
-                            Create a new coursework task.
+                        <p id="courseDetailSubtitle">
+                            All tasks for this course.
                         </p>
 
                     </div>
 
+
+                    <button
+                        id="courseAddTaskButton"
+                        class="small-button"
+                        type="button"
+                    >
+                        + ADD TASK
+                    </button>
+
                 </div>
 
 
-                <div class="form-card">
+                <div
+                    id="courseDetailContainer"
+                    class="task-container"
+                >
 
-                    <div class="section-label">
-                        // NEW SIGNAL
-                    </div>
-
-                    <h2>
-                        Add Task
-                    </h2>
-
-
-                    <form id="taskForm">
-
-
-                        <!-- MATA KULIAH -->
-
-                        <div class="form-group">
-
-                            <label for="course">
-                                COURSE NAME
-                            </label>
-
-                            <input
-                                type="text"
-                                id="course"
-                                placeholder="Example: Data Structures"
-                                autocomplete="off"
-                                required
-                            >
-
-                        </div>
-
-
-                        <!-- KELAS -->
-
-                        <div class="form-group">
-
-                            <label for="className">
-                                CLASS
-                            </label>
-
-                            <input
-                                type="text"
-                                id="className"
-                                placeholder="Example: RD"
-                                autocomplete="off"
-                                required
-                            >
-
-                        </div>
-
-
-                        <!-- DEADLINE -->
-
-                        <div class="form-group">
-
-                            <label for="deadline">
-                                DEADLINE
-                            </label>
-
-                            <input
-                                type="date"
-                                id="deadline"
-                                required
-                            >
-
-                        </div>
-
-
-                        <!-- KATEGORI -->
-
-                        <div class="form-group">
-
-                            <label for="category">
-                                TASK CATEGORY
-                            </label>
-
-                            <input
-                                type="text"
-                                id="category"
-                                placeholder="Example: Lab, Report, Quiz, or custom"
-                                autocomplete="off"
-                                required
-                            >
-
-                            <small class="input-hint">
-                                You can define your own category.
-                            </small>
-
-                        </div>
-
-
-                        <div class="form-group">
-
-                            <label for="status">
-                                TASK STATUS
-                            </label>
-
-                            <select id="status" required>
-                                <option value="Pending">Pending</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Completed">Completed</option>
-                            </select>
-
-                        </div>
-
-
-                        <button
-                            type="submit"
-                            class="submit-button"
-                        >
-                            + ADD TASK
-                        </button>
-
-
-                    </form>
+                    <!-- Diisi oleh script.js -->
 
                 </div>
 
@@ -637,7 +752,7 @@
 
             <section
                 id="syncSection"
-                class="hidden"
+                class="page-view hidden"
             >
 
                 <div class="page-header">
@@ -1094,7 +1209,160 @@
 
         </main>
 
-    </section>
+
+
+    <!-- =====================================================
+         MODAL TAMBAH TUGAS
+         Navbar "Add / Remove" dihapus. Form tambah tugas
+         sekarang muncul sebagai modal dari tombol "+ ADD TASK"
+         di navbar, Beranda, dan halaman detail mata kuliah.
+
+         Modal ini sengaja berada di level <body>, BUKAN di dalam
+         <main class="main-content">. .main-content memakai
+         z-index: 3 sehingga membentuk stacking context sendiri;
+         modal ber-z-index 100 di dalamnya tetap terkurung di
+         bawah navbar (z-index: 100 di level body), dan judul
+         modal tertutup navbar di layar pendek.
+    ====================================================== -->
+
+    <div
+        id="addTaskModal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="addTaskModalTitle"
+    >
+
+        <div class="modal-content">
+
+            <button
+                id="closeAddModal"
+                class="modal-close"
+                type="button"
+                aria-label="Close add task dialog"
+            >
+                ×
+            </button>
+
+
+            <div class="section-label">
+                // NEW SIGNAL
+            </div>
+
+            <h2 id="addTaskModalTitle">
+                Add Task
+            </h2>
+
+
+            <form id="taskForm">
+
+
+                <!-- MATA KULIAH -->
+
+                <div class="form-group">
+
+                    <label for="course">
+                        COURSE NAME
+                    </label>
+
+                    <input
+                        type="text"
+                        id="course"
+                        placeholder="Example: Data Structures"
+                        autocomplete="off"
+                        required
+                    >
+
+                </div>
+
+
+                <!-- KELAS -->
+
+                <div class="form-group">
+
+                    <label for="className">
+                        CLASS
+                    </label>
+
+                    <input
+                        type="text"
+                        id="className"
+                        placeholder="Example: RD"
+                        autocomplete="off"
+                        required
+                    >
+
+                </div>
+
+
+                <!-- DEADLINE -->
+
+                <div class="form-group">
+
+                    <label for="deadline">
+                        DEADLINE
+                    </label>
+
+                    <input
+                        type="date"
+                        id="deadline"
+                        required
+                    >
+
+                </div>
+
+
+                <!-- KATEGORI -->
+
+                <div class="form-group">
+
+                    <label for="category">
+                        TASK CATEGORY
+                    </label>
+
+                    <input
+                        type="text"
+                        id="category"
+                        placeholder="Example: Lab, Report, Quiz, or custom"
+                        autocomplete="off"
+                        required
+                    >
+
+                    <small class="input-hint">
+                        You can define your own category.
+                    </small>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label for="status">
+                        TASK STATUS
+                    </label>
+
+                    <select id="status" required>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+
+                </div>
+
+
+                <button
+                    type="submit"
+                    class="submit-button"
+                >
+                    + ADD TASK
+                </button>
+
+
+            </form>
+
+        </div>
+
+    </div>
 
 
     <!-- =====================================================
@@ -1286,8 +1554,26 @@
 
 
     <!-- =====================================================
-         SUPABASE
+         KONFIGURASI & SUPABASE
+         config.js di-generate dari .env oleh
+         `npm run env:build` dan tidak ikut ter-commit.
+         Harus dimuat SEBELUM script.js.
     ====================================================== -->
+
+    <script src="config.js"></script>
+
+    <!-- Three.js dipin ke 0.160.1 — versi UMD terakhir. Mulai
+         r161 build three.min.js dihapus dari paket npm, jadi versi
+         yang lebih baru tidak bisa dipakai lewat <script> biasa.
+         SRI + crossorigin wajib: bila CDN mengembalikan berkas yang
+         berbeda, browser menolak memuatnya dan three-bg.js otomatis
+         menonaktifkan canvas tanpa mengganggu aplikasi. -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"
+        integrity="sha384-qOkzR5Ke/XkQxuGVJ9hpFEpDlcoLtWwVYhnJf06cLIZa2vaIptSqaubivErzmD5O"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+    ></script>
 
     <script
         src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
@@ -1297,6 +1583,11 @@
     ></script>
 
     <script src="script.js"></script>
+
+    <!-- Latar 3D dimuat setelah logika aplikasi supaya inisialisasi
+         WebGL tidak menunda boot. Modul ini sepenuhnya opsional:
+         bila gagal, aplikasi tetap berjalan. -->
+    <script src="three-bg.js"></script>
 
 </body>
 </html>

@@ -1,0 +1,97 @@
+name: Deploy to GitHub Pages
+
+# =========================================================
+#  Kenapa pakai workflow, bukan "deploy from branch"?
+#
+#  config.js berisi kredensial dan TIDAK ikut ter-commit,
+#  jadi file itu tidak ada di repo. Workflow ini membuatnya
+#  saat deploy dari GitHub Secrets, lalu menerbitkan seluruh
+#  situs ke Pages.
+#
+#  Secret yang perlu diisi di:
+#  Settings -> Secrets and variables -> Actions
+#
+#      SUPABASE_URL
+#      SUPABASE_KEY            (publishable / anon key)
+#      MOODLE_URL              (opsional)
+#      CLASSROOM_CLIENT_ID     (opsional)
+#      CLASSROOM_REDIRECT      (opsional)
+#
+#  Sekaligus matikan "Deploy from a branch" di
+#  Settings -> Pages, dan pilih source "GitHub Actions".
+# =========================================================
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate config.js from secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          MOODLE_URL: ${{ secrets.MOODLE_URL }}
+          CLASSROOM_CLIENT_ID: ${{ secrets.CLASSROOM_CLIENT_ID }}
+          CLASSROOM_REDIRECT: ${{ secrets.CLASSROOM_REDIRECT }}
+        run: |
+          # Tulis .env dari secrets. Nilai kosong dibiarkan
+          # kosong supaya aplikasi memakai default di kode.
+          {
+            echo "SUPABASE_URL=${SUPABASE_URL}"
+            echo "SUPABASE_KEY=${SUPABASE_KEY}"
+            echo "MOODLE_URL=${MOODLE_URL}"
+            echo "CLASSROOM_CLIENT_ID=${CLASSROOM_CLIENT_ID}"
+            echo "CLASSROOM_REDIRECT=${CLASSROOM_REDIRECT}"
+          } > .env
+
+          node scripts/build-config.mjs
+
+      - name: Fail if config is incomplete
+        run: |
+          if ! grep -q '"SUPABASE_URL": "https://' config.js; then
+            echo "::error::SUPABASE_URL secret is missing or invalid."
+            exit 1
+          fi
+
+      - name: Remove dev-only files from artifact
+        run: |
+          rm -rf node_modules supabase scripts .github
+          rm -f package.json package-lock.json .env.example .gitignore README.md
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

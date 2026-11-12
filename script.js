@@ -5,18 +5,27 @@
 
 
 // =========================================================
-// SUPABASE CONFIGURATION
+// KONFIGURASI
+//  Nilai diambil dari config.js, yang di-generate dari .env
+//  oleh `npm run env:build`. Kalau file itu belum ada,
+//  aplikasi tetap jalan tapi menampilkan instruksi yang
+//  jelas alih-alih gagal tanpa penjelasan.
 // =========================================================
 
-const SUPABASE_URL =
-    "https://ixdwiazefaaajydcohgc.supabase.co";
+const APP_CONFIG =
+    (typeof window !== "undefined" && window.APP_CONFIG) || {};
 
-const SUPABASE_KEY =
-    "sb_publishable_NowNDOlf5_ysmjIvbUSZXw_esLgw4Eg";
+const CONFIG_MISSING =
+    !APP_CONFIG.SUPABASE_URL || !APP_CONFIG.SUPABASE_KEY;
+
+const SUPABASE_URL = APP_CONFIG.SUPABASE_URL || "";
+const SUPABASE_KEY = APP_CONFIG.SUPABASE_KEY || "";
 
 
-// Jika CDN Supabase gagal dimuat, jangan sampai seluruh script crash.
+// Jika CDN Supabase gagal dimuat atau config belum ada,
+// jangan sampai seluruh script crash.
 const supabaseClient =
+    !CONFIG_MISSING &&
     typeof window.supabase !== "undefined" &&
     typeof window.supabase.createClient === "function"
         ? window.supabase.createClient(
@@ -26,6 +35,12 @@ const supabaseClient =
         : null;
 
 
+const CONFIG_HELP =
+    "Configuration missing. Copy .env.example to .env, " +
+    "fill in your Supabase URL and publishable key, then " +
+    "run `npm run env:build` and reload this page.";
+
+
 // =========================================================
 // DOM ELEMENT
 // =========================================================
@@ -33,12 +48,14 @@ const supabaseClient =
 const homePage =
     document.getElementById("homePage");
 
-const dashboardPage =
-    document.getElementById("dashboardPage");
+const mainContent =
+    document.getElementById("mainContent");
 
-const enterDashboard =
-    document.getElementById("enterDashboard");
 
+// Navigasi (navbar horizontal)
+
+const homeMenu =
+    document.getElementById("homeMenu");
 
 const listMenu =
     document.getElementById("listMenu");
@@ -46,9 +63,11 @@ const listMenu =
 const scheduleMenu =
     document.getElementById("scheduleMenu");
 
-const addMenu =
-    document.getElementById("addMenu");
+const syncMenu =
+    document.getElementById("syncMenu");
 
+
+// Halaman
 
 const taskListSection =
     document.getElementById("taskListSection");
@@ -56,12 +75,74 @@ const taskListSection =
 const scheduleSection =
     document.getElementById("scheduleSection");
 
-const addTaskSection =
-    document.getElementById("addTaskSection");
+const courseDetailSection =
+    document.getElementById("courseDetailSection");
 
+const syncSection =
+    document.getElementById("syncSection");
+
+
+// Beranda
+
+const courseDirectory =
+    document.getElementById("courseDirectory");
+
+
+// Detail mata kuliah
+
+const courseDetailTitle =
+    document.getElementById("courseDetailTitle");
+
+const courseDetailSubtitle =
+    document.getElementById("courseDetailSubtitle");
+
+const courseDetailContainer =
+    document.getElementById("courseDetailContainer");
+
+const courseBackButton =
+    document.getElementById("courseBackButton");
+
+const courseAddTaskButton =
+    document.getElementById("courseAddTaskButton");
 
 const addTaskFromList =
     document.getElementById("addTaskFromList");
+
+
+// Kalender (sekarang tinggal di Beranda, bukan halaman sendiri)
+
+const calendarGrid =
+    document.getElementById("calendarGrid");
+
+const calendarMonthLabel =
+    document.getElementById("calendarMonthLabel");
+
+const calendarMonthCount =
+    document.getElementById("calendarMonthCount");
+
+const calendarToday =
+    document.getElementById("calendarToday");
+
+const calendarPrev =
+    document.getElementById("calendarPrev");
+
+const calendarNext =
+    document.getElementById("calendarNext");
+
+const calendarDayTitle =
+    document.getElementById("calendarDayTitle");
+
+const calendarDayList =
+    document.getElementById("calendarDayList");
+
+
+// Form tambah tugas (sekarang modal)
+
+const addTaskModal =
+    document.getElementById("addTaskModal");
+
+const closeAddModal =
+    document.getElementById("closeAddModal");
 
 
 const taskForm =
@@ -80,23 +161,10 @@ const totalTasks =
 const upcomingTasks =
     document.getElementById("upcomingTasks");
 
-const overdueTasks =
-    document.getElementById("overdueTasks");
-
-
-const mainContent =
-    document.getElementById("mainContent");
-
 
 // =========================================================
 // SYNC ELEMENT
 // =========================================================
-
-const syncMenu =
-    document.getElementById("syncMenu");
-
-const syncSection =
-    document.getElementById("syncSection");
 
 const moodleForm =
     document.getElementById("moodleForm");
@@ -250,6 +318,152 @@ const toastContainer =
 let tasks = [];
 
 
+// =========================================================
+// REALTIME (SUPABASE POSTGRES CHANGES)
+//  Ledger ini dipakai bersama: teman yang membuka link
+//  yang sama bisa menambah/mengubah/menghapus tugas.
+//  Tanpa langganan ini, layar hanya diperbarui saat user
+//  melakukan sesuatu (klik menu, sync, reload) — sehingga
+//  perubahan orang lain tidak terlihat sampai di-refresh.
+//
+//  Catatan setup: tabel `tasks` harus didaftarkan dulu di
+//  Supabase Dashboard → Database → Replication, kalau tidak
+//  langganan ini tidak akan pernah berbunyi (tanpa error).
+// =========================================================
+
+const REALTIME_CHANNEL = "ghost-matrix-tasks";
+
+let realtimeChannel = null;
+let realtimeActive = false;
+let realtimeNoticeShown = false;
+
+
+// Perubahan dari tab ini sendiri sudah ditangani langsung
+// oleh aksi user (insert/update/delete lalu loadTasks()),
+// jadi event yang datang < 1 detik setelah aksi lokal
+// diabaikan agar tidak memicu render ganda.
+let lastLocalWriteAt = 0;
+
+const LOCAL_WRITE_WINDOW = 1000;
+
+
+function markLocalWrite() {
+
+    lastLocalWriteAt = Date.now();
+
+}
+
+
+function startRealtime() {
+
+    if (!supabaseClient ||
+        typeof supabaseClient.channel !== "function") {
+
+        return;
+
+    }
+
+
+    if (realtimeChannel) {
+
+        return;
+
+    }
+
+
+    try {
+
+        realtimeChannel =
+            supabaseClient
+                .channel(REALTIME_CHANNEL)
+                .on(
+                    "postgres_changes",
+                    {
+                        event: "*",
+                        schema: "public",
+                        table: "tasks"
+                    },
+                    (payload) => {
+
+                        // Abaikan gema dari aksi tab ini sendiri.
+                        if (Date.now() - lastLocalWriteAt <
+                            LOCAL_WRITE_WINDOW) {
+
+                            return;
+
+                        }
+
+
+                        // Beranda, daftar tugas, detail matkul, dan
+                        // kalender semuanya membaca array `tasks`
+                        // yang sama, jadi semuanya perlu disegarkan.
+                        // Dulu ada guard "hanya bila dashboard
+                        // terlihat"; sekarang tidak ada satu halaman
+                        // dashboard lagi, jadi muat ulang selalu.
+                        loadTasks({ silent: true });
+
+
+                        // Beri tahu sekali saja, jangan beruntun.
+                        if (!realtimeNoticeShown &&
+                            payload?.eventType) {
+
+                            realtimeNoticeShown = true;
+
+                            showToast(
+                                "Ledger updated by another user.",
+                                "info"
+                            );
+
+                            setTimeout(() => {
+
+                                realtimeNoticeShown = false;
+
+                            }, 4000);
+
+                        }
+
+                    }
+                )
+                .subscribe((status) => {
+
+                    realtimeActive = (status === "SUBSCRIBED");
+
+                    renderRealtimeStatus();
+
+                });
+
+    }
+    catch (error) {
+
+        // Realtime bersifat tambahan: bila gagal, aplikasi
+        // tetap berfungsi dengan pembaruan manual.
+        console.error(error);
+
+    }
+
+}
+
+
+// Indikator kecil di top bar supaya user tahu apakah
+// perubahan orang lain akan muncul otomatis.
+function renderRealtimeStatus() {
+
+    const badge =
+        document.getElementById("realtimeBadge");
+
+
+    if (!badge) {
+
+        return;
+
+    }
+
+
+    badge.classList.toggle("hidden", !realtimeActive);
+
+}
+
+
 function showToast(message, type = "info") {
 
     const toast = document.createElement("div");
@@ -282,90 +496,148 @@ function showToast(message, type = "info") {
 
 // =========================================================
 // NAVIGATION
+//  Satu <main> berisi beberapa <section class="page-view">.
+//  Hanya satu yang terlihat pada satu waktu.
 // =========================================================
 
-function openDashboard() {
+const PAGES = [
+    homePage,
+    taskListSection,
+    scheduleSection,
+    courseDetailSection,
+    syncSection
+];
 
-    homePage.classList.add("hidden");
-    dashboardPage.classList.remove("hidden");
+const NAV_BUTTONS = [
+    homeMenu,
+    listMenu,
+    scheduleMenu,
+    syncMenu
+];
 
-    loadTasks();
-
-    mainContent.focus();
-
-}
-
-
-enterDashboard.addEventListener(
-    "click",
-    () => {
-
-        openDashboard();
-
-    }
-);
+// Mata kuliah yang sedang dibuka di halaman detail.
+let activeCourse = null;
 
 
-function activateMenu(button) {
+function setActiveNav(button) {
 
-    document
-        .querySelectorAll(".menu-button")
-        .forEach((item) => {
+    NAV_BUTTONS.forEach((item) => {
 
-            item.classList.remove("active");
+        if (!item) return;
 
-        });
+        item.classList.toggle("active", item === button);
 
-    button.classList.add("active");
+        if (item === button) {
 
-}
+            item.setAttribute("aria-current", "page");
 
+        }
+        else {
 
-// Tampilkan hanya SATU section di area konten utama
-function showOnly(section) {
+            item.removeAttribute("aria-current");
 
-    [
-        taskListSection,
-        scheduleSection,
-        addTaskSection,
-        syncSection
-    ].forEach((item) => {
-
-        item.classList.toggle(
-            "hidden",
-            item !== section
-        );
+        }
 
     });
 
+
+    // Di layar sempit navbar-nav bisa digulir mendatar. Tanpa ini,
+    // halaman yang dibuka dari tautan paling kanan (CALENDAR, SYNC)
+    // tampil tanpa penanda aktif yang terlihat — pengguna tidak tahu
+    // di halaman mana dia berada.
+    if (button &&
+        typeof button.scrollIntoView === "function") {
+
+        button.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+            behavior: "instant"
+        });
+
+    }
+
 }
 
 
-// LIST TUGAS
+// Tampilkan satu halaman saja.
+//  - scrollToTop = gulir ke atas (kecuali saat pindah halaman
+//    dari dalam daftar panjang, di mana pengguna mungkin ingin
+//    tetap di posisinya).
+function showPage(page, { button = null, scrollToTop = true } = {}) {
 
-listMenu.addEventListener(
-    "click",
-    () => {
+    PAGES.forEach((item) => {
 
-        activateMenu(listMenu);
+        if (!item) return;
 
-        showOnly(taskListSection);
+        item.classList.toggle("hidden", item !== page);
 
-        loadTasks();
+    });
+
+
+    // Konteks mata kuliah hanya berlaku selama halaman detailnya
+    // terbuka. Kalau tidak direset, modal "Add Task" akan terus
+    // mengisi nama matkul lama walaupun dibuka dari Beranda.
+    if (page !== courseDetailSection) {
+
+        activeCourse = null;
 
     }
-);
 
 
-// JADWAL
+    setActiveNav(button);
+
+
+    if (scrollToTop) {
+
+        window.scrollTo({ top: 0, behavior: "instant" });
+
+    }
+
+
+    // Fokus ke konten utama supaya pembaca layar langsung
+    // membacakan halaman yang baru, bukan tetap di navbar.
+    mainContent.focus({ preventScroll: true });
+
+}
+
+
+// ---------- BERANDA ----------
+
+function showHome() {
+
+    showPage(homePage, { button: homeMenu });
+
+    // Kalender sekarang bagian dari Beranda, jadi ikut disegarkan
+    // setiap kali Beranda dibuka (data bisa berubah dari halaman lain).
+    renderCalendar();
+
+}
+
+
+homeMenu.addEventListener("click", showHome);
+
+
+// ---------- DAFTAR SEMUA TUGAS ----------
+
+function showTaskList() {
+
+    showPage(taskListSection, { button: listMenu });
+
+    loadTasks();
+
+}
+
+
+listMenu.addEventListener("click", showTaskList);
+
+
+// ---------- JADWAL ----------
 
 scheduleMenu.addEventListener(
     "click",
     () => {
 
-        activateMenu(scheduleMenu);
-
-        showOnly(scheduleSection);
+        showPage(scheduleSection, { button: scheduleMenu });
 
         renderSchedule();
 
@@ -373,29 +645,13 @@ scheduleMenu.addEventListener(
 );
 
 
-// ADD / DELETE
-
-addMenu.addEventListener(
-    "click",
-    () => {
-
-        activateMenu(addMenu);
-
-        showOnly(addTaskSection);
-
-    }
-);
-
-
-// SYNC LMS
+// ---------- SYNC LMS ----------
 
 syncMenu.addEventListener(
     "click",
     () => {
 
-        activateMenu(syncMenu);
-
-        showOnly(syncSection);
+        showPage(syncSection, { button: syncMenu });
 
         renderMoodleStatus();
 
@@ -414,22 +670,100 @@ syncMenu.addEventListener(
 );
 
 
-// TOMBOL TAMBAH DARI LIST
+// =========================================================
+// MODAL TAMBAH TUGAS
+//  Navbar "Add / Remove" dihapus; form sekarang modal agar
+//  bisa dibuka dari navbar, Beranda, maupun halaman matkul.
+// =========================================================
 
-addTaskFromList.addEventListener(
+let addModalReturnFocus = null;
+
+
+function openAddTaskModal() {
+
+    if (!addTaskModal) return;
+
+    addModalReturnFocus = document.activeElement;
+
+    addTaskModal.classList.remove("hidden");
+
+
+    // Kalau dibuka dari halaman detail matkul, isi otomatis
+    // nama matkulnya supaya tidak perlu mengetik ulang.
+    const courseInput = document.getElementById("course");
+
+    if (courseInput && activeCourse &&
+        !courseInput.value.trim()) {
+
+        courseInput.value = activeCourse;
+
+    }
+
+
+    courseInput?.focus();
+
+}
+
+
+function closeAddTaskModal() {
+
+    if (!addTaskModal) return;
+
+    addTaskModal.classList.add("hidden");
+
+
+    if (addModalReturnFocus &&
+        typeof addModalReturnFocus.focus === "function") {
+
+        addModalReturnFocus.focus();
+
+    }
+
+    addModalReturnFocus = null;
+
+}
+
+
+// Tombol tambah tugas hanya ada di halaman Tasks dan halaman
+// detail mata kuliah (navbar tidak lagi punya tombol ini).
+courseAddTaskButton?.addEventListener("click", openAddTaskModal);
+
+// Tombol di halaman Tasks (dulu milik section "Add / Remove").
+addTaskFromList?.addEventListener("click", openAddTaskModal);
+
+closeAddModal?.addEventListener("click", closeAddTaskModal);
+
+
+// Klik di area gelap luar kartu menutup modal
+addTaskModal?.addEventListener(
     "click",
-    () => {
+    (event) => {
 
-        activateMenu(addMenu);
+        if (event.target === addTaskModal) {
 
-        showOnly(addTaskSection);
+            closeAddTaskModal();
 
-        document
-            .getElementById("course")
-            .focus();
+        }
 
     }
 );
+
+
+document.addEventListener(
+    "keydown",
+    (event) => {
+
+        if (event.key === "Escape" &&
+            addTaskModal &&
+            !addTaskModal.classList.contains("hidden")) {
+
+            closeAddTaskModal();
+
+        }
+
+    }
+);
+
 
 
 // =========================================================
@@ -467,10 +801,11 @@ taskForm.addEventListener(
                 .trim();
 
         const status =
-            document
-                .getElementById("status")
-                .value
-                .trim() || "Pending";
+            normalizeStatus(
+                document
+                    .getElementById("status")
+                    .value
+            );
 
 
         if (
@@ -507,6 +842,8 @@ taskForm.addEventListener(
             status: status
         };
 
+
+        markLocalWrite();
 
         let insertResult =
             await supabaseClient
@@ -553,9 +890,12 @@ taskForm.addEventListener(
         taskForm.reset();
 
 
-        activateMenu(listMenu);
+        // Setelah menyimpan, modal ditutup dan halaman yang sedang
+        // dibuka dipertahankan. Dulu pengguna dilempar ke daftar
+        // tugas; sekarang menambah tugas dari Beranda atau dari
+        // halaman matkul tidak menghilangkan konteksnya.
+        closeAddTaskModal();
 
-        showOnly(taskListSection);
 
         await loadTasks();
 
@@ -569,6 +909,82 @@ taskForm.addEventListener(
 
 const MOODLE_STORAGE_KEY =
     "ghost_matrix_moodle_auth";
+// Nilai awal dari .env (MOODLE_URL). Hanya dipakai sebagai
+// default saat kolom Site URL kosong — user tetap bisa
+// mengganti URL lain di UI.
+const DEFAULT_MOODLE_URL =
+    normalizeSiteUrl(APP_CONFIG.MOODLE_URL) ||
+    "https://kuliah2.itera.ac.id";
+
+
+// =========================================================
+// UPSERT BATCH (DIPAKAI KEDUA SYNC)
+//  Sebelumnya tiap tugas = satu request HTTP. Untuk 40 tugas
+//  berarti 40 round-trip dan tidak atomik. Sekarang seluruh
+//  batch dikirim sekali ke fungsi database sync_lms_tasks().
+//
+//  Status dan dismissed_at sengaja tidak ikut di-update oleh
+//  fungsi itu, sehingga pilihan user tidak tertimpa sync.
+//  Kalau fungsi belum ada (migrasi belum dijalankan),
+//  helper ini melaporkan pesan yang jelas.
+// =========================================================
+
+const SYNC_BATCH_SIZE = 200;
+
+
+async function syncRowsBatch(rows) {
+
+    let created = 0;
+    let updated = 0;
+
+
+    for (let i = 0; i < rows.length; i += SYNC_BATCH_SIZE) {
+
+        const chunk =
+            rows.slice(i, i + SYNC_BATCH_SIZE);
+
+
+        const {
+            data,
+            error
+        } = await supabaseClient.rpc(
+            "sync_lms_tasks",
+            { rows: chunk }
+        );
+
+
+        if (error) {
+
+            console.error(error);
+
+            if (error.code === "PGRST202") {
+
+                throw new Error(
+                    "Sync function missing. Run SUPABASE_SETUP.sql " +
+                    "(or `npm run db:push`) first."
+                );
+
+            }
+
+            throw new Error(error.message);
+
+        }
+
+
+        // Fungsi mengembalikan satu baris {created, updated}.
+        const result =
+            Array.isArray(data) ? data[0] : data;
+
+
+        created += Number(result?.created || 0);
+        updated += Number(result?.updated || 0);
+
+    }
+
+
+    return { created, updated };
+
+}
 
 
 function loadMoodleConfig() {
@@ -1077,7 +1493,7 @@ ssoLaunch.addEventListener(
 
         const url =
             normalizeSiteUrl(moodleUrl.value) ||
-            "https://kuliah2.itera.ac.id";
+            DEFAULT_MOODLE_URL;
 
 
         const passport =
@@ -1176,7 +1592,7 @@ ssoUse.addEventListener(
             normalizeSiteUrl(
                 pending?.url || moodleUrl.value
             ) ||
-            "https://kuliah2.itera.ac.id";
+            DEFAULT_MOODLE_URL;
 
 
         ssoUse.disabled = true;
@@ -1583,7 +1999,8 @@ moodleSync.addEventListener(
                 withDue.length - active.length;
 
 
-            // 5. Peta existing tugas Moodle (anti dobel)
+            // 5. Baris Moodle yang sudah ada — dipakai untuk
+            //    menentukan mana yang usang (langkah 6b).
             const {
                 data: existingRows,
                 error: existingError
@@ -1609,109 +2026,30 @@ moodleSync.addEventListener(
             }
 
 
-            const existingIdByExternalId = new Map();
-
-            (existingRows || []).forEach((row) => {
-
-                existingIdByExternalId.set(
-                    row.external_id,
-                    row.id
-                );
-
-            });
+            // 6. Upsert batch — satu request untuk semua tugas
+            //    (sebelumnya satu request per tugas).
+            markLocalWrite();
 
 
-            // 6. Insert / update per assignment
-            let created = 0;
-            let updated = 0;
+            const syncPayload = active.map((item) => ({
+                course: item.name,
+                class_name:
+                    courseNameById[item.courseId] || "-",
+                deadline:
+                    unixToLocalDate(item.duedate),
+                category: "Moodle",
+                source: "moodle",
+                external_id:
+                    `assign:${item.courseId}:${item.id}`,
+                synced_at:
+                    new Date().toISOString()
+            }));
 
 
-            for (const item of active) {
-
-                const externalId =
-                    `assign:${item.courseId}:${item.id}`;
-
-                const payload = {
-                    course: item.name,
-                    class_name:
-                        courseNameById[item.courseId] || "-",
-                    deadline:
-                        unixToLocalDate(item.duedate),
-                    category: "Moodle",
-                    source: "moodle",
-                    external_id: externalId,
-                    synced_at:
-                        new Date().toISOString()
-                };
-
-
-                const knownId =
-                    existingIdByExternalId.get(externalId);
-
-
-                if (knownId) {
-
-                    // Update data dasar SAJA — status pilihan user
-                    // (Pending/In Progress/Completed) tidak ditimpa.
-                    const {
-                        error: updateError
-                    } = await supabaseClient
-                        .from("tasks")
-                        .update({
-                            course: payload.course,
-                            class_name: payload.class_name,
-                            deadline: payload.deadline,
-                            category: payload.category,
-                            synced_at: payload.synced_at
-                        })
-                        .eq("id", knownId)
-                        .select("id");
-
-
-                    if (updateError) {
-
-                        throw new Error(updateError.message);
-
-                    }
-
-
-                    updated += 1;
-
-                }
-                else {
-
-                    let insertResult =
-                        await supabaseClient
-                            .from("tasks")
-                            .insert([payload])
-                            .select("id");
-
-
-                    // Fallback bila kolom migrasi belum ada
-                    if (insertResult.error &&
-                        insertResult.error.code === "42703") {
-
-                        throw new Error(
-                            "Missing sync columns. Run SUPABASE_SETUP.sql first."
-                        );
-
-                    }
-
-
-                    if (insertResult.error) {
-
-                        throw new Error(
-                            insertResult.error.message
-                        );
-
-                    }
-
-
-                    created += 1;
-
-                }
-
-            }
+            const {
+                created,
+                updated
+            } = await syncRowsBatch(syncPayload);
 
 
             // 6b. Hapus tugas Moodle yang usang:
@@ -1803,9 +2141,7 @@ moodleSync.addEventListener(
 
 
             // 7. Tampilkan hasilnya
-            activateMenu(listMenu);
-
-            showOnly(taskListSection);
+            showHome();
 
             await loadTasks();
 
@@ -1861,15 +2197,28 @@ const CLASSROOM_SCOPES =
 
 // Halaman GitHub Pages dipakai sebagai tujuan redirect
 // (Google menerima https sebagai redirect URI).
+// Bisa dipaksa lewat CLASSROOM_REDIRECT di .env; kalau
+// kosong, diturunkan dari lokasi halaman supaya build
+// lokal / preview juga bisa dipakai.
 const CLASSROOM_REDIRECT =
-    "https://belliond.github.io/task-vault/";
+    APP_CONFIG.CLASSROOM_REDIRECT ||
+    (window.location.origin + window.location.pathname);
+
+
+// Client ID boleh disiapkan sekali di .env supaya user
+// tidak perlu menempelkannya manual. Nilai yang tersimpan
+// di browser (kalau ada) tetap diutamakan.
+const CLASSROOM_CLIENT_FALLBACK =
+    String(APP_CONFIG.CLASSROOM_CLIENT_ID || "").trim();
 
 
 function loadClassroomClient() {
 
-    return localStorage.getItem(
-        CLASSROOM_CLIENT_KEY
-    ) || "";
+    return (
+        localStorage.getItem(CLASSROOM_CLIENT_KEY) ||
+        CLASSROOM_CLIENT_FALLBACK ||
+        ""
+    );
 
 }
 
@@ -2193,7 +2542,11 @@ window.addEventListener(
 );
 
 
-classroomIdForm.addEventListener(
+// Nama elemen di HTML adalah "classroomIdForm"; variabel
+// referensinya classroomClientIdForm. Sebelumnya baris ini
+// memakai nama yang tidak pernah dideklarasikan sehingga
+// melempar ReferenceError dan menghentikan sisa script.
+classroomClientIdForm.addEventListener(
     "submit",
     (event) => {
 
@@ -2568,20 +2921,88 @@ classroomCourseList.addEventListener(
 );
 
 
+// =========================================================
+// PAGINATION GOOGLE CLASSROOM
+//  Classroom API mengirim data per halaman. Bila hasilnya
+//  lebih dari satu halaman, respons berisi nextPageToken.
+//  Tanpa mengikuti token itu, sisa data hilang diam-diam
+//  (tanpa error), sehingga tugas tidak muncul di ledger.
+//  Helper ini terus meminta halaman berikutnya sampai habis.
+// =========================================================
+
+const CLASSROOM_MAX_PAGES = 50;
+
+
+async function classroomRestAll(path, listKey) {
+
+    const items = [];
+
+    let pageToken = "";
+    let pages = 0;
+
+
+    do {
+
+        const separator =
+            path.includes("?") ? "&" : "?";
+
+        const url =
+            path +
+            (pageToken
+                ? separator + "pageToken=" +
+                  encodeURIComponent(pageToken)
+                : "");
+
+
+        const page = await classroomRest(url);
+
+
+        (page[listKey] || []).forEach((item) => {
+
+            items.push(item);
+
+        });
+
+
+        pageToken = page.nextPageToken || "";
+
+        pages += 1;
+
+    }
+    while (pageToken && pages < CLASSROOM_MAX_PAGES);
+
+
+    // Batas pengaman: jangan diam-diam memotong data.
+    if (pageToken) {
+
+        console.warn(
+            "Classroom pagination stopped at " +
+            CLASSROOM_MAX_PAGES +
+            " pages; some items may be missing."
+        );
+
+    }
+
+
+    return items;
+
+}
+
+
 async function tryRenderClassroomPicker() {
 
     try {
 
-        const result =
-            await classroomRest(
-                "/v1/courses?studentId=me&courseStates=ACTIVE"
+        const courses =
+            await classroomRestAll(
+                "/v1/courses?studentId=me&courseStates=ACTIVE",
+                "courses"
             );
 
 
-        if (Array.isArray(result.courses) &&
-            result.courses.length > 0) {
+        if (courses.length > 0) {
 
-            renderClassroomPicker(result.courses);
+            renderClassroomPicker(courses);
 
         }
 
@@ -2662,15 +3083,16 @@ classroomSync.addEventListener(
 
         try {
 
-            // 1. Daftar kelas aktif
-            const result =
-                await classroomRest(
-                    "/v1/courses?studentId=me&courseStates=ACTIVE"
+            // 1. Daftar kelas aktif (ikut semua halaman)
+            const allCourses =
+                await classroomRestAll(
+                    "/v1/courses?studentId=me&courseStates=ACTIVE",
+                    "courses"
                 );
 
 
             const courses =
-                (result.courses || []).filter(
+                allCourses.filter(
                     (course) => course.id
                 );
 
@@ -2722,14 +3144,18 @@ classroomSync.addEventListener(
 
             for (const course of selectedCourses) {
 
-                const work =
-                    await classroomRest(
+                // Ikuti semua halaman coursework; tanpa ini
+                // kelas dengan >100 tugas kehilangan sisanya
+                // tanpa pesan error.
+                const workItems =
+                    await classroomRestAll(
                         `/v1/courses/${course.id}/courseWork` +
-                        "?pageSize=100"
+                        "?pageSize=100",
+                        "courseWork"
                     );
 
 
-                (work.courseWork || []).forEach(
+                workItems.forEach(
                     (item) => {
 
                         assignments.push({
@@ -2770,7 +3196,8 @@ classroomSync.addEventListener(
                 withDue.length - active.length;
 
 
-            // 5. Existing tugas Classroom (anti dobel)
+            // 5. Baris Classroom yang sudah ada — dipakai untuk
+            //    menentukan mana yang usang (langkah 6b).
             const {
                 data: existingRows,
                 error: existingError
@@ -2789,101 +3216,28 @@ classroomSync.addEventListener(
             }
 
 
-            const existingIdByExternalId = new Map();
-
-            (existingRows || []).forEach((row) => {
-
-                existingIdByExternalId.set(
-                    row.external_id,
-                    row.id
-                );
-
-            });
+            // 6. Upsert batch — satu request untuk semua tugas
+            //    (sebelumnya satu request per tugas).
+            markLocalWrite();
 
 
-            // 6. Insert / update
-            let created = 0;
-            let updated = 0;
+            const syncPayload = active.map((item) => ({
+                course: item.title,
+                class_name: item.courseName || "-",
+                deadline: item.deadline,
+                category: "Classroom",
+                source: "classroom",
+                external_id:
+                    `gc:${item.courseId}:${item.id}`,
+                synced_at:
+                    new Date().toISOString()
+            }));
 
 
-            for (const item of active) {
-
-                const externalId =
-                    `gc:${item.courseId}:${item.id}`;
-
-
-                const payload = {
-                    course: item.title,
-                    class_name:
-                        item.courseName || "-",
-                    deadline: item.deadline,
-                    category: "Classroom",
-                    source: "classroom",
-                    external_id: externalId,
-                    synced_at:
-                        new Date().toISOString()
-                };
-
-
-                const knownId =
-                    existingIdByExternalId.get(
-                        externalId
-                    );
-
-
-                if (knownId) {
-
-                    const {
-                        error: updateError
-                    } = await supabaseClient
-                        .from("tasks")
-                        .update({
-                            course: payload.course,
-                            class_name:
-                                payload.class_name,
-                            deadline: payload.deadline,
-                            category: payload.category,
-                            synced_at: payload.synced_at
-                        })
-                        .eq("id", knownId)
-                        .select("id");
-
-
-                    if (updateError) {
-
-                        throw new Error(
-                            updateError.message
-                        );
-
-                    }
-
-
-                    updated += 1;
-
-                }
-                else {
-
-                    const insertResult =
-                        await supabaseClient
-                            .from("tasks")
-                            .insert([payload])
-                            .select("id");
-
-
-                    if (insertResult.error) {
-
-                        throw new Error(
-                            insertResult.error.message
-                        );
-
-                    }
-
-
-                    created += 1;
-
-                }
-
-            }
+            const {
+                created,
+                updated
+            } = await syncRowsBatch(syncPayload);
 
 
             // 6b. Bersihkan: kelas tidak dicentang
@@ -2974,9 +3328,7 @@ classroomSync.addEventListener(
             );
 
 
-            activateMenu(listMenu);
-
-            showOnly(taskListSection);
+            showHome();
 
             await loadTasks();
 
@@ -3075,15 +3427,54 @@ function renderLoadError(message) {
 }
 
 
-async function loadTasks() {
+// Kolom dismissed_at baru ada setelah SUPABASE_SETUP.sql
+// dijalankan. Selama belum, aplikasi tetap jalan tanpa
+// filter tersebut (dan tugas sync dihapus permanen).
+let dismissSupported = true;
 
-    renderLoadingState();
+
+// Penjaga agar refresh latar belakang (realtime) tidak
+// bertumpuk dan tidak memunculkan skeleton berkedip.
+let loadInFlight = false;
+let loadPendingAgain = false;
+
+
+// silent = true dipakai oleh listener realtime: data
+// diperbarui di tempat tanpa mengganti daftar dengan
+// skeleton, supaya tidak berkedip tiap ada perubahan.
+async function loadTasks({ silent = false } = {}) {
+
+    // Panggilan datang saat request lain masih jalan:
+    // cukup catat, nanti diulang setelah yang sekarang
+    // selesai (agar perubahan terakhir tidak hilang).
+    if (loadInFlight) {
+
+        loadPendingAgain = true;
+
+        return;
+
+    }
+
+    loadInFlight = true;
+
+    loadPendingAgain = false;
+
+
+    if (!silent) {
+
+        renderLoadingState();
+
+    }
 
 
     if (!supabaseClient) {
 
+        loadInFlight = false;
+
         renderLoadError(
-            "The database client failed to load. Check your internet connection and reload the page."
+            CONFIG_MISSING
+                ? CONFIG_HELP
+                : "The database client failed to load. Check your internet connection and reload the page."
         );
 
         return;
@@ -3091,34 +3482,105 @@ async function loadTasks() {
     }
 
 
-    const {
-        data,
-        error
-    } = await supabaseClient
-        .from("tasks")
-        .select("*")
-        .order("deadline", {
-            ascending: true
-        });
+    try {
+
+        let query = () =>
+            supabaseClient
+                .from("tasks")
+                .select("*");
 
 
-    if (error) {
+        let result =
+            dismissSupported
+                ? await query()
+                    .is("dismissed_at", null)
+                    .order("deadline", {
+                        ascending: true
+                    })
+                : await query()
+                    .order("deadline", {
+                        ascending: true
+                    });
 
-        console.error(error);
 
-        renderLoadError(error.message);
+        // Migrasi belum dijalankan: ulangi tanpa filter.
+        if (result.error?.code === "42703" &&
+            dismissSupported) {
 
-        return;
+            dismissSupported = false;
+
+            result = await query()
+                .order("deadline", {
+                    ascending: true
+                });
+
+        }
+
+
+        const {
+            data,
+            error
+        } = result;
+
+
+        if (error) {
+
+            console.error(error);
+
+            // Refresh latar belakang yang gagal tidak boleh
+            // merusak daftar yang sudah tampil.
+            if (!silent) {
+
+                renderLoadError(error.message);
+
+            }
+
+            return;
+
+        }
+
+
+        tasks = data || [];
+
+
+        updateStatistics();
+
+        renderTasks();
+
+        refreshActiveView();
 
     }
+    catch (error) {
+
+        // Jaringan mati / fetch gagal: jangan biarkan skeleton
+        // loading berputar selamanya tanpa penjelasan.
+        console.error(error);
+
+        if (!silent) {
+
+            renderLoadError(
+                error?.message ||
+                "Could not reach the database. Check your connection and retry."
+            );
+
+        }
+
+    }
+    finally {
+
+        loadInFlight = false;
 
 
-    tasks = data || [];
+        // Ada perubahan lain saat kita sibuk: ambil sekali lagi.
+        if (loadPendingAgain) {
 
+            loadPendingAgain = false;
 
-    updateStatistics();
+            await loadTasks({ silent: true });
 
-    renderTasks();
+        }
+
+    }
 
 }
 
@@ -3648,6 +4110,884 @@ function renderTasks() {
 
 
 // =========================================================
+// BANTUAN TAMPILAN
+// =========================================================
+
+// Kartu kosong dipakai di beberapa tempat (direktori matkul,
+// halaman detail, kalender). Dibuat baru tiap kali karena satu
+// node DOM tidak bisa berada di dua tempat sekaligus.
+function buildEmptyState(title, message) {
+
+    const wrap =
+        document.createElement("div");
+
+    wrap.className = "empty-task";
+
+    wrap.innerHTML = `
+
+        <div class="empty-icon">
+            _
+        </div>
+
+        <h3>
+            ${escapeHtml(title)}
+        </h3>
+
+        <p>
+            ${escapeHtml(message)}
+        </p>
+
+    `;
+
+    return wrap;
+
+}
+
+
+// Kelompokkan tugas per mata kuliah (class_name).
+function groupTasksBySubject() {
+
+    const groups = new Map();
+
+
+    tasks.forEach((task) => {
+
+        const subject =
+            String(task.class_name || "").trim() ||
+            "UNASSIGNED";
+
+
+        if (!groups.has(subject)) {
+
+            groups.set(subject, []);
+
+        }
+
+
+        groups.get(subject).push(task);
+
+    });
+
+
+    return groups;
+
+}
+
+
+// Mata kuliah diurutkan: yang deadline terdekat lebih dulu,
+// lalu A-Z sebagai pemecah seri. Sama dengan urutan grup di
+// daftar tugas supaya kedua halaman konsisten.
+function sortedSubjectEntries(groups) {
+
+    return Array.from(groups.entries()).sort(
+        (a, b) => {
+
+            const aNext =
+                a[1][0]?.deadline || "9999-99-99";
+
+            const bNext =
+                b[1][0]?.deadline || "9999-99-99";
+
+
+            if (aNext !== bNext) {
+
+                return aNext < bNext ? -1 : 1;
+
+            }
+
+
+            return a[0].localeCompare(b[0]);
+
+        }
+    );
+
+}
+
+
+function countOpenTasks(items) {
+
+    return items.filter((task) => {
+
+        return normalizeStatus(task.status) !== "Completed";
+
+    }).length;
+
+}
+
+
+// =========================================================
+// BERANDA: DIREKTORI MATA KULIAH
+//  Bagian paling atas Beranda adalah dua kartu statistik
+//  (diisi updateStatistics()). Di bawahnya daftar mata
+//  kuliah ini; klik satu kartu membuka halaman detailnya.
+// =========================================================
+
+function renderCourseDirectory() {
+
+    if (!courseDirectory) return;
+
+
+    courseDirectory.innerHTML = "";
+
+
+    if (tasks.length === 0) {
+
+        courseDirectory.appendChild(
+            buildEmptyState(
+                "No courses yet",
+                "Add a task and its course will show up here."
+            )
+        );
+
+        return;
+
+    }
+
+
+    const groups =
+        groupTasksBySubject();
+
+
+    sortedSubjectEntries(groups).forEach(
+        ([subject, items]) => {
+
+            const open =
+                countOpenTasks(items);
+
+            const next =
+                items[0]?.deadline;
+
+
+            const card =
+                document.createElement("button");
+
+            card.type = "button";
+            card.className = "course-card";
+
+
+            // Matkul yang punya deadline ≤ 3 hari diberi
+            // penanda visual, bukan hanya warna teks.
+            if (items.some((task) => {
+
+                return isWithinThreeDays(task.deadline) &&
+                    normalizeStatus(task.status) !== "Completed";
+
+            })) {
+
+                card.classList.add("is-urgent");
+
+            }
+
+
+            card.innerHTML = `
+
+                <div class="course-card-label">
+                    // MATA KULIAH
+                </div>
+
+                <div class="course-card-title">
+                    ${escapeHtml(subject)}
+                </div>
+
+                <div class="course-card-meta">
+
+                    <span class="course-card-count">
+                        ${items.length} TASK${items.length > 1 ? "S" : ""}
+                    </span>
+
+                    <span class="course-card-count">
+                        ${open} OPEN
+                    </span>
+
+                </div>
+
+                <div class="course-card-next">
+                    NEXT // ${escapeHtml(formatDate(next))}
+                </div>
+
+            `;
+
+
+            card.setAttribute(
+                "aria-label",
+                `Open ${subject}, ${items.length} tasks, ` +
+                `next deadline ${formatDate(next)}`
+            );
+
+
+            card.addEventListener(
+                "click",
+                () => {
+
+                    openCourseDetail(subject);
+
+                }
+            );
+
+
+            courseDirectory.appendChild(card);
+
+        }
+    );
+
+}
+
+
+// =========================================================
+// HALAMAN DETAIL MATA KULIAH
+// =========================================================
+
+function openCourseDetail(subject) {
+
+    // activeCourse dipakai openAddTaskModal() untuk mengisi
+    // otomatis nama matkul di form.
+    activeCourse = subject;
+
+
+    showPage(
+        courseDetailSection,
+        { button: null }
+    );
+
+
+    renderCourseDetail();
+
+}
+
+
+function renderCourseDetail() {
+
+    if (!courseDetailContainer) return;
+
+
+    const subject =
+        activeCourse;
+
+
+    courseDetailContainer.innerHTML = "";
+
+
+    if (!subject) {
+
+        return;
+
+    }
+
+
+    const items =
+        tasks.filter((task) => {
+
+            const name =
+                String(task.class_name || "").trim() ||
+                "UNASSIGNED";
+
+            return name === subject;
+
+        });
+
+
+    if (courseDetailTitle) {
+
+        courseDetailTitle.textContent = subject;
+
+    }
+
+
+    if (courseDetailSubtitle) {
+
+        const open =
+            countOpenTasks(items);
+
+
+        courseDetailSubtitle.textContent =
+            `${items.length} TASK${items.length === 1 ? "" : "S"}` +
+            ` · ${open} OPEN` +
+            ` · NEXT DEADLINE ${formatDate(items[0]?.deadline)}`;
+
+    }
+
+
+    if (items.length === 0) {
+
+        courseDetailContainer.appendChild(
+            buildEmptyState(
+                "No tasks in this course",
+                "Every task for this course was removed."
+            )
+        );
+
+        return;
+
+    }
+
+
+    items.forEach((task) => {
+
+        courseDetailContainer.appendChild(
+            createTaskCard(task)
+        );
+
+    });
+
+}
+
+
+courseBackButton?.addEventListener(
+    "click",
+    () => {
+
+        showHome();
+
+    }
+);
+
+
+// =========================================================
+// KALENDER
+//  Grid bulanan; tiap tanggal yang punya deadline diberi
+//  titik penanda status. Klik tanggal -> daftar tugasnya.
+// =========================================================
+
+// Bulan yang sedang ditampilkan (selalu tanggal 1).
+let calendarCursor =
+    new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        1
+    );
+
+// Tanggal yang dipilih, format "YYYY-MM-DD".
+let calendarSelectedDate = null;
+
+
+function toDateKey(date) {
+
+    const year =
+        date.getFullYear();
+
+    const month =
+        String(date.getMonth() + 1).padStart(2, "0");
+
+    const day =
+        String(date.getDate()).padStart(2, "0");
+
+
+    return `${year}-${month}-${day}`;
+
+}
+
+
+// Kunci tanggal untuk penanda status. Overdue didahulukan
+// supaya tanggal yang sudah lewat tidak terlihat "aman".
+function statusDotClass(task) {
+
+    const normalized =
+        normalizeStatus(task.status);
+
+
+    if (normalized === "Completed") {
+
+        return "completed";
+
+    }
+
+
+    if (isOverdue(task)) {
+
+        return "overdue";
+
+    }
+
+
+    if (normalized === "In Progress") {
+
+        return "progress";
+
+    }
+
+
+    return "pending";
+
+}
+
+
+function renderCalendar() {
+
+    if (!calendarGrid) return;
+
+
+    const year =
+        calendarCursor.getFullYear();
+
+    const month =
+        calendarCursor.getMonth();
+
+
+    // Label bulan
+    if (calendarMonthLabel) {
+
+        calendarMonthLabel.textContent =
+            calendarCursor
+                .toLocaleDateString(
+                    "en-GB",
+                    {
+                        month: "long",
+                        year: "numeric"
+                    }
+                )
+                .toUpperCase();
+
+    }
+
+
+    // Kelompokkan tugas per tanggal deadline
+    const byDate = new Map();
+
+    tasks.forEach((task) => {
+
+        if (!task.deadline) return;
+
+
+        if (!byDate.has(task.deadline)) {
+
+            byDate.set(task.deadline, []);
+
+        }
+
+
+        byDate.get(task.deadline).push(task);
+
+    });
+
+
+    // Ringkasan bulan: berapa deadline yang jatuh di bulan ini.
+    // Membuat kepala kalender terasa "hidup", bukan sekadar label.
+    let monthTaskCount = 0;
+
+    byDate.forEach((list, key) => {
+
+        if (key.startsWith(
+            `${year}-${String(month + 1).padStart(2, "0")}`
+        )) {
+
+            monthTaskCount += list.length;
+
+        }
+
+    });
+
+
+    if (calendarMonthCount) {
+
+        calendarMonthCount.textContent =
+            monthTaskCount === 0
+                ? "NO DEADLINES"
+                : `${monthTaskCount} DEADLINE` +
+                  `${monthTaskCount > 1 ? "S" : ""} THIS MONTH`;
+
+        calendarMonthCount.classList.toggle(
+            "is-empty",
+            monthTaskCount === 0
+        );
+
+    }
+
+
+    // Senin = kolom pertama. getDay() memakai Minggu = 0,
+    // jadi digeser: (0+6)%7 = 6 (Minggu di kolom terakhir).
+    const firstOfMonth =
+        new Date(year, month, 1);
+
+    const leadingBlanks =
+        (firstOfMonth.getDay() + 6) % 7;
+
+    const daysInMonth =
+        new Date(year, month + 1, 0).getDate();
+
+
+    // 35 atau 42 sel supaya grid selalu penuh satu minggu.
+    const totalCells =
+        Math.ceil((leadingBlanks + daysInMonth) / 7) * 7;
+
+
+    const todayKey =
+        toDateKey(new Date());
+
+
+    calendarGrid.innerHTML = "";
+
+
+    for (let index = 0; index < totalCells; index += 1) {
+
+        const dayNumber =
+            index - leadingBlanks + 1;
+
+        const cellDate =
+            new Date(year, month, dayNumber);
+
+        const key =
+            toDateKey(cellDate);
+
+        const dayTasks =
+            byDate.get(key) || [];
+
+
+        const cell =
+            document.createElement("button");
+
+        cell.type = "button";
+        cell.className = "calendar-day";
+        cell.dataset.date = key;
+
+
+        if (cellDate.getMonth() !== month) {
+
+            cell.classList.add("is-outside");
+
+        }
+
+
+        if (key === todayKey) {
+
+            cell.classList.add("is-today");
+
+        }
+
+
+        if (dayTasks.length > 0) {
+
+            cell.classList.add("has-tasks");
+
+        }
+
+
+        if (key === calendarSelectedDate) {
+
+            cell.classList.add("is-selected");
+
+        }
+
+
+        // Titik penanda: satu titik per status unik, maksimal 3
+        // supaya sel tetap rapi di layar sempit.
+        const dotClasses =
+            Array.from(
+                new Set(dayTasks.map(statusDotClass))
+            ).slice(0, 3);
+
+
+        const hasOverdue =
+            dotClasses.includes("overdue");
+
+
+        if (hasOverdue) {
+
+            cell.classList.add("is-urgent");
+
+        }
+
+
+        // Cuplikan tugas pertama: memberi isi pada sel sehingga
+        // kalender tidak lagi terasa seperti tabel angka kosong.
+        // `course` di sini adalah judul tugas (mis. "Laporan
+        // Praktikum 7"), jauh lebih informatif daripada kategori.
+        const firstTaskLabel =
+            dayTasks.length > 0
+                ? (dayTasks[0].course ||
+                   dayTasks[0].category ||
+                   "Task")
+                : "";
+
+
+        cell.innerHTML = `
+
+            <span class="calendar-day-top">
+
+                <span class="calendar-day-number">
+                    ${cellDate.getDate()}
+                </span>
+
+                ${
+                    dayTasks.length > 0
+                        ? `<span class="calendar-day-badge">
+                               ${dayTasks.length}
+                           </span>`
+                        : ""
+                }
+
+            </span>
+
+            ${
+                dayTasks.length > 0
+                    ? `<span class="calendar-day-preview">
+                           ${escapeHtml(firstTaskLabel)}
+                       </span>
+                       <span class="calendar-dots">
+                           ${dotClasses
+                               .map((name) => {
+
+                                   return `<span class="calendar-dot ${name}"></span>`;
+
+                               })
+                               .join("")}
+                       </span>`
+                    : ""
+            }
+
+        `;
+
+
+        const readableDate =
+            cellDate.toLocaleDateString(
+                "en-GB",
+                {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric"
+                }
+            );
+
+
+        cell.setAttribute(
+            "aria-label",
+            dayTasks.length > 0
+                ? `${readableDate}, ${dayTasks.length} task` +
+                  `${dayTasks.length > 1 ? "s" : ""}`
+                : `${readableDate}, no tasks`
+        );
+
+
+        cell.addEventListener(
+            "click",
+            () => {
+
+                selectCalendarDay(key);
+
+            }
+        );
+
+
+        calendarGrid.appendChild(cell);
+
+    }
+
+}
+
+
+function selectCalendarDay(key) {
+
+    calendarSelectedDate = key;
+
+
+    // Tandai ulang tanpa membangun seluruh grid dari awal:
+    // cukup pindahkan class .is-selected.
+    calendarGrid
+        .querySelectorAll(".calendar-day")
+        .forEach((cell) => {
+
+            cell.classList.toggle(
+                "is-selected",
+                cell.dataset.date === key
+            );
+
+        });
+
+
+    renderCalendarDayList(key);
+
+}
+
+
+function renderCalendarDayList(key) {
+
+    if (!calendarDayList) return;
+
+
+    const dayTasks =
+        tasks.filter((task) => {
+
+            return task.deadline === key;
+
+        });
+
+
+    const date =
+        new Date(key + "T00:00:00");
+
+
+    if (calendarDayTitle) {
+
+        calendarDayTitle.textContent =
+            date.toLocaleDateString(
+                "en-GB",
+                {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric"
+                }
+            );
+
+    }
+
+
+    calendarDayList.innerHTML = "";
+
+
+    if (dayTasks.length === 0) {
+
+        calendarDayList.appendChild(
+            buildEmptyState(
+                "Nothing due",
+                "No deadline on this date."
+            )
+        );
+
+        return;
+
+    }
+
+
+    dayTasks.forEach((task) => {
+
+        calendarDayList.appendChild(
+            createTaskCard(task)
+        );
+
+    });
+
+}
+
+
+function shiftCalendarMonth(offset) {
+
+    calendarCursor =
+        new Date(
+            calendarCursor.getFullYear(),
+            calendarCursor.getMonth() + offset,
+            1
+        );
+
+
+    // Pilihan tanggal dibuang: tanggal yang sama di bulan lain
+    // belum tentu punya tugas.
+    calendarSelectedDate = null;
+
+
+    if (calendarDayTitle) {
+
+        calendarDayTitle.textContent = "Pick a date";
+
+    }
+
+
+    if (calendarDayList) {
+
+        calendarDayList.innerHTML = "";
+
+        calendarDayList.appendChild(
+            buildEmptyState(
+                "No date selected",
+                "Choose a highlighted date above to see its tasks."
+            )
+        );
+
+    }
+
+
+    renderCalendar();
+
+}
+
+
+calendarPrev?.addEventListener(
+    "click",
+    () => {
+
+        shiftCalendarMonth(-1);
+
+    }
+);
+
+
+calendarNext?.addEventListener(
+    "click",
+    () => {
+
+        shiftCalendarMonth(1);
+
+    }
+);
+
+
+// Kembali ke bulan berjalan dan langsung buka tanggal hari ini.
+calendarToday?.addEventListener(
+    "click",
+    () => {
+
+        const now = new Date();
+
+
+        calendarCursor =
+            new Date(now.getFullYear(), now.getMonth(), 1);
+
+
+        renderCalendar();
+
+        selectCalendarDay(toDateKey(now));
+
+
+        // Di layar sempit, daftar tugas tanggal terpilih ada di
+        // bawah grid; bawa pengguna ke sana tanpa lompat mendadak.
+        document
+            .getElementById("calendarDayTitle")
+            ?.scrollIntoView({
+                block: "center",
+                behavior: "smooth"
+            });
+
+    }
+);
+
+
+// =========================================================
+// SEGARKAN HALAMAN YANG SEDANG TERBUKA
+//  loadTasks() selalu memperbarui array `tasks`, tetapi tiap
+//  halaman punya render sendiri. Tanpa ini, halaman detail
+//  matkul dan kalender akan menampilkan data basi setelah
+//  tambah/edit/hapus.
+// =========================================================
+
+function refreshActiveView() {
+
+    renderCourseDirectory();
+
+
+    if (courseDetailSection &&
+        !courseDetailSection.classList.contains("hidden")) {
+
+        renderCourseDetail();
+
+    }
+
+
+    // Kalender menempel di Beranda, jadi selalu ikut disegarkan
+    // walaupun pengguna sedang berada di halaman lain: saat dia
+    // kembali ke Beranda datanya sudah benar.
+    renderCalendar();
+
+
+    if (calendarSelectedDate) {
+
+        renderCalendarDayList(calendarSelectedDate);
+
+    }
+
+}
+
+
+// =========================================================
 // CREATE TASK CARD
 // =========================================================
 
@@ -3809,7 +5149,7 @@ function openEditModal(task) {
         task.category || "";
 
     editStatus.value =
-        task.status || "Pending";
+        normalizeStatus(task.status);
 
 
     editModal.classList.remove("hidden");
@@ -3852,6 +5192,36 @@ function closeEditModal(restoreFocus = true) {
 
 // Karena list di-render ulang setelah simpan, elemen tombol lama sudah
 // dilepas dari DOM. Cari tombol berdasarkan id task terbaru, lalu fokuskan.
+
+// Kartu tugas sekarang muncul di tiga tempat: daftar semua tugas,
+// halaman detail mata kuliah, dan daftar tugas pada kalender
+// (kalender ada di Beranda). Fokus harus dikembalikan ke wadah
+// yang benar-benar terlihat, bukan selalu ke #taskContainer.
+function activeTaskScope() {
+
+    if (courseDetailSection &&
+        !courseDetailSection.classList.contains("hidden")) {
+
+        return courseDetailContainer;
+
+    }
+
+
+    if (homePage &&
+        !homePage.classList.contains("hidden") &&
+        calendarSelectedDate &&
+        calendarDayList) {
+
+        return calendarDayList;
+
+    }
+
+
+    return taskContainer;
+
+}
+
+
 function focusTaskButton(kind, id) {
 
     const selector =
@@ -3860,15 +5230,46 @@ function focusTaskButton(kind, id) {
             : ".delete-button";
 
 
+    const scope =
+        activeTaskScope();
+
+
     const button =
-        Array.from(
-            taskContainer.querySelectorAll(selector)
-        ).find((item) => item.dataset.id === id);
+        scope
+            ? Array.from(
+                scope.querySelectorAll(selector)
+            ).find((item) => item.dataset.id === id)
+            : null;
 
 
     if (button) {
 
         button.focus();
+
+    }
+    else {
+
+        mainContent.focus();
+
+    }
+
+}
+
+
+function focusAfterDelete() {
+
+    const scope =
+        activeTaskScope();
+
+
+    const remaining =
+        scope
+            ? scope.querySelector(".delete-button")
+            : null;
+
+    if (remaining) {
+
+        remaining.focus();
 
     }
     else {
@@ -4025,7 +5426,7 @@ editForm.addEventListener(
             editCategory.value.trim();
 
         const status =
-            editStatus.value.trim() || "Pending";
+            normalizeStatus(editStatus.value);
 
 
         if (
@@ -4055,6 +5456,8 @@ editForm.addEventListener(
         }
 
 
+        markLocalWrite();
+
         const {
             data: updatedRows,
             error
@@ -4069,7 +5472,6 @@ editForm.addEventListener(
             })
             .eq("id", id)
             .select("id");
-
 
         if (error) {
 
@@ -4252,13 +5654,22 @@ async function deleteTask(task) {
             .join(" / ");
 
 
+    const isSynced =
+        task?.source === "moodle" ||
+        task?.source === "classroom";
+
+
     const confirmation =
         await askConfirmation(
             label
                 ? `"${label}" will be deleted from ` +
                   "the matrix. This action is permanent " +
                   "and visible to everyone sharing " +
-                  "the ledger."
+                  "the ledger." +
+                  (isSynced
+                      ? " It is a synced task, so it will " +
+                        "not come back on the next sync."
+                      : "")
                 : "Delete this task from the matrix? " +
                   "This action is permanent and visible " +
                   "to everyone sharing the ledger.",
@@ -4288,6 +5699,79 @@ async function deleteTask(task) {
 
     }
 
+
+    // Tugas hasil sync TIDAK dihapus permanen.
+    //  Sync berikutnya mencari baris berdasarkan external_id;
+    //  kalau barisnya hilang, tugas akan di-insert ulang dan
+    //  seolah tombol DELETE tidak berfungsi. Karena itu baris
+    //  hanya ditandai dismissed_at dan disembunyikan dari daftar.
+    //  Bila kolom itu belum ada (migrasi belum dijalankan),
+    //  jatuh kembali ke hapus permanen.
+    if (isSynced && dismissSupported) {
+
+        markLocalWrite();
+
+        const {
+            data: dismissedRows,
+            error: dismissError
+        } = await supabaseClient
+            .from("tasks")
+            .update({
+                dismissed_at: new Date().toISOString()
+            })
+            .eq("id", id)
+            .select("id");
+
+
+        if (dismissError?.code === "42703") {
+
+            // Kolom belum ada — pakai jalur hapus biasa di bawah.
+            dismissSupported = false;
+
+        }
+        else if (dismissError) {
+
+            console.error(dismissError);
+
+            showToast(
+                "Task removal failed: " + dismissError.message,
+                "error"
+            );
+
+            return;
+
+        }
+        else {
+
+            if (!dismissedRows || dismissedRows.length === 0) {
+
+                showToast(
+                    "No task was removed. Check the update policy for anon access.",
+                    "warning"
+                );
+
+                return;
+
+            }
+
+
+            showToast(
+                "Synced task dismissed. It will not return on the next sync.",
+                "success"
+            );
+
+            await loadTasks();
+
+            focusAfterDelete();
+
+            return;
+
+        }
+
+    }
+
+
+    markLocalWrite();
 
     const {
         data: deletedRows,
@@ -4330,25 +5814,15 @@ async function deleteTask(task) {
 
     await loadTasks();
 
-    const remaining =
-        taskContainer.querySelector(".delete-button");
-
-    if (remaining) {
-
-        remaining.focus();
-
-    }
-    else {
-
-        mainContent.focus();
-
-    }
+    focusAfterDelete();
 
 }
 
 
 // =========================================================
 // STATISTICS
+//  Hanya dua kartu di Beranda: TOTAL TASKS dan PRIORITY.
+//  Kartu OVERDUE dihapus sesuai permintaan.
 // =========================================================
 
 function updateStatistics() {
@@ -4370,18 +5844,6 @@ function updateStatistics() {
     upcomingTasks.textContent =
         upcoming.length;
 
-
-    const overdue =
-        tasks.filter((task) => {
-
-            return isOverdue(task);
-
-        });
-
-
-    overdueTasks.textContent =
-        overdue.length;
-
 }
 
 
@@ -4399,9 +5861,9 @@ function isOverdue(task) {
 
 
     const status =
-        String(task.status || "").trim();
+        normalizeStatus(task.status);
 
-    if (status === "Completed" || status === "Selesai") {
+    if (status === "Completed") {
 
         return false;
 
@@ -4466,11 +5928,60 @@ function isWithinThreeDays(deadline) {
 }
 
 
+// =========================================================
+// NORMALISASI STATUS
+//  Database lama menyimpan status dalam bahasa Indonesia
+//  ("Belum Dikerjakan", "Sedang Dikerjakan", "Selesai").
+//  Form hanya mengenal tiga nilai baku: Pending,
+//  In Progress, Completed. Tanpa pemetaan ini, <select>
+//  pada modal edit menjadi kosong (tidak ada <option> yang
+//  cocok) sehingga form required tidak bisa disubmit, dan
+//  nilai lama ikut tertimpa.
+// =========================================================
+
+const STATUS_ALIASES = {
+    "belum dikerjakan": "Pending",
+    "belum": "Pending",
+    "pending": "Pending",
+    "todo": "Pending",
+    "to do": "Pending",
+    "baru": "Pending",
+
+    "sedang dikerjakan": "In Progress",
+    "dikerjakan": "In Progress",
+    "in progress": "In Progress",
+    "progress": "In Progress",
+    "proses": "In Progress",
+
+    "selesai": "Completed",
+    "sudah selesai": "Completed",
+    "completed": "Completed",
+    "complete": "Completed",
+    "done": "Completed"
+};
+
+
+// Mengembalikan salah satu nilai baku form:
+// "Pending" | "In Progress" | "Completed".
+// Nilai tak dikenal diperlakukan sebagai "Pending".
+function normalizeStatus(statusValue) {
+
+    const key =
+        String(statusValue || "")
+            .trim()
+            .toLowerCase();
+
+    return STATUS_ALIASES[key] || "Pending";
+
+}
+
+
 function getStatusInfo(statusValue) {
 
-    const normalized = String(statusValue || "Pending").trim();
+    const normalized =
+        normalizeStatus(statusValue);
 
-    if (normalized === "Completed" || normalized === "Selesai") {
+    if (normalized === "Completed") {
 
         return {
             label: "Completed",
@@ -4479,7 +5990,7 @@ function getStatusInfo(statusValue) {
 
     }
 
-    if (normalized === "In Progress" || normalized === "Sedang Dikerjakan") {
+    if (normalized === "In Progress") {
 
         return {
             label: "In Progress",
@@ -4765,3 +6276,39 @@ function escapeHtml(value) {
         .replace(/'/g, "&#039;");
 
 }
+
+
+// =========================================================
+// BOOT
+//  Dulu data baru dimuat setelah user menekan "ENTER MATRIX"
+//  di halaman hero. Halaman itu dihapus, jadi aplikasi sekarang
+//  langsung terbuka di Beranda dan memuat data saat start.
+// =========================================================
+
+// Beranda tampil lebih dulu; pastikan tidak ada halaman lain
+// yang ikut terlihat bila HTML diubah di masa depan.
+PAGES.forEach((page) => {
+
+    if (!page) return;
+
+    page.classList.toggle("hidden", page !== homePage);
+
+});
+
+
+setActiveNav(homeMenu);
+
+renderRealtimeStatus();
+renderMoodleStatus();
+
+// Kalender adalah bagian Beranda, jadi grid-nya harus sudah
+// tergambar sebelum data datang (label bulan + sel kosong), lalu
+// diisi ulang oleh refreshActiveView() setelah loadTasks().
+renderCalendar();
+
+// silent: skeleton loading hanya relevan untuk daftar tugas,
+// sedangkan saat boot user berada di Beranda (direktori matkul
+// sudah punya placeholder "Loading course list").
+loadTasks({ silent: true });
+
+startRealtime();

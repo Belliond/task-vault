@@ -1,0 +1,31 @@
+# =========================================================
+#  KREDENSIAL — JANGAN PERNAH DI-COMMIT
+# =========================================================
+#  .env        : nilai asli yang Anda isi
+#  config.js   : hasil generate dari .env (dibaca browser)
+#
+#  Keduanya berisi kredensial. Yang di-commit hanya
+#  .env.example (template tanpa nilai rahasia).
+# =========================================================
+
+.env
+.env.*
+!.env.example
+config.js
+
+
+# Dependency
+node_modules/
+
+# Supabase CLI state
+supabase/.temp/
+supabase/.branches/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Log
+*.log

@@ -1,0 +1,21 @@
+{
+  "name": "ghost-task-matrix",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cyber-themed academic task manager (static frontend + Supabase)",
+  "scripts": {
+    "dev": "npm run env:build && node scripts/serve.mjs",
+    "start": "npm run dev",
+    "serve": "npm run dev",
+    "env:build": "node scripts/build-config.mjs",
+    "db:sql": "node scripts/build-sql.mjs",
+    "db:check": "node scripts/db-push.mjs --check",
+    "db:push": "node scripts/db-push.mjs",
+    "db:dry": "node scripts/db-push.mjs --dry-run",
+    "setup": "npm run env:build && npm run db:sql"
+  },
+  "devDependencies": {
+    "pg": "^8.16.3"
+  }
+}

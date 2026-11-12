@@ -1,0 +1,43 @@
+# =========================================================
+#  SUPABASE CLI CONFIG
+#  Dipakai oleh `supabase db push` / `supabase link`.
+#
+#  project_id sengaja dikosongkan: isi dengan ref proyek
+#  Anda (terlihat di URL dashboard, mis.
+#  https://supabase.com/dashboard/project/<REF>).
+#  Bisa juga di-link sekali lewat:
+#      npx supabase link --project-ref <REF>
+# =========================================================
+
+project_id = "ixdwiazefaaajydcohgc"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[realtime]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "https://belliond.github.io/task-vault/"
+
+[auth.email]
+enable_signup = false
+
+[storage]
+enabled = false
