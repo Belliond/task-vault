@@ -23,6 +23,14 @@ name: Sync LMS
 #      SUPABASE_URL    sama dengan yang dipakai deploy
 #      SUPABASE_KEY    publishable / anon key
 #
+#      CLASSROOM_CLIENT_ID       opsional, untuk sync Classroom
+#      CLASSROOM_CLIENT_SECRET   opsional
+#      CLASSROOM_REFRESH_TOKEN   opsional
+#
+#  Kalau tiga secret Classroom kosong, bagian Classroom
+#  dilewati dan Moodle tetap berjalan. Jadi Classroom bisa
+#  diaktifkan belakangan tanpa mengubah workflow.
+#
 #  Token TIDAK pernah masuk ke situs, config.js, atau
 #  localStorage. Hanya ada di runner dan di database.
 # =========================================================
@@ -69,18 +77,29 @@ jobs:
         with:
           node-version: 20
 
+      # Uji fungsi murni (pergeseran tanggal UTC -> WIB, bentuk
+      # external_id). Kalau ini gagal, sync tidak perlu jalan:
+      # hasilnya pasti salah tanggal.
+      - name: Test
+        run: node scripts/test-sync.mjs
+
       - name: Check required secrets
         env:
           MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
+          CLASSROOM_REFRESH_TOKEN: ${{ secrets.CLASSROOM_REFRESH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           # Gagal lebih awal dengan pesan yang menunjuk ke tempat
           # pengisiannya, bukan error samar di tengah jalan.
-          if [ -z "$MOODLE_TOKEN" ]; then
-            echo "::error::Secret MOODLE_TOKEN belum diisi."
-            echo "::error::Buka Settings -> Secrets and variables -> Actions,"
-            echo "::error::lalu tambahkan MOODLE_TOKEN (cara ambilnya ada di README)."
+          #
+          # Minimal satu sumber harus ada. Moodle dan Classroom
+          # boleh berjalan sendiri-sendiri.
+          if [ -z "$MOODLE_TOKEN" ] && [ -z "$CLASSROOM_REFRESH_TOKEN" ]; then
+            echo "::error::Tidak ada sumber yang bisa disinkronkan."
+            echo "::error::Isi MOODLE_TOKEN, atau CLASSROOM_CLIENT_ID +"
+            echo "::error::CLASSROOM_CLIENT_SECRET + CLASSROOM_REFRESH_TOKEN."
+            echo "::error::Caranya ada di README bagian 'Sync otomatis'."
             exit 1
           fi
 
@@ -93,6 +112,9 @@ jobs:
         env:
           MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
           MOODLE_URL: ${{ secrets.MOODLE_URL }}
+          CLASSROOM_CLIENT_ID: ${{ secrets.CLASSROOM_CLIENT_ID }}
+          CLASSROOM_CLIENT_SECRET: ${{ secrets.CLASSROOM_CLIENT_SECRET }}
+          CLASSROOM_REFRESH_TOKEN: ${{ secrets.CLASSROOM_REFRESH_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |

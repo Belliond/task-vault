@@ -119,6 +119,18 @@ function pick(key) {
 
 }
 
+// Penjaga: kunci yang HANYA boleh ada di server. Kalau suatu
+// saat ada yang menambahkannya ke objek config di bawah, build
+// harus gagal di sini, bukan setelah rahasianya terlanjur
+// terbit di GitHub Pages.
+const HANYA_SERVER = [
+    "CLASSROOM_CLIENT_SECRET",
+    "CLASSROOM_REFRESH_TOKEN",
+    "MOODLE_TOKEN",
+    "SUPABASE_DB_PASSWORD",
+    "SUPABASE_DB_URL"
+];
+
 const config = {
     SUPABASE_URL: env.SUPABASE_URL,
     SUPABASE_KEY: env.SUPABASE_KEY,
@@ -126,6 +138,18 @@ const config = {
     CLASSROOM_CLIENT_ID: pick("CLASSROOM_CLIENT_ID"),
     CLASSROOM_REDIRECT: pick("CLASSROOM_REDIRECT")
 };
+
+const bocor = HANYA_SERVER.filter((k) => k in config);
+
+if (bocor.length) {
+
+    fail(
+        "Kunci berikut tidak boleh masuk config.js:\n" +
+        "  " + bocor.join(", ") + "\n" +
+        "  Nilai itu hanya untuk server (GitHub Secrets)."
+    );
+
+}
 
 
 const body = `// =========================================================

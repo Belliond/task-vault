@@ -23,16 +23,28 @@
 //  mata kuliah yang diikuti ikut disinkronkan. Kalau ingin
 //  membatasi, isi MOODLE_COURSE_IDS (lihat README).
 //
+//  Sejak Google Classroom ikut disinkronkan, skrip ini menarik
+//  dari DUA sumber sekaligus:
+//
+//    Moodle    -> token web service (tidak kedaluwarsa)
+//    Classroom -> refresh token OAuth (dapat diperbarui sendiri)
+//
+//  Kalau kredensial Classroom belum diisi, bagian Classroom
+//  dilewati dan Moodle tetap berjalan seperti biasa.
+//
 //  Pemakaian:
 //      node scripts/sync-lms.mjs --dry-run   hanya tampilkan
 //      node scripts/sync-lms.mjs             tulis ke database
 //
 //  Variabel yang dibaca (dari .env atau environment):
-//      MOODLE_URL          https://kuliah2.itera.ac.id
-//      MOODLE_TOKEN        token web service milik user
-//      SUPABASE_URL        https://xxx.supabase.co
-//      SUPABASE_KEY        publishable / anon key
-//      MOODLE_COURSE_IDS   opsional, mis. "968,969"
+//      MOODLE_URL               https://kuliah2.itera.ac.id
+//      MOODLE_TOKEN             token web service milik user
+//      SUPABASE_URL             https://xxx.supabase.co
+//      SUPABASE_KEY             publishable / anon key
+//      MOODLE_COURSE_IDS        opsional, mis. "968,969"
+//      CLASSROOM_CLIENT_ID      OAuth client (Desktop app)
+//      CLASSROOM_CLIENT_SECRET  secret client yang sama
+//      CLASSROOM_REFRESH_TOKEN  hasil `npm run classroom:auth`
 // =========================================================
 
 import fs from "node:fs";
@@ -265,6 +277,148 @@ export function cariUsang({ existing, idTerpilih, hariIni }) {
 
 
 // =========================================================
+//  BAGIAN MURNI: GOOGLE CLASSROOM
+// =========================================================
+
+// Classroom mengirim deadline sebagai pasangan dueDate +
+// dueTime yang KEDUANYA dalam UTC (bukan waktu lokal):
+//
+//     { "dueDate": { "year": 2026, "month": 11, "day": 17 },
+//       "dueTime": { "hours": 16, "minutes": 59 } }
+//
+// Artinya 2026-11-17 16:59 UTC = 2026-11-17 23:59 WIB, tapi
+// kalau jamnya 17:30 UTC hasilnya sudah 2026-11-18 WIB. Karena
+// kolom tasks.deadline hanya menyimpan tanggal, penggeseran ini
+// menentukan tugas masuk di hari yang benar atau tidak.
+//
+// Kalau dueTime tidak ada, tanggalnya dipakai apa adanya —
+// tidak ada jam yang bisa digeser.
+export function tanggalWibDariUtc(dueDate, dueTime) {
+
+    if (!dueDate || !dueDate.year) return "";
+
+    const pad = (n) => String(n).padStart(2, "0");
+
+    const tanggal =
+        dueDate.year + "-" + pad(dueDate.month) + "-" + pad(dueDate.day);
+
+    if (!dueTime || dueTime.hours == null) return tanggal;
+
+    const unixMs = Date.UTC(
+        dueDate.year,
+        dueDate.month - 1,
+        dueDate.day,
+        Number(dueTime.hours) || 0,
+        Number(dueTime.minutes) || 0,
+        Number(dueTime.seconds) || 0
+    );
+
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: ZONA,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).format(new Date(unixMs));
+
+}
+
+
+// Susun baris Classroom siap kirim ke sync_lms_tasks().
+//
+// Aturannya sama dengan versi Moodle: lewati yang tanpa
+// deadline dan yang sudah lewat. Bedanya, di sini tidak ada
+// pemilih kelas — semua kelas yang diikuti ikut, karena
+// daftar kelas tidak disimpan di server.
+export function susunBarisClassroom({ courses, coursework, hariIni }) {
+
+    const baris = [];
+    let tanpaDeadline = 0;
+    let kedaluwarsa = 0;
+    let draf = 0;
+
+    // Nama kelas dicari lewat id, karena courseWork tidak
+    // membawa nama kelasnya sendiri.
+    const namaKelas = {};
+
+    for (const course of courses || []) {
+        namaKelas[String(course.id)] =
+            course.name || course.section || `Kelas ${course.id}`;
+    }
+
+    for (const kerja of coursework || []) {
+
+        // Siswa hanya melihat yang PUBLISHED, tapi kalau
+        // suatu saat akun ini jadi guru, draf akan ikut
+        // terbawa. Draf belum tentu jadi tugas.
+        if (kerja.state && kerja.state !== "PUBLISHED") {
+            draf += 1;
+            continue;
+        }
+
+        const tanggal = tanggalWibDariUtc(kerja.dueDate, kerja.dueTime);
+
+        if (!tanggal) {
+            tanpaDeadline += 1;
+            continue;
+        }
+
+        if (tanggal < hariIni) {
+            kedaluwarsa += 1;
+            continue;
+        }
+
+        baris.push({
+            course: String(kerja.title || "-"),
+            class_name: namaKelas[String(kerja.courseId)] || "-",
+            deadline: tanggal,
+            category: "Classroom",
+            source: "classroom",
+            // Bentuknya sama dengan yang dipakai frontend di
+            // script.js, supaya sync browser dan sync server
+            // tidak membuat baris kembar.
+            external_id: `gc:${kerja.courseId}:${kerja.id}`,
+            synced_at: new Date().toISOString()
+        });
+
+    }
+
+    return { baris, tanpaDeadline, kedaluwarsa, draf };
+
+}
+
+
+// Baris Classroom yang sudah tidak relevan: deadline lewat,
+// atau kelasnya tidak muncul lagi di daftar kelas akun ini
+// (mis. kelas diarsipkan / akses dicabut).
+export function cariUsangClassroom({ existing, idKelasDikenal, hariIni }) {
+
+    const usang = [];
+
+    for (const row of existing || []) {
+
+        const bagian = String(row.external_id || "").split(":");
+
+        if (bagian[0] !== "gc") continue;
+
+        if (idKelasDikenal && !idKelasDikenal.has(String(bagian[1]))) {
+            usang.push(row);
+            continue;
+        }
+
+        const tanggal = String(row.deadline || "").slice(0, 10);
+
+        if (tanggal !== "" && tanggal < hariIni) {
+            usang.push(row);
+        }
+
+    }
+
+    return usang;
+
+}
+
+
+// =========================================================
 //  BAGIAN JARINGAN
 // =========================================================
 
@@ -460,6 +614,164 @@ async function supabaseDelete({ url, key }, idList) {
 //  ALUR UTAMA
 // =========================================================
 
+// Tukar refresh token menjadi access token baru.
+//
+// Ini inti dari otomatisasi Classroom: access token hanya
+// berlaku ~1 jam, tapi refresh token bisa ditukar ulang
+// kapan saja tanpa campur tangan manusia — SELAMA project
+// Google-nya berstatus "In production". Selama masih
+// "Testing", Google mematikan refresh token setelah 7 hari
+// dan tidak ada cara memperpanjangnya dari sisi skrip.
+async function classroomAccessToken({ clientId, clientSecret, refreshToken }) {
+
+    const body = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token"
+    });
+
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        signal: AbortSignal.timeout(30000)
+    });
+
+    const teks = await res.text();
+
+    let data = null;
+
+    try { data = JSON.parse(teks); }
+    catch { throw new Error("Balasan token Google bukan JSON: " + teks.slice(0, 160)); }
+
+    if (!res.ok || !data.access_token) {
+
+        const kode = data.error || `HTTP ${res.status}`;
+
+        // Pesan yang menunjuk penyebab, bukan sekadar
+        // "invalid_grant" yang tidak menjelaskan apa pun.
+        if (kode === "invalid_grant") {
+
+            throw new Error(
+                "Google menolak refresh token (invalid_grant). Penyebab tersering:\n" +
+                "  1. Project Google masih berstatus 'Testing'. Google mematikan\n" +
+                "     refresh token setelah 7 hari. Buka Google Auth Platform ->\n" +
+                "     Audience -> Publish app, lalu jalankan `npm run classroom:auth` lagi.\n" +
+                "  2. Akses aplikasi dicabut di https://myaccount.google.com/permissions\n" +
+                "  3. Refresh token berasal dari client ID yang berbeda."
+            );
+
+        }
+
+        if (kode === "invalid_client") {
+
+            throw new Error(
+                "Google menolak client ID/secret (invalid_client). Pastikan\n" +
+                "CLASSROOM_CLIENT_ID dan CLASSROOM_CLIENT_SECRET berasal dari\n" +
+                "OAuth client yang sama (tipe Desktop app)."
+            );
+
+        }
+
+        throw new Error(
+            `Gagal menukar refresh token (${kode}): ` +
+            `${data.error_description || "-"}`
+        );
+
+    }
+
+    return data.access_token;
+
+}
+
+
+async function classroomGet(accessToken, jalur) {
+
+    const res = await fetch(
+        "https://classroom.googleapis.com" + jalur,
+        {
+            headers: { Authorization: "Bearer " + accessToken },
+            signal: AbortSignal.timeout(30000)
+        }
+    );
+
+    const teks = await res.text();
+
+    let data = null;
+
+    try { data = JSON.parse(teks); }
+    catch {
+        throw new Error(
+            `Balasan Classroom bukan JSON (HTTP ${res.status}): ` +
+            teks.replace(/\s+/g, " ").slice(0, 160)
+        );
+    }
+
+    if (!res.ok) {
+
+        const pesan = data?.error?.message || `HTTP ${res.status}`;
+
+        // Kesalahan yang paling mungkin terjadi di sini adalah
+        // API belum diaktifkan di project, atau scope kurang.
+        throw new Error(
+            `Classroom menolak permintaan (${jalur.split("?")[0]}): ${pesan}`
+        );
+
+    }
+
+    return data;
+
+}
+
+
+// Ambil SEMUA halaman hasil list. Tanpa ini, akun dengan
+// banyak kelas/tugas akan kehilangan data diam-diam karena
+// Classroom membatasi jumlah per halaman.
+async function classroomGetAll(accessToken, jalur, kunci) {
+
+    const hasil = [];
+    let pageToken = "";
+
+    for (let halaman = 0; halaman < 50; halaman++) {
+
+        const pemisah = jalur.includes("?") ? "&" : "?";
+        const url =
+            jalur + pemisah +
+            (pageToken ? "pageToken=" + encodeURIComponent(pageToken) : "pageSize=100");
+
+        const data = await classroomGet(accessToken, url);
+
+        for (const item of data[kunci] || []) hasil.push(item);
+
+        pageToken = data.nextPageToken || "";
+
+        if (!pageToken) break;
+
+    }
+
+    return hasil;
+
+}
+
+
+// Daftar kelas yang diikuti (siswa maupun guru), yang tidak
+// diarsipkan. courseState ARCHIVED sengaja dibuang karena
+// kelas arsip tidak lagi punya tugas berjalan.
+async function ambilKelasClassroom(accessToken) {
+
+    const semua = await classroomGetAll(
+        accessToken,
+        "/v1/courses?studentId=me&courseStates=ACTIVE&courseStates=PROVISIONED",
+        "courses"
+    );
+
+    return semua.filter(
+        (c) => !c.courseState || c.courseState === "ACTIVE" || c.courseState === "PROVISIONED"
+    );
+
+}
+
 async function main() {
 
     const dryRun = process.argv.includes("--dry-run");
@@ -489,17 +801,16 @@ async function main() {
         token: tokenBersih || tokenMentah
     };
 
+    const classroom = {
+        clientId: String(env.CLASSROOM_CLIENT_ID || "").trim(),
+        clientSecret: String(env.CLASSROOM_CLIENT_SECRET || "").trim(),
+        refreshToken: String(env.CLASSROOM_REFRESH_TOKEN || "").trim()
+    };
+
     const supabase = {
         url: String(env.SUPABASE_URL || "").trim(),
         key: String(env.SUPABASE_KEY || "").trim()
     };
-
-    if (!moodle.token) {
-        throw new Error(
-            "MOODLE_TOKEN kosong. Isi di .env (lokal) atau " +
-            "Settings -> Secrets and variables -> Actions (GitHub)."
-        );
-    }
 
     if (!supabase.url || !supabase.key) {
         throw new Error("SUPABASE_URL / SUPABASE_KEY kosong.");
@@ -513,10 +824,148 @@ async function main() {
 
     const hariIni = hariIniWib();
 
-    console.log(`Moodle   : ${moodle.url}`);
+    // Classroom dianggap aktif hanya kalau KETIGA nilainya ada.
+    // Kalau baru sebagian terisi, itu hampir pasti salah tempel,
+    // jadi lebih baik diberitahu daripada dilewati diam-diam.
+    const classroomLengkap = Boolean(
+        classroom.clientId && classroom.clientSecret && classroom.refreshToken
+    );
+
+    const classroomSebagian = !classroomLengkap && Boolean(
+        classroom.clientId || classroom.clientSecret || classroom.refreshToken
+    );
+
+    if (!moodle.token && !classroomLengkap) {
+        throw new Error(
+            "Tidak ada sumber yang bisa disinkronkan.\n" +
+            "  Moodle    : isi MOODLE_TOKEN.\n" +
+            "  Classroom : isi CLASSROOM_CLIENT_ID, CLASSROOM_CLIENT_SECRET,\n" +
+            "              dan CLASSROOM_REFRESH_TOKEN (lihat `npm run classroom:auth`)."
+        );
+    }
+
     console.log(`Supabase : ${supabase.url}`);
     console.log(`Tanggal  : ${hariIni} (${ZONA})`);
     console.log(`Mode     : ${dryRun ? "DRY-RUN (tidak menulis)" : "TULIS"}`);
+
+    const gagal = [];
+
+    // -----------------------------------------------------
+    //  MOODLE
+    // -----------------------------------------------------
+
+    if (!moodle.token) {
+
+        console.log("\n--- Moodle ---");
+        console.log("Dilewati: MOODLE_TOKEN kosong.");
+
+    }
+    else {
+
+        try {
+
+            await syncMoodle({
+                moodle,
+                supabase,
+                idTerpilih,
+                hariIni,
+                dryRun,
+                tokenMentah,
+                tokenBersih
+            });
+
+        }
+        catch (error) {
+
+            gagal.push(["Moodle", error]);
+
+        }
+
+    }
+
+    // -----------------------------------------------------
+    //  CLASSROOM
+    // -----------------------------------------------------
+
+    if (classroomSebagian) {
+
+        console.log("\n--- Classroom ---");
+        console.log(
+            "Dilewati: kredensial Classroom baru terisi sebagian. " +
+            "Isi ketiganya (client ID, client secret, refresh token)."
+        );
+
+    }
+    else if (!classroomLengkap) {
+
+        console.log("\n--- Classroom ---");
+        console.log(
+            "Dilewati: belum dikonfigurasi. " +
+            "Jalankan `npm run classroom:auth` untuk mengaktifkan."
+        );
+
+    }
+    else {
+
+        try {
+
+            await syncClassroom({ classroom, supabase, hariIni, dryRun });
+
+        }
+        catch (error) {
+
+            gagal.push(["Classroom", error]);
+
+        }
+
+    }
+
+    // -----------------------------------------------------
+    //  HASIL AKHIR
+    // -----------------------------------------------------
+
+    // Satu sumber gagal tidak boleh membuat sumber lain ikut
+    // batal — Moodle yang sudah tertulis tetap tersimpan. Tapi
+    // run tetap harus berakhir GAGAL supaya masalahnya terlihat
+    // di GitHub Actions, bukan lewat diam-diam.
+    if (gagal.length) {
+
+        console.log("");
+
+        for (const [nama, error] of gagal) {
+            console.error(`${nama} GAGAL: ${error.message || error}`);
+        }
+
+        const ringkas = gagal.map(([nama]) => nama).join(", ");
+
+        throw new Error(
+            `Sumber berikut gagal disinkronkan: ${ringkas}. ` +
+            "Sumber lain tetap diproses seperti terlihat di atas."
+        );
+
+    }
+
+    console.log("\nSelesai.");
+
+}
+
+
+// =========================================================
+//  MOODLE
+// =========================================================
+
+async function syncMoodle({
+    moodle,
+    supabase,
+    idTerpilih,
+    hariIni,
+    dryRun,
+    tokenMentah,
+    tokenBersih
+}) {
+
+    console.log("\n--- Moodle ---");
+    console.log(`Moodle   : ${moodle.url}`);
 
     // Token TIDAK dicetak. Yang dilaporkan hanya bentuknya, supaya
     // kesalahan salin-tempel bisa dikenali tanpa membocorkan nilainya.
@@ -568,7 +1017,6 @@ async function main() {
         );
 
     }
-
 
 
     // 1. Validasi token + id user
@@ -708,7 +1156,142 @@ async function main() {
 
     }
 
-    console.log("Selesai.");
+}
+
+
+// =========================================================
+//  GOOGLE CLASSROOM
+// =========================================================
+
+async function syncClassroom({ classroom, supabase, hariIni, dryRun }) {
+
+    console.log("Classroom: googleapis.com (OAuth refresh token)");
+
+    // 1. Tukar refresh token -> access token.
+    //    Nilai token tidak pernah dicetak, hanya panjangnya.
+    const accessToken = await classroomAccessToken(classroom);
+
+    console.log(`Token    : diperbarui (${accessToken.length} karakter, berlaku ~1 jam)`);
+
+    // 2. Kelas yang diikuti
+    const courses = await ambilKelasClassroom(accessToken);
+
+    if (courses.length === 0) {
+        throw new Error(
+            "Tidak ada kelas Classroom aktif pada akun ini. " +
+            "Kalau kelasnya diarsipkan, sync memang tidak mengambilnya."
+        );
+    }
+
+    console.log(`Kelas    : ${courses.length} aktif`);
+
+    // 3. Course work tiap kelas
+    const coursework = [];
+
+    for (const course of courses) {
+
+        const items = await classroomGetAll(
+            accessToken,
+            `/v1/courses/${course.id}/courseWork`,
+            "courseWork"
+        );
+
+        // courseWork.list tidak mengembalikan nama kelas,
+        // jadi courseId ditempelkan di sini.
+        for (const item of items) {
+            coursework.push({ ...item, courseId: course.id });
+        }
+
+    }
+
+    // 4. Saring + bentuk baris
+    const { baris, tanpaDeadline, kedaluwarsa, draf } = susunBarisClassroom({
+        courses,
+        coursework,
+        hariIni
+    });
+
+    console.log(
+        `Tugas    : ${baris.length} aktif ` +
+        `(dilewati: ${tanpaDeadline} tanpa deadline, ` +
+        `${kedaluwarsa} sudah lewat, ${draf} draf)`
+    );
+
+    const idKelasDikenal = new Set(courses.map((c) => String(c.id)));
+
+    if (dryRun) {
+
+        console.log("\nContoh baris:");
+        console.log(JSON.stringify(baris.slice(0, 3), null, 1));
+
+        const existing = await supabaseGet(
+            supabase,
+            "select=id,external_id,deadline&source=eq.classroom"
+        );
+
+        const usang = cariUsangClassroom({
+            existing,
+            idKelasDikenal,
+            hariIni
+        });
+
+        console.log(
+            `\nAkan menghapus ${usang.length} baris usang dari ` +
+            `${existing.length} baris Classroom yang ada.`
+        );
+
+        if (usang.length) {
+            console.log(JSON.stringify(usang.slice(0, 3), null, 1));
+        }
+
+        return;
+
+    }
+
+    // 5. Tulis
+    if (baris.length === 0) {
+
+        console.log("Tidak ada tugas aktif untuk ditulis.");
+
+    }
+    else {
+
+        const [hasil] = await supabaseRpc(supabase, baris);
+
+        console.log(
+            `Tersimpan: ${hasil?.created ?? 0} baru, ` +
+            `${hasil?.updated ?? 0} diperbarui`
+        );
+
+    }
+
+    // 6. Bersihkan baris usang
+    const existing = await supabaseGet(
+        supabase,
+        "select=id,external_id,deadline&source=eq.classroom"
+    );
+
+    const usang = cariUsangClassroom({
+        existing,
+        idKelasDikenal,
+        hariIni
+    });
+
+    if (usang.length) {
+
+        const jumlah = await supabaseDelete(
+            supabase,
+            usang.map((row) => row.id)
+        );
+
+        console.log(`Dihapus : ${jumlah} baris usang`);
+
+    }
+    else {
+
+        console.log("Dihapus : 0 baris usang");
+
+    }
 
 }
 

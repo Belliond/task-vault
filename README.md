@@ -431,7 +431,7 @@ dihapus.
 ## Integrasi LMS
 
 Ada dua cara menarik tugas: **manual** lewat tombol di halaman SYNC, dan
-**otomatis** lewat GitHub Actions (khusus Moodle).
+**otomatis** lewat GitHub Actions. Moodle dan Classroom sama-sama bisa otomatis.
 
 ### Moodle
 
@@ -449,7 +449,8 @@ ke server lain. Dua jalur pengambilan token:
 
 ### Google Classroom
 
-OAuth 2.0 *implicit flow*, client-side. Butuh OAuth Client ID milik sendiri:
+Di browser, Classroom memakai OAuth 2.0 *implicit flow* client-side. Butuh
+OAuth Client ID milik sendiri:
 
 1. Google Cloud Console → aktifkan **Google Classroom API**
 2. Credentials → OAuth client ID → **Web application**
@@ -457,11 +458,9 @@ OAuth 2.0 *implicit flow*, client-side. Butuh OAuth Client ID milik sendiri:
 4. *Authorized redirect URIs*: `https://belliond.github.io/task-vault/`
 5. OAuth consent screen → **Test users** → tambahkan akun yang akan sync
 
-> **Batas yang perlu diketahui:** selama publishing status masih *Testing*,
-> Google membuat refresh token kedaluwarsa **7 hari**. Sync Classroom lewat
-> OAuth karena itu belum bisa sepenuhnya otomatis — token harus diperbarui
-> berkala. Pindah ke *In production* butuh verifikasi Google untuk scope
-> sensitif, yang prosesnya berminggu-minggu.
+Implicit flow **hanya** memberi access token berumur ~1 jam — tidak pernah
+refresh token. Karena itu sync otomatis Classroom memakai jalur berbeda
+(authorization code + PKCE), dijelaskan di bagian berikut.
 
 ---
 
@@ -521,6 +520,7 @@ Kalau hasilnya wajar, jalankan lagi tanpa centang.
 ```bash
 npm run sync:dry     # tampilkan saja
 npm run sync         # tulis ke database
+npm test             # uji fungsi murni (tanggal, external_id)
 ```
 
 Membaca `MOODLE_TOKEN` dari `.env`, atau dari environment kalau `.env` tidak ada.
@@ -540,7 +540,114 @@ Membaca `MOODLE_TOKEN` dari `.env`, atau dari environment kalau `.env` tidak ada
   mengirim email pemberitahuan, dan tombol *Run workflow* tetap bisa dipakai
   kapan saja.
 - **Tugas yang sudah lewat deadline dihapus** dari database saat sync, sama
-  seperti perilaku tombol SYNC di browser. Baris Classroom tidak pernah disentuh.
+  seperti perilaku tombol SYNC di browser. Tiap sumber hanya membersihkan
+  barisnya sendiri — sync Moodle tidak pernah menyentuh baris Classroom.
+
+---
+
+## Sync otomatis Google Classroom
+
+Berbeda dari Moodle, Classroom tidak punya token permanen. Access token-nya
+mati dalam ~1 jam. Yang bisa bertahan adalah **refresh token**, dan itu hanya
+diberikan oleh *authorization code flow* dengan `access_type=offline` — bukan
+oleh implicit flow yang dipakai situs.
+
+Karena itu ada dua hal terpisah:
+
+- `scripts/classroom-auth.mjs` — dijalankan **sekali** oleh Anda, di komputer
+  sendiri, untuk menangkap refresh token.
+- `scripts/sync-lms.mjs` — menukar refresh token itu menjadi access token baru
+  setiap kali sync jalan, lalu menarik daftar kelas dan tugas.
+
+### Syarat yang tidak bisa dilewati
+
+Project Google harus berstatus **In production**.
+
+| Status | Umur refresh token |
+|---|---|
+| `Testing` | **mati setelah 7 hari** — sync otomatis akan berhenti sendiri |
+| `In production` (belum diverifikasi) | tidak kedaluwarsa |
+
+Selama masih `Testing`, Google sengaja mematikan refresh token setelah 7 hari.
+Tidak ada cara memperpanjangnya dari sisi skrip. Ini bukan batasan kode, tapi
+aturan Google.
+
+Cara mengubahnya:
+
+1. Buka <https://console.cloud.google.com/auth/audience>
+2. Pastikan project yang benar sudah dipilih
+3. Pada **Publishing status**, klik **Publish app** → konfirmasi
+
+Konsekuensinya:
+
+- Consent pertama menampilkan layar **"Google hasn't verified this app"**.
+  Klik **Advanced** → **Go to … (unsafe)**. Ini normal untuk aplikasi pribadi.
+- Batas **100 user** seumur project. Untuk satu akun, tidak masalah.
+- **Tidak perlu** submit verifikasi, dan tidak ada biaya.
+
+### Setup (sekali saja)
+
+**1. Buat OAuth client tipe Desktop app**
+
+<https://console.cloud.google.com/auth/clients> → **Create client** →
+Application type **Desktop app** → Create.
+
+> Tipe harus **Desktop app**. Client **Web application** yang dipakai situs
+> tidak mengizinkan redirect ke `http://127.0.0.1`, jadi alur ini akan gagal
+> dengan `redirect_uri_mismatch`.
+
+Pastikan **Google Classroom API** sudah aktif:
+<https://console.cloud.google.com/apis/library/classroom.googleapis.com>
+
+**2. Isi `.env`**
+
+```env
+CLASSROOM_CLIENT_ID=....apps.googleusercontent.com
+CLASSROOM_CLIENT_SECRET=...
+```
+
+**3. Ambil refresh token**
+
+```bash
+npm run classroom:auth
+```
+
+Skrip membuka browser, meminta izin, lalu mencetak `CLASSROOM_REFRESH_TOKEN`.
+Sebelum mencetak, skrip **langsung menguji** token itu ke Classroom API dan
+menampilkan daftar kelas yang terlihat — jadi kalau ada yang salah (scope
+kurang, API belum aktif, akun tanpa kelas), ketahuan saat itu juga.
+
+**4. Simpan ke GitHub Secrets**
+
+| Nama | Nilai |
+|---|---|
+| `CLASSROOM_CLIENT_ID` | dari langkah 1 |
+| `CLASSROOM_CLIENT_SECRET` | dari langkah 1 |
+| `CLASSROOM_REFRESH_TOKEN` | dari langkah 3 |
+
+**5. Buktikan dengan dry run**
+
+Actions → **Sync LMS** → **Run workflow** → centang *dry run*. Log akan
+menampilkan dua bagian terpisah, `--- Moodle ---` dan `--- Classroom ---`.
+
+### Kalau refresh token mati
+
+Gejalanya: log berhenti dengan `invalid_grant`. Penyebab tersering adalah
+project masih `Testing` dan sudah lewat 7 hari. Perbaiki dengan
+**Publish app**, lalu jalankan `npm run classroom:auth` sekali lagi dan
+perbarui secret-nya.
+
+### Batasan yang perlu diketahui
+
+- **Deadline Classroom juga digeser ke WIB.** `dueDate`/`dueTime` dari
+  Classroom API keduanya dalam UTC. Tugas yang deadline-nya 17:00 UTC jatuh
+  pada 00:00 WIB keesokan harinya, dan itu yang dicatat.
+- **Hanya kelas aktif.** Kelas yang diarsipkan tidak diambil, dan baris lama
+  milik kelas itu akan dibersihkan saat sync.
+- **Hanya tugas berstatus `PUBLISHED`.** Draf dilewati.
+- **Satu sumber gagal tidak membatalkan yang lain.** Kalau Moodle bermasalah,
+  Classroom tetap ditulis — tetapi run tetap ditandai gagal supaya masalahnya
+  terlihat.
 
 ---
 
@@ -563,6 +670,15 @@ Konsekuensi yang perlu diterima:
 - **`MOODLE_TOKEN` hanya hidup di GitHub Secrets.** Token itu tidak pernah
   dibuat menjadi `config.js` dan tidak pernah dikirim ke browser, karena
   `sync.yml` berjalan di runner GitHub, bukan di halaman.
+- **Kredensial Classroom juga hanya di server.** `CLASSROOM_CLIENT_SECRET` dan
+  `CLASSROOM_REFRESH_TOKEN` dibaca oleh `scripts/sync-lms.mjs` dari GitHub
+  Secrets, bukan dari halaman. Yang ada di browser hanyalah OAuth Client ID
+  (memang bukan rahasia) dan access token berumur ~1 jam di `localStorage`.
+  Refresh token **tidak pernah** menyentuh browser.
+- **`config.js` tidak memuat kredensial apa pun.** Generator
+  `scripts/build-config.mjs` hanya meneruskan nilai yang memang publik.
+  `CLASSROOM_CLIENT_SECRET` dan `CLASSROOM_REFRESH_TOKEN` sengaja tidak
+  diteruskan; kalau suatu saat muncul di `config.js`, itu kesalahan.
 - **Fungsi `security definer` harus dicabut dari `anon`.** Fungsi yang
   memegang rahasia server tidak boleh bisa dipanggil dari browser; kalau bisa,
   siapa pun yang menemukan URL + publishable key dapat memicunya tanpa batas.
