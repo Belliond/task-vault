@@ -413,6 +413,86 @@ dihapus.
 
 ---
 
+## Pengingat deadline via WhatsApp
+
+Chat WhatsApp otomatis saat deadline sudah dekat. Panelnya ada di halaman
+**SYNC**, kartu ketiga.
+
+### Kenapa dijalankan di server, bukan di halaman
+
+Situs ini statis, tanpa login, dan RLS dimatikan. Kalau nomor WhatsApp dan
+API key disimpan di `localStorage` atau `config.js`, siapa pun yang membuka
+situs bisa membacanya lalu mengirim pesan atas nama pemilik. Selain itu
+pengingat harus tetap terkirim walau tab browser sudah ditutup.
+
+Karena itu:
+
+| Bagian | Tempat | Alasan |
+|---|---|---|
+| Nomor + jadwal | tabel `reminder_channel` | Bukan rahasia, tapi tetap di server |
+| API key CallMeBot | **Supabase Vault** | Rahasia; tidak pernah dikirim ke browser |
+| Penjadwal | `pg_cron` (tiap jam) | Berjalan tanpa browser |
+| Pengirim HTTP | `pg_net` | Panggilan keluar dari dalam Postgres |
+| Riwayat | tabel `reminder_log` | Sekaligus penjaga anti-dobel |
+
+Yang dibaca browser hanya nomor **tersamarkan** (`*********7890`) dan status
+terakhir. RPC `run_deadline_reminders()` dan `refresh_reminder_status()`
+sengaja **tidak** bisa dipanggil `anon` — keduanya memegang API key dan bisa
+dipakai memicu spam.
+
+### Kenapa CallMeBot
+
+WhatsApp Cloud API resmi **tidak gratis** untuk pesan yang kita mulai
+sendiri. Sejak 1 Oktober 2026 Meta menagih per pesan:
+
+- **Utility template** — jenis yang wajib dipakai kalau bisnis yang memulai
+  chat — selalu berbayar, tarif Indonesia sekitar **USD 0.0287/pesan**.
+- **Service message** — balasan dalam 24 jam setelah user lebih dulu
+  mengirim pesan — 1.000 gratis/bulan, tapi tidak bisa dipakai untuk
+  pengingat otomatis.
+
+CallMeBot adalah satu-satunya jalur WhatsApp yang benar-benar gratis untuk
+pemakaian pribadi. Konsekuensinya harus disadari: **tidak resmi**, hanya bisa
+mengirim ke nomor sendiri, satu arah (tidak bisa dibalas), dan ada batas
+kirim harian. Kalau suatu saat pindah ke Cloud API resmi, cukup ganti badan
+fungsi `run_deadline_reminders()` — bagian lain tidak berubah.
+
+### Cara mengaktifkan
+
+1. Simpan nomor CallMeBot sebagai kontak, lalu kirim pesan
+   `I allow callmebot to send me messages` ke kontak itu.
+2. Balasannya berisi API key.
+3. Buka halaman **SYNC** → isi nomor (format `6281234567890`, tanpa `+` dan
+   tanpa `0` di depan) dan API key → **SAVE REMINDER**.
+4. Tekan **SEND TEST** untuk memastikan pesan benar-benar masuk.
+
+Jadwal bawaan: **H-3, H-1, dan hari H pada 08:00 WIB**. Bisa diubah ke
+H-1/hari H atau hari H saja.
+
+### Detail yang mudah salah
+
+- **CallMeBot membalas HTTP 201 walaupun gagal.** Pesan errornya ada di body
+  (`ERROR: apikey can not be empty...`). Karena itu `refresh_reminder_status()`
+  memeriksa isi respons, bukan hanya kode HTTP — tanpa ini UI akan
+  melaporkan "sent" untuk pesan yang sebenarnya ditolak.
+- **Pesan harus di-percent-encode.** Dikirim lewat query string GET, jadi
+  `&`, `#`, dan baris baru akan memotong URL. Ada `url_encode()` untuk itu.
+- **Anti-dobel** lewat `unique (task_id, offset_days)`. Cron yang berjalan
+  dua kali tidak akan mengirim pesan yang sama dua kali.
+- **Deadline diubah → log dihapus.** Trigger `tasks_clear_reminders`
+  menghapus riwayat tugas itu, supaya pengingat jalan lagi untuk tanggal
+  yang baru.
+- **`days_before` dibandingkan dengan jam lokal** `Asia/Jakarta`, bukan jam
+  server. Cron berjalan tiap jam; fungsi pengirim sendiri yang memutuskan
+  apakah jam lokal sudah sama dengan `send_hour`.
+
+### Biaya
+
+Rp 0. Tidak ada kartu kredit, tidak ada akun Meta Business, tidak ada
+template yang perlu disetujui.
+
+---
+
 ## Integrasi LMS
 
 ### Moodle
@@ -448,6 +528,15 @@ Konsekuensi yang perlu diterima:
 - Tidak ada isolasi antar pengguna — ini memang tujuannya.
 - Satu orang iseng bisa mengosongkan ledger. Tidak ada rate limit.
 - Tidak ada backup otomatis. Ekspor data secara berkala bila penting.
+- **Nomor WhatsApp dan API key CallMeBot tidak boleh masuk frontend.**
+  Keduanya hanya ada di database: nomor di `reminder_channel`, API key di
+  Supabase Vault. Yang dibaca browser cuma nomor tersamarkan. Kalau suatu
+  saat menambah fitur yang butuh rahasia baru, pola ini yang dipakai —
+  bukan `localStorage` dan bukan `config.js`.
+- **Fungsi `security definer` harus dicabut dari `anon`.** `run_deadline_reminders()`
+  dan `refresh_reminder_status()` memegang API key dari Vault; kalau bisa
+  dipanggil dari browser, siapa pun yang menemukan URL + publishable key
+  bisa memicu pengiriman WhatsApp tanpa batas.
 
 Kalau nanti butuh multi-user yang aman, aktifkan RLS + Supabase Auth dan
 tambahkan kembali kolom `user_id`.

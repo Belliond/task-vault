@@ -585,6 +585,17 @@ function showPage(page, { button = null, scrollToTop = true } = {}) {
     }
 
 
+    // Panel pengingat WhatsApp memuat konfigurasinya dari server
+    // saat halaman SYNC pertama kali dibuka. Dipanggil di sini
+    // (bukan saat boot) agar pengguna yang tidak pernah membuka
+    // halaman SYNC tidak membayar satu request tambahan.
+    if (page === syncSection) {
+
+        ensureReminderLoaded();
+
+    }
+
+
     setActiveNav(button);
 
 
@@ -3369,6 +3380,391 @@ classroomSync.addEventListener(
 captureClassroomHash();
 
 renderClassroomStatus();
+
+
+// =========================================================
+// PENGINGAT DEADLINE VIA WHATSAPP
+//  ---------------------------------------------------------
+//  Halaman ini TIDAK mengirim WhatsApp apa pun. Ia hanya
+//  menulis konfigurasi (nomor, jadwal) ke database lewat RPC.
+//  Pengiriman dilakukan pg_cron + pg_net di server, jadi
+//  pengingat tetap berjalan walau tab ditutup.
+//
+//  Kenapa begitu: proyek ini tanpa login dan RLS dimatikan.
+//  Kalau nomor dan API key disimpan di sini (localStorage /
+//  config.js), siapa pun yang membuka situs bisa membacanya
+//  lalu memakainya untuk mengirim pesan atas nama pemilik.
+//  Karena itu API key hanya ditulis ke Supabase Vault, dan
+//  yang dibaca kembali hanyalah nomor yang sudah tersamarkan.
+// =========================================================
+
+const reminderBadge =
+    document.getElementById("reminderBadge");
+
+const reminderStatus =
+    document.getElementById("reminderStatus");
+
+const reminderPhone =
+    document.getElementById("reminderPhone");
+
+const reminderApiKey =
+    document.getElementById("reminderApiKey");
+
+const reminderHour =
+    document.getElementById("reminderHour");
+
+const reminderDays =
+    document.getElementById("reminderDays");
+
+const reminderEnabled =
+    document.getElementById("reminderEnabled");
+
+const reminderSave =
+    document.getElementById("reminderSave");
+
+const reminderTest =
+    document.getElementById("reminderTest");
+
+
+// Status terakhir yang diterima dari server, dipakai untuk
+// mencegah penimpaan input saat pengguna sedang mengetik.
+let reminderLoaded = false;
+
+
+function setReminderStatus(message, type = "") {
+
+    if (!reminderStatus) return;
+
+    reminderStatus.textContent = message;
+
+    reminderStatus.classList.toggle("success", type === "success");
+    reminderStatus.classList.toggle("error", type === "error");
+
+}
+
+
+function setReminderBadge(active) {
+
+    if (!reminderBadge) return;
+
+    reminderBadge.textContent = active ? "ON" : "OFF";
+
+    reminderBadge.classList.toggle("sync-badge-live", active);
+    reminderBadge.classList.toggle("sync-badge-pending", !active);
+
+}
+
+
+// days_before datang sebagai array integer dari Postgres, tetapi
+// PostgREST bisa mengirimkannya sebagai string "{3,1,0}" pada
+// beberapa konfigurasi. Keduanya diterima di sini.
+function parseReminderDays(value) {
+
+    if (Array.isArray(value)) {
+
+        return value.map(Number).filter((n) => Number.isFinite(n));
+
+    }
+
+    if (typeof value === "string") {
+
+        return value
+            .replace(/[{}]/g, "")
+            .split(",")
+            .map((part) => Number(part.trim()))
+            .filter((n) => Number.isFinite(n));
+
+    }
+
+    return [3, 1, 0];
+
+}
+
+
+function formatReminderDays(days) {
+
+    const sorted = [...days].sort((a, b) => b - a);
+
+    return sorted
+        .map((d) => (d === 0 ? "hari H" : `H-${d}`))
+        .join(", ");
+
+}
+
+
+function renderReminderChannel(data) {
+
+    if (!data) {
+
+        setReminderBadge(false);
+        setReminderStatus("Not configured.", "");
+        return;
+
+    }
+
+    const days = parseReminderDays(data.days_before);
+
+    setReminderBadge(Boolean(data.enabled));
+
+    if (data.phone_masked) {
+
+        setReminderStatus(
+            `${data.enabled ? "Active" : "Paused"} • ${data.phone_masked} • ` +
+            `${formatReminderDays(days)} at ${String(data.send_hour).padStart(2, "0")}:00 WIB`,
+            data.enabled ? "success" : ""
+        );
+
+    }
+    else {
+
+        setReminderStatus("Nomor WhatsApp belum diisi.", "");
+
+    }
+
+    // Jangan timpa apa yang sedang diketik pengguna.
+    if (reminderLoaded) return;
+
+    reminderEnabled.checked = Boolean(data.enabled);
+
+    reminderHour.value = String(data.send_hour ?? 8);
+
+    const preset = days.sort((a, b) => b - a).join(",");
+
+    // Kalau kombinasi harinya tidak ada di <select>, biarkan
+    // pilihan pertama (H-3, H-1, hari H) — nilainya tetap
+    // dikirim ulang saat disimpan.
+    if ([...reminderDays.options].some((o) => o.value === preset)) {
+
+        reminderDays.value = preset;
+
+    }
+
+    if (data.phone_masked && !reminderPhone.value) {
+
+        reminderPhone.value = data.phone_masked;
+
+    }
+
+    reminderLoaded = true;
+
+}
+
+
+async function loadReminderChannel() {
+
+    if (!reminderStatus) return;
+
+    if (!supabaseClient) {
+
+        setReminderStatus(
+            "Database belum terhubung — pengingat tidak bisa diatur.",
+            "error"
+        );
+
+        return;
+
+    }
+
+    try {
+
+        const { data, error } = await supabaseClient.rpc(
+            "reminder_channel_get"
+        );
+
+        if (error) {
+
+            if (error.code === "PGRST202") {
+
+                setReminderStatus(
+                    "Fitur pengingat belum ada di database. " +
+                    "Jalankan `npm run db:push`.",
+                    "error"
+                );
+
+                return;
+
+            }
+
+            throw new Error(error.message);
+
+        }
+
+        const row = Array.isArray(data) ? data[0] : data;
+
+        renderReminderChannel(row);
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        setReminderStatus(error.message, "error");
+
+    }
+
+}
+
+
+async function saveReminderChannel() {
+
+    if (!supabaseClient) {
+
+        setReminderStatus("Database belum terhubung.", "error");
+        return;
+
+    }
+
+    const phone = reminderPhone.value.trim();
+
+    if (!phone) {
+
+        setReminderStatus("Nomor WhatsApp wajib diisi.", "error");
+        reminderPhone.focus();
+        return;
+
+    }
+
+    // Nomor yang masih tersamarkan (mis. *******7890) berarti
+    // pengguna tidak mengubah apa pun. Server butuh nomor utuh,
+    // jadi jangan kirim nilai bertanda bintang — kirim ulang
+    // nomor yang sudah tersimpan lewat argumen kosong khusus.
+    const isMasked = phone.includes("*");
+
+    reminderSave.disabled = true;
+    reminderSave.textContent = "SAVING...";
+
+    try {
+
+        const days = reminderDays.value
+            .split(",")
+            .map((n) => Number(n))
+            .filter((n) => Number.isFinite(n));
+
+        const { error } = await supabaseClient.rpc(
+            "reminder_channel_save",
+            {
+                p_phone: isMasked ? null : phone,
+                p_api_key: reminderApiKey.value.trim() || null,
+                p_enabled: reminderEnabled.checked,
+                p_days: days,
+                p_hour: Number(reminderHour.value)
+            }
+        );
+
+        if (error) throw new Error(error.message);
+
+        reminderApiKey.value = "";
+
+        // Paksa render ulang dari server.
+        reminderLoaded = false;
+
+        await loadReminderChannel();
+
+        setReminderStatus(
+            "Tersimpan. Pengingat akan dikirim otomatis sesuai jadwal.",
+            "success"
+        );
+
+        showToast("Reminder settings saved.", "success");
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        setReminderStatus(error.message, "error");
+
+        showToast("Could not save reminder settings.", "error");
+
+    }
+    finally {
+
+        reminderSave.disabled = false;
+        reminderSave.textContent = "SAVE REMINDER";
+
+    }
+
+}
+
+
+async function sendReminderTest() {
+
+    if (!supabaseClient) {
+
+        setReminderStatus("Database belum terhubung.", "error");
+        return;
+
+    }
+
+    reminderTest.disabled = true;
+    reminderTest.textContent = "SENDING...";
+
+    try {
+
+        const { data, error } = await supabaseClient.rpc(
+            "reminder_send_test"
+        );
+
+        if (error) throw new Error(error.message);
+
+        // Fungsi mengembalikan teks status, bukan objek.
+        const message = typeof data === "string"
+            ? data
+            : "Pesan uji dikirim.";
+
+        const failed = /gagal|belum|tidak valid/i.test(message);
+
+        setReminderStatus(message, failed ? "error" : "success");
+
+        showToast(message, failed ? "error" : "success");
+
+    }
+    catch (error) {
+
+        console.error(error);
+
+        setReminderStatus(error.message, "error");
+
+        showToast("Could not send test message.", "error");
+
+    }
+    finally {
+
+        reminderTest.disabled = false;
+        reminderTest.textContent = "SEND TEST";
+
+    }
+
+}
+
+
+if (reminderSave) {
+
+    reminderSave.addEventListener("click", saveReminderChannel);
+
+}
+
+if (reminderTest) {
+
+    reminderTest.addEventListener("click", sendReminderTest);
+
+}
+
+// Muat saat halaman SYNC dibuka pertama kali. Dipanggil malas
+// (bukan saat boot) supaya tidak menambah satu request ke
+// database bagi pengguna yang tidak pernah membuka halaman ini.
+let reminderLoadedOnce = false;
+
+function ensureReminderLoaded() {
+
+    if (reminderLoadedOnce) return;
+
+    reminderLoadedOnce = true;
+
+    loadReminderChannel();
+
+}
+
 
 
 // =========================================================

@@ -1202,6 +1202,189 @@
                     </div>
 
 
+                    <!-- ==========================================
+                         PENGINGAT DEADLINE VIA WHATSAPP
+                         Kartu ketiga di halaman SYNC.
+
+                         Nomor dan API key TIDAK disimpan di browser
+                         dan TIDAK ikut ke config.js. Keduanya ditulis
+                         ke Supabase (API key ke Vault) lewat RPC
+                         reminder_channel_save(); nomor yang dibaca
+                         kembali selalu tersamarkan. Pengiriman
+                         dilakukan pg_cron + pg_net di server, bukan
+                         oleh halaman ini — jadi pengingat tetap
+                         terkirim walau browser ditutup.
+                    ========================================== -->
+
+                    <div class="sync-card reminder-card">
+
+                        <div class="sync-card-head">
+
+                            <span class="sync-badge">
+                                WHATSAPP
+                            </span>
+
+                            <span
+                                id="reminderBadge"
+                                class="sync-badge sync-badge-pending"
+                            >
+                                OFF
+                            </span>
+
+                        </div>
+
+                        <h3>
+                            Deadline reminders
+                        </h3>
+
+                        <p class="sync-note">
+                            Kirim chat WhatsApp otomatis saat deadline sudah
+                            dekat. Berjalan di server (pg_cron), jadi tetap
+                            terkirim walau situs sedang ditutup. Memakai
+                            <strong>CallMeBot</strong> — jalur gratis untuk
+                            nomor sendiri, satu arah.
+                        </p>
+
+
+                        <div class="sync-status-row">
+
+                            <div
+                                id="reminderStatus"
+                                class="sync-status"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                Not configured.
+                            </div>
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label for="reminderPhone">
+                                WHATSAPP NUMBER
+                            </label>
+
+                            <input
+                                type="tel"
+                                id="reminderPhone"
+                                placeholder="6281234567890"
+                                autocomplete="off"
+                                inputmode="numeric"
+                            />
+
+                            <small class="input-hint">
+                                Format internasional tanpa "+" dan tanpa "0"
+                                di depan. Contoh: 6281234567890
+                            </small>
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label for="reminderApiKey">
+                                CALLMEBOT API KEY
+                            </label>
+
+                            <input
+                                type="password"
+                                id="reminderApiKey"
+                                placeholder="Kosongkan untuk mempertahankan yang lama"
+                                autocomplete="off"
+                            />
+
+                            <small class="input-hint">
+                                Dapatkan dengan mengirim pesan
+                                <code>I allow callmebot to send me messages</code>
+                                ke bot CallMeBot. Kunci disimpan di Supabase
+                                Vault dan tidak pernah dikirim ke browser.
+                            </small>
+
+                        </div>
+
+
+                        <div class="reminder-row">
+
+                            <div class="form-group">
+
+                                <label for="reminderHour">
+                                    SEND AT (WIB)
+                                </label>
+
+                                <select id="reminderHour">
+                                    <option value="6">06:00</option>
+                                    <option value="7">07:00</option>
+                                    <option value="8" selected>08:00</option>
+                                    <option value="9">09:00</option>
+                                    <option value="12">12:00</option>
+                                    <option value="18">18:00</option>
+                                    <option value="20">20:00</option>
+                                </select>
+
+                            </div>
+
+                            <div class="form-group">
+
+                                <label for="reminderDays">
+                                    REMIND WHEN
+                                </label>
+
+                                <select id="reminderDays">
+                                    <option value="3,1,0" selected>
+                                        H-3, H-1, hari H
+                                    </option>
+                                    <option value="1,0">
+                                        H-1, hari H
+                                    </option>
+                                    <option value="0">
+                                        Hari H saja
+                                    </option>
+                                </select>
+
+                            </div>
+
+                        </div>
+
+
+                        <label class="reminder-toggle">
+
+                            <input
+                                type="checkbox"
+                                id="reminderEnabled"
+                            />
+
+                            <span>
+                                Aktifkan pengingat otomatis
+                            </span>
+
+                        </label>
+
+
+                        <div class="reminder-actions">
+
+                            <button
+                                type="button"
+                                id="reminderSave"
+                                class="sync-button"
+                            >
+                                SAVE REMINDER
+                            </button>
+
+                            <button
+                                type="button"
+                                id="reminderTest"
+                                class="mini-button"
+                            >
+                                SEND TEST
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
                 </div>
 
             </section>
