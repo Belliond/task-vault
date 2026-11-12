@@ -29,3 +29,6 @@ Thumbs.db
 
 # Log
 *.log
+
+# File uji sementara
+tmp-*
