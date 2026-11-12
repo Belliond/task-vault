@@ -257,6 +257,27 @@ const classroomSyncLog =
     document.getElementById("classroomSyncLog");
 
 
+// --- Sinkronisasi otomatis (filter kelas) ---
+
+const autoSyncBadge =
+    document.getElementById("autoSyncBadge");
+
+const autoSyncLastRun =
+    document.getElementById("autoSyncLastRun");
+
+const autoSyncCourseList =
+    document.getElementById("autoSyncCourseList");
+
+const autoSyncRefreshCourses =
+    document.getElementById("autoSyncRefreshCourses");
+
+const autoSyncSaveFilter =
+    document.getElementById("autoSyncSaveFilter");
+
+const autoSyncFilterStatus =
+    document.getElementById("autoSyncFilterStatus");
+
+
 // =========================================================
 // EDIT MODAL
 // =========================================================
@@ -3636,6 +3657,411 @@ async function loadTasks({ silent = false } = {}) {
 // =========================================================
 
 // =========================================================
+// SINKRONISASI OTOMATIS — FILTER KELAS
+//
+//  Sync otomatis berjalan di GitHub Actions tiap 4 jam, bukan
+//  di browser ini. Jadi pilihannya tidak bisa disimpan di
+//  localStorage: harus di database supaya terbaca server.
+//
+//  Alurnya:
+//    web  -> tabel sync_settings (publishable key)
+//    skrip -> baca sync_settings, saring kelas, tulis tasks
+//
+//  TIDAK ada token GitHub di sini. Halaman statis tidak bisa
+//  menyimpan rahasia; kalau token ditaruh di browser, siapa
+//  pun yang membuka situs bisa memicu workflow.
+// =========================================================
+
+const SYNC_SETTINGS_TABLE = "sync_settings";
+
+// Daftar kelas disimpan sementara di memori saja, karena
+// hanya dipakai untuk menggambar checkbox.
+let autoSyncCourses = [];
+let autoSyncSettings = null;
+
+
+function setAutoSyncStatus(pesan, jenis) {
+
+    if (!autoSyncFilterStatus) {
+        return;
+    }
+
+    autoSyncFilterStatus.textContent = pesan || "";
+
+    autoSyncFilterStatus.classList.toggle(
+        "success", jenis === "success"
+    );
+
+    autoSyncFilterStatus.classList.toggle(
+        "error", jenis === "error"
+    );
+
+}
+
+
+async function loadAutoSyncSettings() {
+
+    if (!supabaseClient) {
+        setAutoSyncStatus(
+            "Database belum terhubung — pengaturan tidak bisa dibaca.",
+            "error"
+        );
+        return null;
+    }
+
+    try {
+
+        const { data, error } = await supabaseClient
+            .from(SYNC_SETTINGS_TABLE)
+            .select("classroom_exclude, classroom_only, updated_at")
+            .eq("id", 1)
+            .maybeSingle();
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        autoSyncSettings = data || {
+            classroom_exclude: "",
+            classroom_only: "",
+            updated_at: null
+        };
+
+        return autoSyncSettings;
+
+    }
+    catch (error) {
+
+        // Tabel belum dibuat (migrasi belum jalan) atau
+        // jaringan bermasalah. Halaman tetap bisa dipakai.
+        setAutoSyncStatus(
+            "Pengaturan belum bisa dibaca: " + error.message,
+            "error"
+        );
+
+        return null;
+
+    }
+
+}
+
+
+// Filter disimpan sebagai teks dipisah koma, sama persis
+// dengan yang dibaca scripts/sync-lms.mjs.
+function pecahDaftar(teks) {
+
+    return String(teks || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+}
+
+
+function gabungDaftar(daftar) {
+
+    return daftar.join(", ");
+
+}
+
+
+// Kelas dianggap DIPAKAI kalau:
+//   - ada di classroom_only (bila diisi), ATAU
+//   - tidak ada di classroom_exclude.
+function kelasDipakai(course, pengaturan) {
+
+    const id = String(course.id);
+    const nama = String(course.name || "").toLowerCase();
+
+    const hanya = pecahDaftar(pengaturan?.classroom_only);
+    const kecuali = pecahDaftar(pengaturan?.classroom_exclude)
+        .map((s) => s.toLowerCase());
+
+    if (hanya.length) {
+        const cocok = hanya.some(
+            (p) => p === id || nama.includes(p.toLowerCase())
+        );
+        if (!cocok) {
+            return false;
+        }
+    }
+
+    const dibuang = kecuali.some(
+        (p) => p === id || nama.includes(p)
+    );
+
+    return !dibuang;
+
+}
+
+
+function renderAutoSyncPicker() {
+
+    if (!autoSyncCourseList) {
+        return;
+    }
+
+    autoSyncCourseList.innerHTML = "";
+
+    if (!autoSyncCourses.length) {
+
+        const kosong = document.createElement("p");
+        kosong.className = "filter-empty";
+        kosong.textContent =
+            "Daftar kelas belum dimuat. Tekan “MUAT ULANG DAFTAR KELAS” " +
+            "di bawah — perlu koneksi Google Classroom yang masih aktif.";
+        autoSyncCourseList.appendChild(kosong);
+        autoSyncSaveFilter.disabled = true;
+        return;
+
+    }
+
+    for (const course of autoSyncCourses) {
+
+        const label = document.createElement("label");
+        label.className = "course-item";
+
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.value = String(course.id);
+        box.checked = kelasDipakai(course, autoSyncSettings);
+
+        // Perubahan langsung ditandai supaya user tahu
+        // ada yang belum disimpan.
+        box.addEventListener("change", () => {
+            autoSyncSaveFilter.disabled = false;
+            setAutoSyncStatus("Ada perubahan belum disimpan.");
+        });
+
+        const nama = document.createElement("span");
+        nama.textContent = course.name || `Classroom ${course.id}`;
+
+        label.appendChild(box);
+        label.appendChild(nama);
+
+        autoSyncCourseList.appendChild(label);
+
+    }
+
+    autoSyncSaveFilter.disabled = true;
+
+}
+
+
+// Ambil daftar kelas dari Google Classroom memakai token
+// yang tersimpan di browser (dari bagian manual di bawah).
+async function muatKelasUntukFilter() {
+
+    if (!autoSyncCourseList) {
+        return;
+    }
+
+    setAutoSyncStatus("Memuat daftar kelas dari Google Classroom…");
+
+    try {
+
+        if (!classroomTokenValid()) {
+            throw new Error(
+                "Belum terhubung ke Google Classroom. Hubungkan dulu di " +
+                "bagian MANUAL di bawah, lalu kembali ke sini."
+            );
+        }
+
+        const data = await classroomRestAll(
+            "/v1/courses?studentId=me&courseStates=ACTIVE&courseStates=PROVISIONED",
+            "courses"
+        );
+
+        autoSyncCourses = (data || [])
+            .filter((c) => c.id)
+            .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+        await loadAutoSyncSettings();
+        renderAutoSyncPicker();
+
+        setAutoSyncStatus(
+            `${autoSyncCourses.length} kelas dimuat. ` +
+            `Yang tidak dicentang tidak akan disinkronkan.`,
+            "success"
+        );
+
+    }
+    catch (error) {
+
+        setAutoSyncStatus(error.message, "error");
+
+    }
+
+}
+
+
+// Ubah centang menjadi dua daftar teks:
+//   classroom_only    = yang dicentang
+//   classroom_exclude = yang TIDAK dicentang
+//
+// Menyimpan yang tidak dicentang (bukan hanya yang
+// dicentang) penting: kelas baru yang muncul belakangan
+// otomatis ikut, tanpa perlu menyimpan ulang.
+function susunFilterDariCentang() {
+
+    const dipilih = [];
+
+    autoSyncCourseList
+        .querySelectorAll("input[type=checkbox]")
+        .forEach((box) => {
+            if (box.checked) {
+                dipilih.push(box.value);
+            }
+        });
+
+    const idDipilih = new Set(dipilih);
+
+    const tidakDipilih = autoSyncCourses
+        .map((c) => String(c.id))
+        .filter((id) => !idDipilih.has(id));
+
+    return {
+        // Kalau semua dicentang, "hanya" dikosongkan supaya
+        // kelas baru otomatis ikut.
+        classroom_only: tidakDipilih.length ? gabungDaftar(dipilih) : "",
+        classroom_exclude: gabungDaftar(tidakDipilih)
+    };
+}
+
+
+async function simpanFilterAutoSync() {
+
+    if (!supabaseClient) {
+        setAutoSyncStatus("Database belum terhubung.", "error");
+        return;
+    }
+
+    const nilai = susunFilterDariCentang();
+
+    autoSyncSaveFilter.disabled = true;
+    setAutoSyncStatus("Menyimpan…");
+
+    try {
+
+        const { error } = await supabaseClient
+            .from(SYNC_SETTINGS_TABLE)
+            .update({
+                classroom_exclude: nilai.classroom_exclude,
+                classroom_only: nilai.classroom_only,
+                updated_at: new Date().toISOString()
+            })
+            .eq("id", 1);
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        autoSyncSettings = {
+            ...(autoSyncSettings || {}),
+            ...nilai,
+            updated_at: new Date().toISOString()
+        };
+
+        setAutoSyncStatus(
+            "Tersimpan. Sync otomatis berikutnya (tiap 4 jam) akan " +
+            "memakai pilihan ini. Tugas dari kelas yang tidak dicentang " +
+            "dihapus pada sync itu.",
+            "success"
+        );
+
+    }
+    catch (error) {
+
+        setAutoSyncStatus("Gagal menyimpan: " + error.message, "error");
+        autoSyncSaveFilter.disabled = false;
+
+    }
+
+}
+
+
+// Tampilkan kapan terakhir data benar-benar diperbarui server.
+// Diambil dari synced_at terbaru di tabel tasks — itu bukti
+// nyata sync berjalan, bukan perkiraan.
+async function tampilkanSyncTerakhir() {
+
+    if (!autoSyncLastRun) {
+        return;
+    }
+
+    if (!supabaseClient) {
+        autoSyncLastRun.textContent = "database belum terhubung";
+        return;
+    }
+
+    try {
+
+        const { data, error } = await supabaseClient
+            .from("tasks")
+            .select("synced_at")
+            .not("synced_at", "is", null)
+            .order("synced_at", { ascending: false })
+            .limit(1);
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        const waktu = data?.[0]?.synced_at;
+
+        if (!waktu) {
+            autoSyncLastRun.textContent = "belum pernah";
+            return;
+        }
+
+        const tanggal = new Date(waktu);
+
+        autoSyncLastRun.textContent =
+            tanggal.toLocaleString("id-ID", {
+                dateStyle: "medium",
+                timeStyle: "short"
+            }) + " WIB";
+
+    }
+    catch (error) {
+
+        autoSyncLastRun.textContent = "tidak terbaca";
+
+    }
+
+}
+
+
+function initAutoSync() {
+
+    if (autoSyncRefreshCourses) {
+        autoSyncRefreshCourses.addEventListener(
+            "click",
+            muatKelasUntukFilter
+        );
+    }
+
+    if (autoSyncSaveFilter) {
+        autoSyncSaveFilter.addEventListener(
+            "click",
+            simpanFilterAutoSync
+        );
+    }
+
+    // Muat pengaturan lebih dulu supaya centang langsung
+    // benar kalau daftar kelas sudah ada.
+    loadAutoSyncSettings().then(() => {
+        if (autoSyncCourses.length) {
+            renderAutoSyncPicker();
+        }
+    });
+
+    tampilkanSyncTerakhir();
+
+}
+
+
+// =========================================================
 // FILTER KELAS PER MATA KULIAH
 //  Kode kelas (RA/RB/RC/RD, dst.) menempel di judul
 //  tugas, mis. "Worksheet 3 (RD)" atau "… MINGGU 9 RD".
@@ -6386,6 +6812,11 @@ setActiveNav(homeMenu);
 
 renderRealtimeStatus();
 renderMoodleStatus();
+
+// Pengaturan sync otomatis (filter kelas). Aman dipanggil
+// walau database belum siap: semua galatnya ditampilkan di
+// kartu, tidak menghentikan boot.
+initAutoSync();
 
 // Kalender adalah bagian Beranda, jadi grid-nya harus sudah
 // tergambar sebelum data datang (label bulan + sel kosong), lalu

@@ -571,8 +571,46 @@ async function supabaseGet({ url, key }, query) {
 }
 
 
-async function supabaseDelete({ url, key }, idList) {
+// Baca pengaturan filter yang diubah dari halaman web.
+//
+// Tabel ini bukan rahasia — isinya cuma daftar kelas yang
+// tidak diinginkan. Nilai dari GitHub Secrets (kalau ada)
+// tetap diutamakan, supaya pengaturan bisa dikunci dari sisi
+// server kalau perlu.
+async function ambilPengaturanSync({ url, key }) {
 
+    try {
+
+        const data = await ambilJson(
+            rapikanUrl(url) + "/rest/v1/sync_settings?select=classroom_exclude,classroom_only,updated_at&id=eq.1",
+            {
+                headers: {
+                    apikey: key,
+                    Authorization: "Bearer " + key
+                }
+            }
+        );
+
+        return Array.isArray(data) && data.length ? data[0] : null;
+
+    }
+    catch (error) {
+
+        // Tabel belum ada (migrasi belum dijalankan) atau
+        // jaringan bermasalah. Jangan gagalkan sync hanya
+        // karena pengaturan opsional tidak terbaca.
+        console.log(
+            "Pengaturan: tidak terbaca (" + error.message.slice(0, 120) + ")"
+        );
+
+        return null;
+
+    }
+
+}
+
+
+async function supabaseDelete({ url, key }, idList) {
     const daftar = idList.map((id) => `"${id}"`).join(",");
 
     const res = await fetch(
@@ -1257,17 +1295,33 @@ async function syncClassroom({ classroom, supabase, hariIni, dryRun, env }) {
     // Kelas lama yang masih ACTIVE di Google (mis. dari semester
     // lalu) tetap ikut terbawa kalau tidak dibatasi. Sync manual
     // di halaman web punya pemilih matkul, jadi perilakunya
-    // terasa berbeda. CLASSROOM_EXCLUDE_COURSES menutup celah
-    // itu tanpa harus mengarsipkan kelas di Google.
-    const mentahKecuali = String(env.CLASSROOM_EXCLUDE_COURSES || "").trim();
-    const mentahHanya = String(env.CLASSROOM_COURSE_IDS || "").trim();
+    // terasa berbeda.
+    //
+    // Urutan prioritas:
+    //   1. GitHub Secrets (kalau diisi) — mengunci pengaturan
+    //      dari sisi server, tidak bisa diubah dari web.
+    //   2. Tabel sync_settings — diubah lewat halaman web.
+    const pengaturan = await ambilPengaturanSync(supabase);
+
+    const mentahKecuali = String(
+        env.CLASSROOM_EXCLUDE_COURSES ||
+        pengaturan?.classroom_exclude ||
+        ""
+    ).trim();
+
+    const mentahHanya = String(
+        env.CLASSROOM_COURSE_IDS ||
+        pengaturan?.classroom_only ||
+        ""
+    ).trim();
 
     // Dicetak apa adanya (bukan rahasia), supaya kalau nilainya
     // tidak sampai ke runner — mis. lupa menaruh di blok env
     // workflow — kelihatan di log, bukan diam-diam diabaikan.
     console.log(
         `Filter   : kecuali="${mentahKecuali || "(kosong)"}" ` +
-        `hanya="${mentahHanya || "(kosong)"}"`
+        `hanya="${mentahHanya || "(kosong)"}"` +
+        (pengaturan ? ` (dari web, diubah ${pengaturan.updated_at || "?"})` : "")
     );
 
     const { dipakai: courses, dibuang } = saringKelasClassroom({

@@ -776,6 +776,137 @@
                 </div>
 
 
+                <!-- =============================================
+                     1. SINKRONISASI OTOMATIS
+                     Berjalan sendiri di GitHub Actions tiap 4 jam.
+                     Bagian ini hanya mengatur APA yang disinkronkan.
+                ============================================== -->
+
+                <div class="sync-card sync-card-wide" id="autoSyncCard">
+
+                    <div class="sync-card-head">
+
+                        <span class="sync-badge">
+                            SINKRONISASI OTOMATIS
+                        </span>
+
+                        <span
+                            id="autoSyncBadge"
+                            class="sync-badge sync-badge-live"
+                        >
+                            AKTIF
+                        </span>
+
+                    </div>
+
+                    <h3>
+                        Berjalan sendiri, tiap 4 jam
+                    </h3>
+
+                    <p class="sync-note">
+                        Server menarik tugas dari Moodle dan Classroom tanpa
+                        perlu membuka halaman ini. Atur di sini kelas mana
+                        yang ikut dan mana yang diabaikan — pilihannya
+                        disimpan ke database, jadi berlaku untuk semua
+                        perangkat dan tidak hilang saat browser dibersihkan.
+                    </p>
+
+
+                    <div class="auto-sync-status">
+
+                        <div class="auto-sync-row">
+
+                            <span class="auto-sync-label">
+                                TERAKHIR DISINKRONKAN
+                            </span>
+
+                            <span
+                                id="autoSyncLastRun"
+                                class="auto-sync-value"
+                            >
+                                memuat…
+                            </span>
+
+                        </div>
+
+                        <div class="auto-sync-row">
+
+                            <span class="auto-sync-label">
+                                JADWAL
+                            </span>
+
+                            <span class="auto-sync-value">
+                                tiap 4 jam (00:17, 04:17, 08:17, 12:17, 16:17, 20:17 UTC)
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- Filter kelas Classroom -->
+
+                    <div class="filter-block">
+
+                        <div class="section-label">
+                            // KELAS CLASSROOM YANG IKUT DISINKRONKAN
+                        </div>
+
+                        <p class="input-hint filter-hint">
+                            Kelas yang dicentang ikut disinkronkan. Kelas yang
+                            tidak dicentang akan diabaikan — dan tugasnya yang
+                            sudah tersimpan akan dihapus pada sync berikutnya.
+                            Daftar kelas diambil dari akun Classroom Anda.
+                        </p>
+
+                        <div
+                            id="autoSyncCourseList"
+                            class="course-list filter-course-list"
+                        >
+                            <p class="filter-empty">
+                                Hubungkan Google Classroom di bagian bawah
+                                sekali saja, lalu daftar kelas muncul di sini.
+                            </p>
+                        </div>
+
+                        <div class="filter-actions">
+
+                            <button
+                                type="button"
+                                id="autoSyncRefreshCourses"
+                                class="mini-button"
+                            >
+                                ⟳ MUAT ULANG DAFTAR KELAS
+                            </button>
+
+                            <button
+                                type="button"
+                                id="autoSyncSaveFilter"
+                                class="sync-button sync-button-small"
+                                disabled
+                            >
+                                SIMPAN PILIHAN
+                            </button>
+
+                        </div>
+
+                        <div
+                            id="autoSyncFilterStatus"
+                            class="sync-status"
+                            role="status"
+                            aria-live="polite"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="sync-divider">
+                    <span>MANUAL</span>
+                </div>
+
+
                 <div class="sync-grid">
 
 
