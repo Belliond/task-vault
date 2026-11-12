@@ -632,6 +632,34 @@ kurang, API belum aktif, akun tanpa kelas), ketahuan saat itu juga.
 Actions → **Sync LMS** → **Run workflow** → centang *dry run*. Log akan
 menampilkan dua bagian terpisah, `--- Moodle ---` dan `--- Classroom ---`.
 
+Hasil yang sudah pernah terbukti pada proyek ini (run `43294038151`, mode
+tulis): `Tersimpan: 0 baru, 22 diperbarui` untuk Moodle dan
+`Tersimpan: 1 baru, 1 diperbarui` untuk Classroom, lalu diverifikasi langsung
+ke tabel `tasks` (24 baris: 22 `moodle` + 2 `classroom`).
+
+### Kalau `Publish app` masih abu-abu
+
+Tombol itu menuntut **homepage** dan **privacy policy** yang benar-benar bisa
+dibuka publik. Keduanya sudah disediakan repo ini:
+
+- `https://belliond.github.io/task-vault/`
+- `https://belliond.github.io/task-vault/privacy.html`
+
+Isi di **Google Auth Platform → Branding → App domain**. Jangan unggah logo:
+halaman itu sendiri memperingatkan logo memicu kewajiban verifikasi tambahan.
+
+### Kenapa perlu DUA OAuth client
+
+| Client | Tipe | Dipakai oleh |
+|---|---|---|
+| `CLASSROOM_CLIENT_ID` | Web application | tombol sync di halaman web |
+| `CLASSROOM_SYNC_CLIENT_ID` | **Desktop app** | GitHub Actions |
+
+Client `Web application` **menolak** redirect `http://127.0.0.1` dengan
+`redirect_uri_mismatch` — diuji langsung ke server Google, bukan diasumsikan.
+Karena itu pengambilan refresh token mustahil memakai client situs, dan nama
+variabelnya sengaja dipisah supaya keduanya tidak saling menimpa.
+
 ### Kalau refresh token mati
 
 Gejalanya: log berhenti dengan `invalid_grant`. Penyebab tersering adalah
