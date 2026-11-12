@@ -1,0 +1,9 @@
+﻿2026-11-12T18:46:40.6307455Z ##[group]Environment details
+2026-11-12T18:46:40.7972194Z env:
+2026-11-12T18:46:40.8113153Z env:
+2026-11-12T18:46:40.8468511Z Moodle   : ***
+2026-11-12T18:46:40.8469017Z Supabase : ***
+2026-11-12T18:46:40.8469286Z Tanggal  : 2026-11-13 (Asia/Jakarta)
+2026-11-12T18:46:40.8469610Z Mode     : DRY-RUN (tidak menulis)
+2026-11-12T18:46:41.7515905Z GAGAL: Moodle menolak permintaan (invalidtoken): Invalid token - token not found
+2026-11-12T18:46:41.7975623Z [36;1m  echo "- Mode   : \`dry-run\`"[0m

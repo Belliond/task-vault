@@ -1,0 +1,38 @@
+﻿=== token ===
+login  : Belliond
+status : 200
+scopes : gist, repo, workflow
+
+=== workflow ===
+nama   : Sync LMS
+state  : active
+status : 200
+
+=== memicu dry run ===
+HTTP 204
+Workflow dipicu. Menunggu run muncul...
+run id  : 43283324770
+url     : https://github.com/Belliond/task-vault/actions/runs/43283324770
+status  : queued / null
+  ... in_progress / null
+  ... completed / failure
+
+=== hasil akhir ===
+status     : completed
+conclusion : failure
+url        : https://github.com/Belliond/task-vault/actions/runs/43283324770
+
+=== langkah per job ===
+JOB: sync -> failure
+   [success] Set up job
+   [success] Checkout
+   [success] Setup Node
+   [success] Check required secrets
+   [failure] Run sync
+   [success] Summary
+   [skipped] Post Setup Node
+   [success] Post Checkout
+   [success] Complete job
+
+=== log mentah: HTTP 200 ===
+disimpan: tmp-run-logs.zip (10988 byte)

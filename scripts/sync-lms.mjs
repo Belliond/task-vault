@@ -313,6 +313,22 @@ async function moodleRest({ url, token }, params) {
 
     if (data && data.errorcode) {
 
+        // Pesan khusus untuk kesalahan yang paling sering terjadi,
+        // supaya tidak perlu menebak dari "Invalid token".
+        if (data.errorcode === "invalidtoken") {
+
+            throw new Error(
+                "Moodle menolak token (invalidtoken). Penyebab tersering:\n" +
+                "  1. Token milik situs/akun lain — pastikan diambil dari " +
+                "kuliah2.itera.ac.id saat login sebagai akun yang benar.\n" +
+                "  2. Token sudah dihapus/di-reset di halaman Security keys.\n" +
+                "  3. Yang disalin bukan token service 'moodle_mobile_app'.\n" +
+                "  Ambil ulang di: https://kuliah2.itera.ac.id/user/managetoken.php\n" +
+                "  lalu perbarui secret MOODLE_TOKEN di GitHub."
+            );
+
+        }
+
         throw new Error(
             `Moodle menolak permintaan (${data.errorcode}): ` +
             `${data.message || "-"}`
@@ -451,6 +467,30 @@ async function main() {
     console.log(`Supabase : ${supabase.url}`);
     console.log(`Tanggal  : ${hariIni} (${ZONA})`);
     console.log(`Mode     : ${dryRun ? "DRY-RUN (tidak menulis)" : "TULIS"}`);
+
+    // Token TIDAK dicetak. Yang dilaporkan hanya bentuknya, supaya
+    // kesalahan salin-tempel bisa dikenali tanpa membocorkan nilainya.
+    //
+    //   panjang 32 + hanya huruf/angka -> bentuk token Moodle normal
+    //   ada spasi / baris baru         -> ikut tersalin dari halaman
+    //   ada tanda kutip                -> ikut tersalin pembungkusnya
+    //   diawali "Bearer "              -> yang disalin token akses, bukan wstoken
+    const bentukToken = {
+        panjang: moodle.token.length,
+        spasi: /\s/.test(moodle.token),
+        kutip: /["']/.test(moodle.token),
+        bearer: /^bearer\s/i.test(moodle.token),
+        hanyaAlfanumerik: /^[A-Za-z0-9]+$/.test(moodle.token)
+    };
+
+    console.log(
+        `Token    : ${bentukToken.panjang} karakter` +
+        (bentukToken.spasi ? ", MENGANDUNG SPASI/BARIS BARU" : "") +
+        (bentukToken.kutip ? ", MENGANDUNG TANDA KUTIP" : "") +
+        (bentukToken.bearer ? ", DIAWALI 'Bearer'" : "") +
+        (bentukToken.hanyaAlfanumerik ? ", bentuk normal" : ", ada karakter tak biasa")
+    );
+
 
     // 1. Validasi token + id user
     const siteInfo = await moodleRest(moodle, {
