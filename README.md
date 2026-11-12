@@ -459,12 +459,35 @@ fungsi `run_deadline_reminders()` — bagian lain tidak berubah.
 
 ### Cara mengaktifkan
 
-1. Simpan nomor CallMeBot sebagai kontak, lalu kirim pesan
-   `I allow callmebot to send me messages` ke kontak itu.
-2. Balasannya berisi API key.
-3. Buka halaman **SYNC** → isi nomor (format `6281234567890`, tanpa `+` dan
+1. Simpan nomor bot CallMeBot sebagai kontak, lalu kirim pesan **persis**
+   seperti ini (satu baris, tanpa tanda kutip):
+
+   ```
+   I allow callmebot to send me messages
+   ```
+
+   Frasa ini dicocokkan persis oleh bot. Salah ketik satu kata — misalnya
+   `calme` alih-alih `callmebot` — dan bot tidak akan menjawab sama sekali.
+
+2. Balasannya berisi API key. Kalau tidak datang dalam 2 menit, coba lagi
+   setelah 24 jam (batas anti-spam dari CallMeBot).
+
+   Nomor bot bisa berubah sewaktu-waktu. Cek nomor yang berlaku di
+   <https://www.callmebot.com/blog/free-api-whatsapp-messages/>. Kalau
+   halaman itu menampilkan nomor bertanda bintang (`+34*********`) dengan
+   keterangan *"The bot is currently full"*, artinya pendaftaran baru sedang
+   ditutup dan API key tidak akan dikirim sampai slot terbuka lagi — bukan
+   kesalahan konfigurasi.
+
+3. Sudah pernah mendaftar tapi lupa API key-nya? Kirim `Recover APIKey` ke
+   bot yang sama.
+
+4. Buka halaman **SYNC** → isi nomor (format `6281234567890`, tanpa `+` dan
    tanpa `0` di depan) dan API key → **SAVE REMINDER**.
-4. Tekan **SEND TEST** untuk memastikan pesan benar-benar masuk.
+
+5. Tekan **SEND TEST**. Statusnya berubah dari *"Menunggu konfirmasi..."*
+   menjadi hasil sebenarnya: hijau kalau gateway menerima, merah dengan
+   alasan dari CallMeBot kalau ditolak.
 
 Jadwal bawaan: **H-3, H-1, dan hari H pada 08:00 WIB**. Bisa diubah ke
 H-1/hari H atau hari H saja.
@@ -473,8 +496,14 @@ H-1/hari H atau hari H saja.
 
 - **CallMeBot membalas HTTP 201 walaupun gagal.** Pesan errornya ada di body
   (`ERROR: apikey can not be empty...`). Karena itu `refresh_reminder_status()`
-  memeriksa isi respons, bukan hanya kode HTTP — tanpa ini UI akan
-  melaporkan "sent" untuk pesan yang sebenarnya ditolak.
+  dan `reminder_last_test()` memeriksa isi respons, bukan hanya kode HTTP —
+  tanpa ini UI akan melaporkan "sent" untuk pesan yang sebenarnya ditolak.
+- **SEND TEST tidak bisa menunggu di dalam fungsi database.** `pg_net`
+  asinkron: `net.http_get()` hanya menjadwalkan request lalu langsung
+  kembali. Menunggu dengan `pg_sleep()` juga tidak mungkin karena peran
+  `anon` punya `statement_timeout = 3s`. Karena itu hasilnya diambil
+  terpisah oleh `reminder_last_test()`, yang dipanggil browser tiap detik
+  sampai maksimal ~15 detik.
 - **Pesan harus di-percent-encode.** Dikirim lewat query string GET, jadi
   `&`, `#`, dan baris baru akan memotong URL. Ada `url_encode()` untuk itu.
 - **Anti-dobel** lewat `unique (task_id, offset_days)`. Cron yang berjalan
@@ -485,6 +514,18 @@ H-1/hari H atau hari H saja.
 - **`days_before` dibandingkan dengan jam lokal** `Asia/Jakarta`, bukan jam
   server. Cron berjalan tiap jam; fungsi pengirim sendiri yang memutuskan
   apakah jam lokal sudah sama dengan `send_hour`.
+
+### Batasan yang perlu disadari
+
+CallMeBot gratis, tapi **tidak resmi** dan tidak punya jaminan:
+
+- Hanya bisa mengirim ke nomor pemilik API key, satu arah (tidak bisa dibalas).
+- Ada batas kirim harian (~140 pesan).
+- Pendaftaran bisa ditutup saat kapasitas penuh (lihat langkah 2 di atas).
+- Nomor bot bisa berganti tanpa pemberitahuan.
+
+Kalau pengingat ini penting untuk nilai akademik, jangan jadikan satu-satunya
+pengingat. Fitur ini pelengkap, bukan pengganti kalender.
 
 ### Biaya
 

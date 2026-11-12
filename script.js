@@ -3712,11 +3712,59 @@ async function sendReminderTest() {
             ? data
             : "Pesan uji dikirim.";
 
+        // Pesan "belum diisi" / "gagal" berarti tidak ada yang
+        // dikirim — tidak perlu menunggu apa pun.
         const failed = /gagal|belum|tidak valid/i.test(message);
 
-        setReminderStatus(message, failed ? "error" : "success");
+        if (failed) {
 
-        showToast(message, failed ? "error" : "success");
+            setReminderStatus(message, "error");
+            showToast(message, "error");
+            return;
+
+        }
+
+        // Pengiriman lewat pg_net berjalan asinkron: fungsi di
+        // atas hanya menjadwalkan request. Hasil sebenarnya
+        // (diterima atau ditolak gateway) baru bisa dibaca
+        // beberapa detik kemudian lewat reminder_last_test().
+        setReminderStatus(message, "");
+
+        const final = await waitForReminderTest();
+
+        if (final?.status === "sent") {
+
+            const ok = "Pesan uji terkirim. Cek WhatsApp Anda sekarang.";
+
+            setReminderStatus(ok, "success");
+            showToast(ok, "success");
+
+        }
+        else if (final?.status === "failed") {
+
+            const detail = (final.detail || "").trim();
+
+            const gagal = detail
+                ? `Gagal mengirim: ${detail}`
+                : "Gagal mengirim. Periksa nomor dan API key.";
+
+            setReminderStatus(gagal, "error");
+            showToast("Pesan uji gagal dikirim.", "error");
+
+        }
+        else {
+
+            // Gateway belum menjawab dalam ~15 detik. Jangan
+            // mengaku berhasil; beri tahu apa adanya.
+            setReminderStatus(
+                "Belum ada konfirmasi dari gateway. Kalau chat tidak " +
+                "masuk dalam 1 menit, periksa nomor dan API key Anda.",
+                "error"
+            );
+
+            showToast("Belum ada konfirmasi dari gateway.", "error");
+
+        }
 
     }
     catch (error) {
@@ -3734,6 +3782,47 @@ async function sendReminderTest() {
         reminderTest.textContent = "SEND TEST";
 
     }
+
+}
+
+
+// Menanyakan hasil pesan uji sampai gateway menjawab atau
+// batas waktu habis. Dibatasi ~15 detik: CallMeBot biasanya
+// menjawab di bawah 5 detik, dan menunggu lebih lama hanya
+// membuat tombol terasa menggantung.
+async function waitForReminderTest() {
+
+    for (let i = 0; i < 15; i++) {
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        try {
+
+            const { data, error } = await supabaseClient.rpc(
+                "reminder_last_test"
+            );
+
+            if (error) throw new Error(error.message);
+
+            const row = Array.isArray(data) ? data[0] : data;
+
+            if (!row) return null;
+
+            if (row.status && row.status !== "queued") return row;
+
+        }
+        catch (error) {
+
+            // Fungsi belum ada di database (migrasi belum
+            // dijalankan). Berhenti diam-diam.
+            console.error(error);
+            return null;
+
+        }
+
+    }
+
+    return null;
 
 }
 

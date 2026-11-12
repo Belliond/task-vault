@@ -613,6 +613,18 @@ $$;
 -- Hasilnya dicatat di reminder_log dengan task_id NULL dan
 -- offset_days = -1 (baris uji), supaya UI bisa menampilkan
 -- apakah gateway benar-benar menerima pesan.
+--
+-- PENTING: fungsi ini TIDAK menunggu jawaban gateway.
+-- pg_net bersifat asinkron — net.http_get() hanya menjadwalkan
+-- request lalu langsung kembali. Menunggu di dalam fungsi juga
+-- tidak mungkin: peran `anon` di proyek ini punya
+-- statement_timeout = 3 detik, jadi pg_sleep() akan mematikan
+-- query sebelum jawaban datang.
+--
+-- Karena itu hasil sebenarnya diambil terpisah oleh
+-- reminder_last_test(), yang dipanggil browser beberapa saat
+-- kemudian. Tanpa pemisahan ini, tombol SEND TEST akan
+-- melaporkan "terkirim" padahal gateway menolak API key.
 create or replace function public.reminder_send_test()
 returns text
 language plpgsql
@@ -657,15 +669,90 @@ begin
         return 'Gagal mengirim: ' || sqlerrm;
     end;
 
-    -- Catat supaya refresh_reminder_status() bisa memperbarui
-    -- hasilnya. Baris uji memakai task_id NULL (tidak terikat
-    -- tugas), jadi unique (task_id, offset_days) tidak bentrok.
     insert into public.reminder_log
         (task_id, offset_days, status, detail, request_id)
     values
         (null, -1, 'queued', pesan, req_id);
 
-    return 'Pesan uji dikirim. Cek WhatsApp Anda dalam beberapa detik.';
+    return 'Pesan uji dikirim ke gateway. Menunggu konfirmasi...';
+
+end;
+$$;
+
+
+-- =========================================================
+--  HASIL PESAN UJI
+--  Dipanggil browser sesudah reminder_send_test(), sekali
+--  tiap detik, sampai statusnya tidak lagi 'queued'.
+--
+--  Aman dibuka untuk anon: hanya membaca satu baris uji milik
+--  channel ini sendiri, tidak menyentuh API key, dan tidak bisa
+--  memicu pengiriman apa pun.
+-- =========================================================
+
+create or replace function public.reminder_last_test()
+returns table (
+    status     text,
+    detail     text,
+    created_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    rid bigint;
+begin
+
+    select l.request_id
+      into rid
+      from public.reminder_log l
+     where l.task_id is null
+       and l.offset_days = -1
+     order by l.id desc
+     limit 1;
+
+    if rid is null then
+        return;
+    end if;
+
+    -- Salin jawaban gateway ke baris uji. Sama seperti
+    -- refresh_reminder_status(): kode 2xx saja tidak cukup,
+    -- karena CallMeBot membalas 201 walaupun gagal.
+    begin
+
+        update public.reminder_log l
+           set status = case
+                            when r.status_code not between 200 and 299 then 'failed'
+                            when coalesce(r.content, '') ~* '(^|\n)\s*ERROR' then 'failed'
+                            else 'sent'
+                        end,
+               detail = case
+                            when r.status_code not between 200 and 299 then
+                                'HTTP ' || r.status_code || ': '
+                                || left(coalesce(r.content, ''), 200)
+                            when coalesce(r.content, '') ~* '(^|\n)\s*ERROR' then
+                                left(regexp_replace(r.content, '<[^>]+>', '', 'g'), 200)
+                            else l.detail
+                        end
+          from net._http_response r
+         where r.id = l.request_id
+           and l.request_id = rid
+           and l.status = 'queued';
+
+    exception when others then
+        -- net._http_response belum ada / pg_net mati. Diamkan.
+        null;
+
+    end;
+
+    return query
+        select l.status, l.detail, l.created_at
+          from public.reminder_log l
+         where l.task_id is null
+           and l.offset_days = -1
+         order by l.id desc
+         limit 1;
 
 end;
 $$;
@@ -698,6 +785,7 @@ grant execute on function public.reminder_channel_get()      to anon, authentica
 grant execute on function public.reminder_channel_save(text, text, boolean, integer[], integer)
     to anon, authenticated;
 grant execute on function public.reminder_send_test()        to anon, authenticated;
+grant execute on function public.reminder_last_test()        to anon, authenticated;
 
 
 -- =========================================================
