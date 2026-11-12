@@ -782,19 +782,42 @@
                      Bagian ini hanya mengatur APA yang disinkronkan.
                 ============================================== -->
 
+                <div class="sync-section-head">
+
+                    <span class="sync-section-index" aria-hidden="true">
+                        01
+                    </span>
+
+                    <div class="sync-section-text">
+
+                        <h3 class="sync-section-title">
+                            SINKRONISASI OTOMATIS
+                        </h3>
+
+                        <span class="sync-section-note">
+                            server yang bekerja · atur sekali, berlaku terus
+                        </span>
+
+                    </div>
+
+                    <span class="sync-section-rule" aria-hidden="true"></span>
+
+                </div>
+
+
                 <div class="sync-card sync-card-wide" id="autoSyncCard">
 
                     <div class="sync-card-head">
-
-                        <span class="sync-badge">
-                            SINKRONISASI OTOMATIS
-                        </span>
 
                         <span
                             id="autoSyncBadge"
                             class="sync-badge sync-badge-live"
                         >
                             AKTIF
+                        </span>
+
+                        <span class="sync-badge sync-badge-cyan">
+                            TIAP 4 JAM
                         </span>
 
                     </div>
@@ -869,41 +892,94 @@
                             </p>
                         </div>
 
-                        <div class="filter-actions">
+                    </div>
 
-                            <button
-                                type="button"
-                                id="autoSyncRefreshCourses"
-                                class="mini-button"
-                            >
-                                ⟳ MUAT ULANG DAFTAR KELAS
-                            </button>
 
-                            <button
-                                type="button"
-                                id="autoSyncSaveFilter"
-                                class="sync-button sync-button-small"
-                                disabled
-                            >
-                                SIMPAN PILIHAN
-                            </button>
+                    <!-- Filter mata kuliah Moodle -->
 
+                    <div class="filter-block">
+
+                        <div class="section-label">
+                            // MATA KULIAH MOODLE YANG IKUT DISINKRONKAN
                         </div>
 
+                        <p class="input-hint filter-hint">
+                            Mata kuliah yang dicentang ikut disinkronkan. Yang
+                            tidak dicentang diabaikan, dan tugasnya yang sudah
+                            tersimpan dihapus pada sync berikutnya.
+                        </p>
+
                         <div
-                            id="autoSyncFilterStatus"
-                            class="sync-status"
-                            role="status"
-                            aria-live="polite"
-                        ></div>
+                            id="autoSyncMoodleList"
+                            class="course-list filter-course-list"
+                        >
+                            <p class="filter-empty">
+                                Memuat daftar mata kuliah…
+                            </p>
+                        </div>
 
                     </div>
+
+
+                    <!-- Satu tombol untuk kedua daftar -->
+
+                    <div class="filter-actions">
+
+                        <button
+                            type="button"
+                            id="autoSyncRefreshCourses"
+                            class="mini-button"
+                        >
+                            ⟳ MUAT ULANG DAFTAR
+                        </button>
+
+                        <button
+                            type="button"
+                            id="autoSyncSaveFilter"
+                            class="sync-button sync-button-small"
+                            disabled
+                        >
+                            SIMPAN PILIHAN
+                        </button>
+
+                    </div>
+
+                    <div
+                        id="autoSyncFilterStatus"
+                        class="sync-status"
+                        role="status"
+                        aria-live="polite"
+                    ></div>
 
                 </div>
 
 
-                <div class="sync-divider">
-                    <span>MANUAL</span>
+                <!-- =============================================
+                     2. MANUAL
+                     Dua kartu lama: hubungkan akun sendiri dari
+                     browser. Tetap ada untuk sync sekali-kali.
+                ============================================== -->
+
+                <div class="sync-section-head sync-section-head-manual">
+
+                    <span class="sync-section-index" aria-hidden="true">
+                        02
+                    </span>
+
+                    <div class="sync-section-text">
+
+                        <h3 class="sync-section-title">
+                            MANUAL
+                        </h3>
+
+                        <span class="sync-section-note">
+                            dari browser ini · token tersimpan lokal
+                        </span>
+
+                    </div>
+
+                    <span class="sync-section-rule" aria-hidden="true"></span>
+
                 </div>
 
 

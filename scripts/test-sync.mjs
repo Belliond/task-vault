@@ -14,6 +14,7 @@ import {
     tanggalWib,
     tanggalWibDariUtc,
     susunBarisClassroom,
+    cariUsang,
     cariUsangClassroom,
     saringKelasClassroom,
     petikToken
@@ -223,8 +224,62 @@ cek(
     "2026-11-16"
 );
 
-console.log("\n=== saringKelasClassroom ===");
+console.log("\n=== cariUsang dengan mata kuliah dikecualikan ===");
 
+// Baris Moodle dari mata kuliah yang tidak dicentang di halaman
+// web harus ikut dibersihkan, bukan tertinggal di daftar.
+const barisMoodle = [
+    { id: 1, external_id: "assign:1016:1795", deadline: "2026-12-01" },
+    { id: 2, external_id: "assign:968:2001", deadline: "2026-12-01" },
+    { id: 3, external_id: "gc:876689741003:123", deadline: "2026-12-01" }
+];
+
+cek(
+    "tanpa filter: tidak ada yang usang",
+    cariUsang({
+        existing: barisMoodle,
+        idTerpilih: null,
+        idKecuali: new Set(),
+        hariIni: "2026-11-13"
+    }).map((r) => r.id),
+    []
+);
+
+cek(
+    "mata kuliah 968 dikecualikan: barisnya dibuang",
+    cariUsang({
+        existing: barisMoodle,
+        idTerpilih: null,
+        idKecuali: new Set(["968"]),
+        hariIni: "2026-11-13"
+    }).map((r) => r.id),
+    [2]
+);
+
+// Baris Classroom TIDAK boleh ikut terhapus oleh filter Moodle.
+cek(
+    "baris classroom tidak tersentuh",
+    cariUsang({
+        existing: barisMoodle,
+        idTerpilih: null,
+        idKecuali: new Set(["968"]),
+        hariIni: "2026-11-13"
+    }).some((r) => String(r.external_id).startsWith("gc:")),
+    false
+);
+
+cek(
+    "hanya + kecuali digabung",
+    cariUsang({
+        existing: barisMoodle,
+        idTerpilih: new Set(["1016"]),
+        idKecuali: new Set(["968"]),
+        hariIni: "2026-11-13"
+    }).map((r) => r.id),
+    [2]
+);
+
+console.log("\n=== saringKelasClassroom ===");
 // Kelas lama yang masih ACTIVE di Google pernah ikut tersync
 // dan memunculkan "PBO RA 2026" di halaman web. Filter ini
 // yang mencegahnya terulang.

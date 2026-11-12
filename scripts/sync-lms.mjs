@@ -239,10 +239,11 @@ export function susunBaris({
 // Dua alasan sebuah baris dianggap usang:
 //   1. deadline-nya sudah lewat
 //   2. mata kuliahnya tidak lagi ikut disinkronkan (hanya
-//      kalau daftar mata kuliah dibatasi lewat MOODLE_COURSE_IDS)
+//      kalau daftar mata kuliah dibatasi lewat MOODLE_COURSE_IDS
+//      atau filter dari halaman web)
 //
 // Baris dari sumber lain (classroom) tidak pernah disentuh.
-export function cariUsang({ existing, idTerpilih, hariIni }) {
+export function cariUsang({ existing, idTerpilih, idKecuali, hariIni }) {
 
     const usang = [];
 
@@ -255,6 +256,15 @@ export function cariUsang({ existing, idTerpilih, hariIni }) {
         const idCourse = bagian[1];
 
         if (idTerpilih && !idTerpilih.has(String(idCourse))) {
+
+            usang.push(row);
+            continue;
+
+        }
+
+        // Mata kuliah yang dikecualikan juga dibersihkan,
+        // supaya tugasnya tidak tertinggal di daftar.
+        if (idKecuali && idKecuali.has(String(idCourse))) {
 
             usang.push(row);
             continue;
@@ -571,6 +581,51 @@ async function supabaseGet({ url, key }, query) {
 }
 
 
+// Simpan daftar mata kuliah Moodle yang terlihat server ke
+// database, supaya panel filter di halaman web bisa
+// menampilkannya tanpa token di browser.
+async function simpanDaftarMatkul({ url, key }, courses) {
+
+    if (!courses?.length) {
+        return;
+    }
+
+    const baris = courses.map((c) => ({
+        course_id: String(c.id),
+        name: String(c.fullname || c.shortname || `Course ${c.id}`),
+        seen_at: new Date().toISOString()
+    }));
+
+    try {
+
+        await ambilJson(
+            rapikanUrl(url) + "/rest/v1/moodle_courses?on_conflict=course_id",
+            {
+                method: "POST",
+                headers: {
+                    apikey: key,
+                    Authorization: "Bearer " + key,
+                    "Content-Type": "application/json",
+                    Prefer: "resolution=merge-duplicates,return=minimal"
+                },
+                body: JSON.stringify(baris)
+            }
+        );
+
+        console.log(`Daftar   : ${baris.length} mata kuliah disimpan untuk halaman web`);
+
+    }
+    catch (error) {
+
+        console.log(
+            "Daftar   : gagal disimpan (" + error.message.slice(0, 120) + ")"
+        );
+
+    }
+
+}
+
+
 // Simpan daftar kelas yang terlihat server ke database.
 //
 // Halaman web memakai ini untuk menampilkan pilihan filter,
@@ -635,7 +690,7 @@ async function ambilPengaturanSync({ url, key }) {
     try {
 
         const data = await ambilJson(
-            rapikanUrl(url) + "/rest/v1/sync_settings?select=classroom_exclude,classroom_only,updated_at&id=eq.1",
+            rapikanUrl(url) + "/rest/v1/sync_settings?select=classroom_exclude,classroom_only,moodle_only,moodle_exclude,updated_at&id=eq.1",
             {
                 headers: {
                     apikey: key,
@@ -931,9 +986,30 @@ async function main() {
 
     const batasi = String(env.MOODLE_COURSE_IDS || "").trim();
 
-    const idTerpilih = batasi
-        ? new Set(batasi.split(",").map((s) => s.trim()).filter(Boolean))
+    // Filter Moodle: GitHub Secrets menang bila diisi, kalau
+    // tidak pakai pengaturan dari halaman web.
+    const pengaturanAwal = await ambilPengaturanSync(supabase);
+
+    const mentahMoodleHanya = String(
+        batasi || pengaturanAwal?.moodle_only || ""
+    ).trim();
+
+    const mentahMoodleKecuali = String(
+        env.MOODLE_EXCLUDE_COURSES || pengaturanAwal?.moodle_exclude || ""
+    ).trim();
+
+    const idTerpilih = mentahMoodleHanya
+        ? new Set(mentahMoodleHanya.split(",").map((s) => s.trim()).filter(Boolean))
         : null;
+
+    const idMoodleKecuali = new Set(
+        mentahMoodleKecuali.split(",").map((s) => s.trim()).filter(Boolean)
+    );
+
+    console.log(
+        `Filter   : moodle hanya="${mentahMoodleHanya || "(kosong)"}" ` +
+        `kecuali="${mentahMoodleKecuali || "(kosong)"}"`
+    );
 
     const hariIni = hariIniWib();
 
@@ -982,6 +1058,7 @@ async function main() {
                 moodle,
                 supabase,
                 idTerpilih,
+                idMoodleKecuali,
                 hariIni,
                 dryRun,
                 tokenMentah,
@@ -1072,6 +1149,7 @@ async function syncMoodle({
     moodle,
     supabase,
     idTerpilih,
+    idMoodleKecuali,
     hariIni,
     dryRun,
     tokenMentah,
@@ -1157,15 +1235,28 @@ async function syncMoodle({
             course.fullname || course.shortname || `Course ${course.id}`;
     }
 
-    const dipakai = idTerpilih
-        ? courses.filter((c) => idTerpilih.has(String(c.id)))
-        : courses;
+    // Daftar mata kuliah disimpan supaya panel filter di
+    // halaman web bisa menampilkannya tanpa token Moodle.
+    await simpanDaftarMatkul(supabase, courses);
+
+    const dipakai = courses
+        .filter((c) => !idTerpilih || idTerpilih.has(String(c.id)))
+        .filter((c) => !idMoodleKecuali.has(String(c.id)));
 
     console.log(`Matkul   : ${dipakai.length} dari ${courses.length} diikuti`);
 
+    if (idMoodleKecuali.size && dipakai.length !== courses.length) {
+        const dibuang = courses.filter((c) => idMoodleKecuali.has(String(c.id)));
+        for (const c of dibuang) {
+            console.log(`           - dilewati: ${c.fullname || c.id} (id ${c.id})`);
+        }
+    }
+
     if (dipakai.length === 0) {
         throw new Error(
-            "MOODLE_COURSE_IDS tidak cocok dengan mata kuliah mana pun."
+            "Semua mata kuliah Moodle tersaring. Periksa filter " +
+            "MOODLE_COURSE_IDS / MOODLE_EXCLUDE_COURSES, atau centang " +
+            "minimal satu mata kuliah di halaman Sync."
         );
     }
 
@@ -1214,7 +1305,7 @@ async function syncMoodle({
             "select=id,external_id,deadline&source=eq.moodle"
         );
 
-        const usang = cariUsang({ existing, idTerpilih, hariIni });
+        const usang = cariUsang({ existing, idTerpilih, idKecuali: idMoodleKecuali, hariIni });
 
         console.log(
             `\nAkan menghapus ${usang.length} baris usang dari ` +
@@ -1252,7 +1343,7 @@ async function syncMoodle({
         "select=id,external_id,deadline&source=eq.moodle"
     );
 
-    const usang = cariUsang({ existing, idTerpilih, hariIni });
+    const usang = cariUsang({ existing, idTerpilih, idKecuali: idMoodleKecuali, hariIni });
 
     if (usang.length) {
 

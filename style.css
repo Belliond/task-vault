@@ -1536,7 +1536,7 @@ button {
    tidak perlu ikut grid dua kolom. */
 .sync-card-wide {
 
-    margin-top: 45px;
+    margin-top: 0;
 
 }
 
@@ -1548,28 +1548,125 @@ button {
 }
 
 
-/* Garis pemisah antara bagian otomatis dan manual. */
-.sync-divider {
+/* =========================================================
+   SUBJUDUL BAGIAN SYNC (01 OTOMATIS / 02 MANUAL)
+
+   Dulu berupa garis tipis dengan teks kecil di tengah — terlalu
+   ringkih untuk tema terminal dan mudah terlewat. Sekarang tiap
+   bagian dibuka oleh blok nomor bergaris tegas (bahasa visual
+   neobrutalism yang sama dengan badge dan kartu), judul mono
+   berjarak lebar, keterangan satu baris, lalu garis putus-putus
+   yang memanjang mengisi sisa lebar.
+========================================================= */
+
+.sync-section-head {
 
     display: flex;
     align-items: center;
     gap: 16px;
-    margin: 42px 0 0;
-    font-family: var(--ff-mono);
-    font-size: 11px;
-    letter-spacing: 3px;
-    color: var(--muted);
+    margin: 46px 0 20px;
 
 }
 
 
-.sync-divider::before,
-.sync-divider::after {
+.sync-section-index {
 
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--border);
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--border);
+    background: var(--green-soft);
+    box-shadow: var(--shadow-hard-sm);
+    color: var(--green);
+    font-family: var(--ff-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+
+}
+
+
+.sync-section-text {
+
+    flex: 0 1 auto;
+    min-width: 0;
+
+}
+
+
+.sync-section-title {
+
+    margin: 0;
+    font-family: var(--ff-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    line-height: 1.3;
+    color: var(--text);
+
+}
+
+
+.sync-section-note {
+
+    display: block;
+    margin-top: 4px;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    line-height: 1.5;
+    color: var(--text-soft);
+
+}
+
+
+/* Garis pengisi: putus-putus, bukan garis 1px penuh, supaya
+   terasa seperti jalur data dan bukan pemisah dokumen biasa. */
+.sync-section-rule {
+
+    flex: 1 1 auto;
+    min-width: 30px;
+    height: 3px;
+    background-image: repeating-linear-gradient(
+        90deg,
+        var(--border) 0 12px,
+        transparent 12px 20px
+    );
+    opacity: 0.65;
+
+}
+
+
+/* Bagian manual memakai aksen cyan agar beda peran langsung
+   terbaca: hijau = server, cyan = browser ini. */
+.sync-section-head-manual .sync-section-index {
+
+    border-color: var(--cyan);
+    background: rgba(79, 230, 255, 0.1);
+    color: var(--cyan);
+
+}
+
+
+.sync-section-head-manual .sync-section-rule {
+
+    background-image: repeating-linear-gradient(
+        90deg,
+        var(--cyan) 0 12px,
+        transparent 12px 20px
+    );
+
+}
+
+
+.sync-badge-cyan {
+
+    color: var(--cyan);
+    border-color: rgba(79, 230, 255, 0.45);
+    background: rgba(79, 230, 255, 0.08);
 
 }
 
@@ -4039,6 +4136,47 @@ button {
     .form-card {
 
         padding: 24px 17px;
+
+    }
+
+
+    /* Subjudul bagian sync: nomor lebih kecil dan jarak dirapatkan
+       supaya judul mono berjarak lebar tidak memaksa dua baris. */
+
+    .sync-section-head {
+
+        gap: 12px;
+
+        margin: 34px 0 16px;
+
+    }
+
+
+    .sync-section-index {
+
+        width: 34px;
+
+        height: 34px;
+
+        font-size: 11px;
+
+    }
+
+
+    .sync-section-title {
+
+        font-size: 11px;
+
+        letter-spacing: 2.5px;
+
+    }
+
+
+    .sync-section-note {
+
+        font-size: 9px;
+
+        letter-spacing: 1px;
 
     }
 

@@ -27,6 +27,14 @@ name: Sync LMS
 #      CLASSROOM_SYNC_CLIENT_SECRET   opsional
 #      CLASSROOM_SYNC_REFRESH_TOKEN   opsional
 #      CLASSROOM_EXCLUDE_COURSES      opsional, mis. "PBO RA 2026"
+#      CLASSROOM_COURSE_IDS           opsional, kebalikan dari di atas
+#      MOODLE_COURSE_IDS              opsional, mis. "968,1016"
+#      MOODLE_EXCLUDE_COURSES         opsional, mis. "968"
+#
+#  Filter kelas/matkul biasanya diatur dari halaman web (tabel
+#  sync_settings), jadi secret di atas TIDAK wajib diisi. Kalau
+#  diisi, secret menang atas nilai database — berguna untuk
+#  mengunci pengaturan dari sisi server.
 #
 #  Client Classroom untuk sync HARUS bertipe "Desktop app" dan
 #  HARUS berbeda dari CLASSROOM_CLIENT_ID milik situs. Client
@@ -87,7 +95,9 @@ jobs:
       # external_id). Kalau ini gagal, sync tidak perlu jalan:
       # hasilnya pasti salah tanggal.
       - name: Test
-        run: node scripts/test-sync.mjs
+        run: |
+          node scripts/test-sync.mjs
+          node scripts/test-filter-ui.mjs
 
       - name: Check required secrets
         env:
@@ -123,6 +133,8 @@ jobs:
           CLASSROOM_SYNC_REFRESH_TOKEN: ${{ secrets.CLASSROOM_SYNC_REFRESH_TOKEN }}
           CLASSROOM_EXCLUDE_COURSES: ${{ secrets.CLASSROOM_EXCLUDE_COURSES }}
           CLASSROOM_COURSE_IDS: ${{ secrets.CLASSROOM_COURSE_IDS }}
+          MOODLE_COURSE_IDS: ${{ secrets.MOODLE_COURSE_IDS }}
+          MOODLE_EXCLUDE_COURSES: ${{ secrets.MOODLE_EXCLUDE_COURSES }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
