@@ -352,6 +352,25 @@ async function mulaiWhatsApp() {
 //  Telegram -> WhatsApp
 // ---------------------------------------------------------
 
+// Perintah yang datang saat WhatsApp masih menyambung tidak
+// boleh langsung ditolak: pesan bisa tertahan di antrean
+// Telegram (mis. HP baru hidup lagi) dan tiba sebelum
+// koneksi WhatsApp siap. Tunggu sebentar, baru menyerah.
+async function tungguSiap(ms = 30000) {
+
+    const mulai = Date.now();
+
+    while (!siap && Date.now() - mulai < ms) {
+
+        await tidur(500);
+
+    }
+
+    return siap;
+
+}
+
+
 async function prosesTelegram(pesan) {
 
     const teks = String(pesan.text || "");
@@ -417,9 +436,12 @@ async function prosesTelegram(pesan) {
 
         }
 
-        if (!siap) {
+        if (!(await tungguSiap())) {
 
-            await kirimTelegram("WhatsApp belum tersambung. Coba lagi sebentar.");
+            await kirimTelegram(
+                `WhatsApp belum tersambung, ${NAMA}. ` +
+                `Coba lagi sebentar.`
+            );
 
             return;
 
@@ -464,9 +486,20 @@ async function prosesTelegram(pesan) {
 
         const jid = jidDariNomor(tujuanDefault);
 
-        if (!jid || !siap) {
+        if (!jid) {
 
-            await kirimTelegram("WhatsApp belum siap.");
+            await kirimTelegram("Nomor tujuan di .env tidak valid.");
+
+            return;
+
+        }
+
+        if (!(await tungguSiap())) {
+
+            await kirimTelegram(
+                `WhatsApp belum tersambung, ${NAMA}. ` +
+                `Coba lagi sebentar.`
+            );
 
             return;
 
@@ -526,9 +559,16 @@ async function putarTelegram() {
 
             for (const update of data.result || []) {
 
+                const pesan = update.message;
+
+
+                // Konfirmasi (maju) SELALU dilakukan, apa pun
+                // isinya. Kalau offset tidak dimajukan, update
+                // yang sama diambil terus dan antrean tidak
+                // pernah habis — pesan berikutnya tidak pernah
+                // sampai.
                 offsetTelegram = update.update_id + 1;
 
-                const pesan = update.message;
 
                 if (!pesan) continue;
 

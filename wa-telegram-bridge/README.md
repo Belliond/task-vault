@@ -253,6 +253,35 @@ Kalau di `.env` diisi `WA_BRIDGE_TUJUAN=08123456789`, maka pesan Telegram tanpa
 
 ---
 
+## Kalau HP sempat mati atau internet mati
+
+Pesan Telegram **tidak hilang** selama HP hidup lagi dalam **24 jam**.
+
+Telegram menyimpan pesan yang belum diambil bot. Begitu jembatan hidup dan
+tersambung ke internet, semua pesan yang tertunda diproses berurutan.
+
+Contoh: pesan kamu kirim jam 10.00, HP baru dapat internet jam 11.00 — pesan itu
+tetap diproses jam 11.00, terkirim ke WhatsApp, dan kamu dapat balasan
+`Terkirim ke ...`.
+
+Batasannya:
+
+| Situasi | Hasil |
+|---|---|
+| HP hidup lagi < 24 jam | Pesan tertunda diproses semua, berurutan |
+| HP hidup lagi > 24 jam | Pesan lama **dibuang Telegram**, tidak bisa diselamatkan |
+| Lebih dari 100 pesan tertunda | Diproses 100 per putaran, sisanya menyusul |
+| Pesan tertunda datang saat WhatsApp masih menyambung | Jembatan menunggu sampai 30 detik, tidak langsung menolak |
+
+Ini perilaku server Telegram, bukan setelan jembatan — tidak ada cara
+menyimpan lebih lama dari 24 jam lewat Bot API.
+
+Yang **tidak** tertunda: pesan WhatsApp. Kalau jembatan mati, pesan WhatsApp
+yang masuk saat itu tidak diteruskan (tidak ada riwayat). WhatsApp hanya
+mengirim event ke klien yang sedang tersambung.
+
+---
+
 ## Kalau ada masalah
 
 **QR tidak muncul**
@@ -286,13 +315,19 @@ tail -f bridge.log
 ## Untuk pengembang
 
 ```bash
-npm test          # 21 uji fungsi murni, tanpa jaringan
-node test-e2e.mjs # uji alur penuh dengan WhatsApp & Telegram tiruan
+npm test           # 21 uji fungsi murni, tanpa jaringan
+node test-e2e.mjs  # alur penuh dengan WhatsApp & Telegram tiruan
+node test-tertunda.mjs  # pesan tertunda: dikirim saat jembatan mati
 ```
 
 `test-e2e.mjs` mengganti paket `baileys` dengan tiruan dan menjalankan Bot API
 Telegram palsu di localhost. Jadi seluruh alur (pesan masuk, kiriman keluar,
 perintah, penyaringan chat asing) teruji tanpa menyentuh akun sungguhan.
+
+`test-tertunda.mjs` meniru "pesan jam 10, internet hidup jam 11": update
+ditahan di antrean server, jembatan baru dinyalakan belakangan, dan harus tetap
+memproses pesan lama — termasuk memastikan tidak dobel dan tidak ada yang
+terlewat saat dua pesan tertahan sekaligus.
 
 Berkas:
 
@@ -302,6 +337,7 @@ Berkas:
 | `lib.mjs` | Fungsi murni: parser, normalisasi nomor, format pesan |
 | `test.mjs` | Uji fungsi murni |
 | `test-e2e.mjs` | Uji alur penuh dengan tiruan |
+| `test-tertunda.mjs` | Uji pesan tertunda (jembatan mati lalu hidup) |
 
 ---
 
