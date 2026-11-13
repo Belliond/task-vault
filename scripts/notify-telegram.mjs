@@ -217,7 +217,7 @@ export function susunPesan(baru, dekat, todayKey) {
 
         }
 
-        bagian.push("<b>TUGAS BARU</b>\n" + baris.join("\n"));
+        bagian.push("tugas baru:\n" + baris.join("\n"));
 
     }
 
@@ -240,13 +240,13 @@ export function susunPesan(baru, dekat, todayKey) {
 
         }
 
-        bagian.push("<b>DEADLINE DEKAT</b>\n" + baris.join("\n"));
+        bagian.push("yang udah deket:\n" + baris.join("\n"));
 
     }
 
     if (bagian.length === 0) return "";
 
-    return "<b>Hai, ini update tugas kamu ya</b>\n\n" + bagian.join("\n\n");
+    return "pagi. ini update tugas kamu\n\n" + bagian.join("\n\n");
 
 }
 
@@ -261,8 +261,8 @@ function jamTampil(task) {
 
 
 // Pesan "3 jam sebelum deadline".
-// Nada sengaja dibuat hangat tapi singkat: satu kalimat
-// pengingat, tanpa emoji berlebihan.
+// Ditulis seperti orang ngingetin teman: pendek, huruf kecil,
+// tanpa pembuka basa-basi.
 export function susunPesanDeadline(daftar, now = new Date()) {
 
     if (daftar.length === 0) return "";
@@ -271,14 +271,14 @@ export function susunPesanDeadline(daftar, now = new Date()) {
 
         const sisa = Math.max(1, Math.round(sisaJam(task, now)));
 
-        return `• ${labelTugas(task)}\n` +
-            `  deadline jam ${jamTampil(task)}, sekitar ${sisa} jam lagi`;
+        return `• ${labelTugas(task)} — jam ${jamTampil(task)}, ` +
+            `sisa ${sisa} jam`;
 
     });
 
-    return "<b>Reminder ya</b>\n\n" +
-        baris.join("\n\n") +
-        "\n\nMasih ada waktu kok, jangan lupa dikerjakan ya.";
+    return "deadline udah deket\n\n" +
+        baris.join("\n") +
+        "\n\nkalau udah beres abaikan aja";
 
 }
 
@@ -302,28 +302,24 @@ export function susunDigest(mingguIni, selesaiLalu) {
 
         }
 
-        bagian.push("<b>MINGGU INI</b>\n" + baris.join("\n"));
+        bagian.push("minggu ini:\n" + baris.join("\n"));
 
     }
     else {
 
-        bagian.push(
-            "<b>MINGGU INI</b>\n" +
-            "Belum ada deadline minggu ini, santai dulu."
-        );
+        bagian.push("minggu ini kosong, aman.");
 
     }
 
 
     bagian.push(
-        "<b>SELESAI MINGGU LALU</b>\n" +
-        (selesaiLalu.length > 0
-            ? `${selesaiLalu.length} tugas sudah kamu selesaikan, keren.`
-            : "Belum ada yang tercatat selesai, semangat minggu ini.")
+        selesaiLalu.length > 0
+            ? `minggu lalu kamu kelar ${selesaiLalu.length} tugas.`
+            : "minggu lalu belum ada yang kelar, gapapa."
     );
 
 
-    return "<b>Selamat pagi, Senin lagi</b>\n\n" + bagian.join("\n\n");
+    return "senin lagi.\n\n" + bagian.join("\n\n");
 
 }
 
@@ -577,7 +573,7 @@ async function main() {
     if (process.argv.includes("--uji")) {
 
         await kirimTelegram(
-            "<b>Halo</b>\n\nTes koneksi berhasil. Aku siap bantu ingetin tugas kamu."
+            "tes. kalau pesan ini masuk, botnya jalan."
         );
 
         console.log("Pesan tes terkirim.");

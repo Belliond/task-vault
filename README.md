@@ -769,16 +769,33 @@ Tugas yang sudah dikirim ke Moodle/Classroom (`submitted`/`graded`) tidak
 diingatkan lagi.
 
 **Nada pesan** diatur di `scripts/notify-telegram.mjs` (fungsi `susunPesan`,
-`susunPesanDeadline`, `susunDigest`). Gaya saat ini: hangat, singkat, tanpa
-emoji dan tanpa panggilan sayang. Contoh:
+`susunPesanDeadline`, `susunDigest`). Gaya saat ini: seperti chat orang,
+huruf kecil, tanpa emoji, tanpa basa-basi. Contoh:
 
 ```
-Reminder ya
+deadline udah deket
 
-• Tugas 3 (Kriptografi)
-  deadline jam 23.59, sekitar 3 jam lagi
+• Tugas 3 (Kriptografi) — jam 23.59, sisa 3 jam
 
-Masih ada waktu kok, jangan lupa dikerjakan ya.
+kalau udah beres abaikan aja
+```
+
+```
+pagi. ini update tugas kamu
+
+yang udah deket:
+• H-1 · 17 Nov 2026
+  Tugas 3 (Kriptografi)
+```
+
+```
+senin lagi.
+
+minggu ini:
+• Sel, 17 Nov 2026 · 23.59
+  Tugas 3 (Kriptografi)
+
+minggu lalu kamu kelar 3 tugas.
 ```
 
 **Setup (sekali saja)**

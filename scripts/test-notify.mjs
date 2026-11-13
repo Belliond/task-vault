@@ -107,9 +107,9 @@ uji("pesan memuat bagian baru, deadline, dan H-x", () => {
         "2026-11-13"
     );
 
-    assert.match(teks, /TUGAS BARU/);
+    assert.match(teks, /tugas baru:/);
     assert.match(teks, /Kriptografi \(RA\)/);
-    assert.match(teks, /DEADLINE DEKAT/);
+    assert.match(teks, /yang udah deket:/);
     assert.match(teks, /H-2/);
     assert.match(teks, /15 Nov 2026 · 23\.59/);
 
@@ -222,9 +222,9 @@ uji("pesan pengingat memuat jam dan sisa waktu", () => {
         new Date("2026-11-13T05:00:00Z")
     );
 
-    assert.match(teks, /Reminder ya/);
-    assert.match(teks, /deadline jam 15\.00/);
-    assert.match(teks, /sekitar 3 jam lagi/);
+    assert.match(teks, /deadline udah deket/);
+    assert.match(teks, /jam 15\.00/);
+    assert.match(teks, /sisa 3 jam/);
 
 });
 
@@ -241,11 +241,10 @@ uji("digest Senin memuat minggu ini dan minggu lalu", () => {
         [{}, {}, {}]
     );
 
-    assert.match(teks, /Senin/i);
-    assert.match(teks, /MINGGU INI/);
+    assert.match(teks, /senin lagi/i);
+    assert.match(teks, /minggu ini:/);
     assert.match(teks, /Sel, 17 Nov 2026 · 23\.59/);
-    assert.match(teks, /SELESAI MINGGU LALU/);
-    assert.match(teks, /3 tugas sudah kamu selesaikan/);
+    assert.match(teks, /kelar 3 tugas/);
 
 });
 
@@ -254,8 +253,8 @@ uji("digest tetap terkirim walau tidak ada tugas", () => {
 
     const teks = susunDigest([], []);
 
-    assert.match(teks, /Belum ada deadline minggu ini/);
-    assert.match(teks, /Belum ada yang tercatat selesai/);
+    assert.match(teks, /minggu ini kosong/);
+    assert.match(teks, /belum ada yang kelar/);
 
 });
 
