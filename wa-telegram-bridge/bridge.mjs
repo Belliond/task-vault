@@ -32,6 +32,8 @@ import {
     formatKeTelegram
 } from "./lib.mjs";
 
+import { buatAntrean, putuskan, tujuanAman } from "./outbox.mjs";
+
 
 const AKAR = path.dirname(fileURLToPath(import.meta.url));
 const FOLDER_AUTH = path.join(AKAR, "auth");
@@ -236,6 +238,25 @@ let qrTerakhir = "";
 // Tujuan default untuk /to tanpa argumen, dan untuk pesan
 // Telegram biasa yang tidak memakai /to.
 let tujuanDefault = String(env.WA_BRIDGE_TUJUAN || "").trim();
+
+
+// ---------------------------------------------------------
+//  Antrean notifikasi (GitHub Actions -> HP -> WhatsApp)
+//
+//  Notifikasi tugas disusun di server GitHub. Server itu
+//  tidak bisa memanggil HP, jadi pesannya dititipkan ke
+//  tabel wa_outbox. Di sini titipan itu diambil lalu
+//  dikirim ke nomor utama.
+// ---------------------------------------------------------
+
+const antrean = buatAntrean(env, log);
+
+const ANTREAN_JEDA_MS = Number(env.WA_BRIDGE_ANTREAN_JEDA_MS || 15000);
+
+const tujuanAntrean = tujuanAman(env);
+
+let antreanJalan = false;
+let antreanSibuk = false;
 
 
 async function mulaiWhatsApp() {
@@ -559,7 +580,8 @@ async function prosesTelegram(pesan) {
         await kirimTelegram(
             `WhatsApp : ${siap ? "tersambung" : "terputus"}\n` +
             `Nomor    : ${nomorSendiri || "-"}\n` +
-            `Tujuan   : ${tujuanDefault || "-"}`
+            `Tujuan   : ${tujuanDefault || "-"}\n` +
+            `Antrean  : ${antrean ? "aktif" : "tidak aktif (SUPABASE_URL/KEY kosong)"}`
         );
 
         return;
@@ -669,7 +691,24 @@ async function prosesTelegram(pesan) {
         }
         catch (error) {
 
-            await kirimTelegram(`Gagal mengirim: ${error.message}`);
+            // Kesalahan paling sering di sini: nomor tujuan
+            // tidak terdaftar di WhatsApp. Tanpa penjelasan,
+            // pesan galat mentah dari library bikin bingung.
+            const pesan = String(error?.message || error);
+
+            if (/not.?on.?whatsapp|not.?registered|item-not-found|404/i.test(pesan)) {
+
+                await kirimTelegram(
+                    `Gagal mengirim: ${tujuanDefault} tidak terdaftar di WhatsApp.\n` +
+                    `Cek nomornya di /status, atau kirim /to 62... untuk mencoba nomor lain.`
+                );
+
+            }
+            else {
+
+                await kirimTelegram(`Gagal mengirim: ${pesan}`);
+
+            }
 
         }
 
@@ -778,6 +817,135 @@ async function putarTelegram() {
 
 
 // ---------------------------------------------------------
+//  Antrean: ambil titipan notifikasi, kirim ke WhatsApp
+// ---------------------------------------------------------
+
+async function prosesAntrean() {
+
+    if (!antrean || !tujuanAntrean) return;
+
+    if (!siap) return;
+
+    if (antreanSibuk) return;
+
+    antreanSibuk = true;
+
+    try {
+
+        const jid = jidDariNomor(tujuanAntrean);
+
+        if (!jid) {
+
+            log("WA_BRIDGE_TUJUAN tidak valid:", tujuanAntrean);
+
+            return;
+
+        }
+
+        const daftar = await antrean.ambil(5);
+
+        for (const baris of daftar) {
+
+            const putusan = putuskan(baris);
+
+            if (putusan === "lewat") continue;
+
+
+            if (putusan === "kedaluwarsa") {
+
+                log(`antrean ${baris.id} kedaluwarsa, dilewati`);
+
+                await antrean.kedaluwarsa(
+                    baris.id,
+                    "lebih tua dari 24 jam"
+                );
+
+                continue;
+
+            }
+
+
+            try {
+
+                await sock.sendMessage(jid, {
+                    text: potong(baris.pesan, 4000)
+                });
+
+                await antrean.terkirim(baris.id);
+
+                log(
+                    `antrean ${baris.id} terkirim ke ${tujuanAntrean} ` +
+                    `(${String(baris.pesan).length} char)`
+                );
+
+            }
+            catch (error) {
+
+                const menyerah = await antrean.gagal(
+                    baris.id,
+                    baris.percobaan,
+                    error?.message || error
+                );
+
+                log(
+                    `antrean ${baris.id} gagal` +
+                    (menyerah ? " (menyerah)" : " (akan dicoba lagi)") +
+                    ":", error?.message || error
+                );
+
+            }
+
+        }
+
+    }
+    catch (error) {
+
+        log("antrean error:", error?.message || error);
+
+    }
+    finally {
+
+        antreanSibuk = false;
+
+    }
+
+}
+
+
+async function putarAntrean() {
+
+    if (!antrean) {
+
+        log("antrean WhatsApp tidak aktif: SUPABASE_URL / SUPABASE_KEY kosong.");
+
+        return;
+
+    }
+
+    if (!tujuanAntrean) {
+
+        log("antrean WhatsApp tidak aktif: WA_BRIDGE_TUJUAN kosong.");
+
+        return;
+
+    }
+
+    antreanJalan = true;
+
+    log(`antrean WhatsApp siap (tujuan ${tujuanAntrean}, tiap ${ANTREAN_JEDA_MS / 1000} detik)`);
+
+    while (antreanJalan) {
+
+        await prosesAntrean();
+
+        await tidur(ANTREAN_JEDA_MS);
+
+    }
+
+}
+
+
+// ---------------------------------------------------------
 //  Start
 // ---------------------------------------------------------
 
@@ -827,6 +995,8 @@ await mulaiWhatsApp();
 
 putarTelegram();
 
+putarAntrean();
+
 
 // Keluar dengan rapi supaya sesi tidak korup.
 for (const sinyal of ["SIGINT", "SIGTERM"]) {
@@ -836,6 +1006,7 @@ for (const sinyal of ["SIGINT", "SIGTERM"]) {
         log("berhenti...");
 
         telegramJalan = false;
+        antreanJalan = false;
 
         try { sock?.end(undefined); } catch {}
 

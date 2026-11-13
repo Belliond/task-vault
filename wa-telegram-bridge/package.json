@@ -7,7 +7,7 @@
   "main": "bridge.mjs",
   "scripts": {
     "start": "node bridge.mjs",
-    "test": "node test.mjs && node test-e2e.mjs && node test-tertunda.mjs"
+    "test": "node test.mjs && node test-antrean.mjs && node test-e2e.mjs && node test-tertunda.mjs"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",

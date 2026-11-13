@@ -410,7 +410,74 @@ Kalau di `.env` diisi `WA_BRIDGE_TUJUAN=08123456789`, maka pesan Telegram tanpa
 | `WA_BRIDGE_KE_TG` | `0` = jangan teruskan WhatsApp ke Telegram |
 | `WA_BRIDGE_KE_WA` | `0` = jangan terima perintah dari Telegram |
 | `WA_BRIDGE_ABAIKAN_DIRI` | `1` = pesan yang kamu kirim sendiri tidak diteruskan |
-| `WA_BRIDGE_TUJUAN` | Nomor default untuk pesan tanpa `/to` |
+| `WA_BRIDGE_TUJUAN` | Nomor tujuan: pesan tanpa `/to`, **dan** semua notifikasi tugas |
+| `WA_BRIDGE_PASANGAN` | Nomor WhatsApp yang ditautkan (untuk kode 8 digit) |
+| `SUPABASE_URL` | Alamat proyek Supabase, untuk membaca antrean notifikasi |
+| `SUPABASE_KEY` | Kunci publishable (memang publik, aman di HP) |
+| `WA_BRIDGE_ANTREAN_JEDA_MS` | Jeda antar-pemeriksaan antrean, default `15000` |
+
+---
+
+## Notifikasi tugas masuk WhatsApp
+
+Notifikasi tugas **tidak** dikirim dari HP. Penyusunnya jalan di GitHub Actions
+jam 08.00 WIB, dan runner GitHub tidak punya alamat yang bisa dihubungi HP.
+Karena itu pesannya dititipkan lebih dulu ke tabel `wa_outbox` di Supabase:
+
+```
+GitHub Actions (08.00 WIB)
+        ↓  baca tugas dari tabel tasks
+        ↓  susun pesan, saring yang sudah dikumpulkan
+   insert ke wa_outbox (status: menunggu)
+        ↓
+Jembatan di HP (tiap 15 detik)
+        ↓  ambil yang menunggu, terlama dulu
+        ↓  kirim lewat WhatsApp ke WA_BRIDGE_TUJUAN
+   update status: terkirim
+```
+
+Nomor pengirimnya nomor dummy (`WA_BRIDGE_PASANGAN`), penerimanya nomor
+utamamu. Jadi nomor utama hanya menerima pesan biasa — tidak menjalankan
+klien tidak resmi apa pun.
+
+**Tujuan tidak pernah dibaca dari tabel.** Jembatan selalu memakai
+`WA_BRIDGE_TUJUAN` di `.env`. Kalau kunci publishable bocor (memang publik di
+halaman web), penyusup paling jauh hanya bisa menitipkan teks ke nomor pemilik
+sendiri — tidak bisa memakai nomor dummy untuk mengirim ke orang lain.
+
+### Kalau HP mati saat notifikasi dikirim
+
+Pesan menunggu di antrean dan terkirim begitu HP hidup lagi — **selama belum
+lewat 24 jam**. Lewat dari itu ditandai `kedaluwarsa` dan tidak dikirim, karena
+"besok deadline" yang tiba dua hari kemudian justru menyesatkan.
+
+Kalau pengiriman gagal (mis. WhatsApp belum tersambung), dicoba lagi tiap 15
+detik sampai **3 kali**, lalu ditandai `gagal` dengan alasannya di kolom
+`galat`.
+
+### Menguji jalur ini
+
+Dari repo, picu workflow **Notify Tugas** → *Run workflow* → centang `uji` dan
+`tunggu`. Runner akan menitipkan pesan tes, lalu menunggu sampai jembatan di HP
+melaporkan `terkirim` (paling lama 90 detik). Hasilnya tertulis di log:
+
+```
+TERBUKTI: jembatan di HP sudah mengirim pesan ke WhatsApp pada ...
+```
+
+Kalau tertulis `BELUM TERKIRIM`, berarti jembatan di HP mati atau WhatsApp
+belum tersambung.
+
+### Memeriksa isi antrean
+
+```sql
+select id, status, percobaan, dibuat_at, terkirim_at, galat, pesan
+from wa_outbox
+order by id desc
+limit 10;
+```
+
+Atau lewat `/status` di Telegram — baris `Antrean` menunjukkan aktif atau tidak.
 
 ---
 

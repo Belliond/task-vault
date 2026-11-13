@@ -239,6 +239,11 @@ try {
         path.join(dirKerja, "lib.mjs")
     );
 
+    fs.copyFileSync(
+        path.join(AKAR, "outbox.mjs"),
+        path.join(dirKerja, "outbox.mjs")
+    );
+
     const tulisModul = (nama, isi) => {
 
         const folder = path.join(dirKerja, "node_modules", nama);

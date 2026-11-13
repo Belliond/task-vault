@@ -1,20 +1,31 @@
-name: Notify Telegram
+name: Notify Tugas
 
 # =========================================================
-#  Pesan ke Telegram:
+#  Notifikasi tugas, dikirim ke WhatsApp nomor utama.
+#
+#  Alurnya:
+#    1. Runner ini membaca tugas dari Supabase
+#    2. Pesan dititipkan ke tabel wa_outbox
+#    3. Jembatan di HP mengambil titipan itu dan
+#       mengirimnya lewat WhatsApp ke nomor utama
+#
+#  Runner GitHub tidak bisa memanggil HP secara langsung,
+#  jadi tabel antrean itulah perantaranya. Kalau HP sedang
+#  mati, pesan menunggu di antrean (maksimal 24 jam) dan
+#  terkirim begitu HP hidup lagi.
+#
+#  Jadwal:
 #    - 08.00 WIB tiap hari : tugas LMS baru + deadline
 #                            H-3 sampai H-1
 #    - Senin 08.00 WIB     : ditambah digest mingguan
-#                            (tugas minggu ini + selesai
-#                            minggu lalu)
 #    - tiap jam menit :05  : pengingat 3 jam sebelum
 #                            deadline (hanya tugas berjam)
 #
-#  Token bot hanya ada di secret runner, tidak pernah masuk
-#  halaman web.
+#  Telegram hanya salinan/arsip. Matikan dengan
+#  NOTIFY_TELEGRAM=0 kalau tidak perlu.
 #
-#  Secret: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-#          SUPABASE_URL, SUPABASE_KEY
+#  Secret: SUPABASE_URL, SUPABASE_KEY,
+#          TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 # =========================================================
 
 on:
@@ -39,6 +50,14 @@ on:
         description: "Kirim pesan tes saja"
         type: boolean
         default: false
+      tunggu:
+        description: "Pesan tes: tunggu bukti terkirim dari HP (90 detik)"
+        type: boolean
+        default: false
+      kirim_telegram:
+        description: "Kirim salinan ke Telegram juga"
+        type: boolean
+        default: true
 
 concurrency:
   group: notify-telegram
@@ -81,8 +100,21 @@ jobs:
             MODE=harian
           fi
 
+          # Saat dijalankan manual, kotak centang menentukan
+          # apakah salinan Telegram ikut dikirim. Pada jadwal
+          # otomatis, salinan selalu dikirim.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.kirim_telegram }}" != "true" ]; then
+              export NOTIFY_TELEGRAM=0
+            fi
+          fi
+
           if [ "${{ inputs.uji }}" = "true" ]; then
-            node scripts/notify-telegram.mjs --uji
+            if [ "${{ inputs.tunggu }}" = "true" ]; then
+              node scripts/notify-telegram.mjs --uji=tunggu
+            else
+              node scripts/notify-telegram.mjs --uji
+            fi
           elif [ "${{ inputs.dry_run }}" = "true" ]; then
             node scripts/notify-telegram.mjs --dry-run --mode=$MODE
           else

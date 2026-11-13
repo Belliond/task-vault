@@ -12,7 +12,8 @@ import {
     waktuDeadline,
     perluIngatDeadline,
     susunPesanDeadline,
-    susunDigest
+    susunDigest,
+    untukWhatsApp
 } from "./notify-telegram.mjs";
 
 let lulus = 0;
@@ -259,8 +260,47 @@ uji("digest tetap terkirim walau tidak ada tugas", () => {
 });
 
 
-uji("setiap pesan menyapa nama", () => {
+// WhatsApp tidak mengerti HTML. Tanpa ini, nama tugas dengan
+// "&" akan tampil "&amp;" di pesan WhatsApp.
+uji("escape HTML dibuka kembali untuk WhatsApp", () => {
 
+    assert.equal(
+        untukWhatsApp("&lt;b&gt;Bocor&lt;/b&gt; &amp; co"),
+        "<b>Bocor</b> & co"
+    );
+
+    // Teks biasa tidak berubah.
+    assert.equal(
+        untukWhatsApp("Laporan Praktikum 7 (RB)"),
+        "Laporan Praktikum 7 (RB)"
+    );
+
+    // Urutan penggantian penting: &amp; paling akhir, supaya
+    // "&amp;lt;" tidak berubah jadi "<".
+    assert.equal(untukWhatsApp("&amp;lt;"), "&lt;");
+
+});
+
+
+uji("pesan untuk WhatsApp bebas dari entitas HTML", () => {
+
+    const teks = susunPesan(
+        [{ course: "Riset & Metode", class_name: "RA", deadline: "2026-11-20" }],
+        [],
+        "2026-11-13"
+    );
+
+    assert.match(teks, /&amp;/);
+
+    const wa = untukWhatsApp(teks);
+
+    assert.match(wa, /Riset & Metode/);
+    assert.doesNotMatch(wa, /&amp;|&lt;|&gt;/);
+
+});
+
+
+uji("setiap pesan menyapa nama", () => {
     const nama = "Krisna";
 
     assert.match(

@@ -1,9 +1,15 @@
 // =========================================================
-//  NOTIFIKASI TELEGRAM
+//  NOTIFIKASI TUGAS
 //
 //  Dua jenis pesan, dikirim sekali sehari (08.00 WIB):
 //    1. Tugas LMS yang baru ditemukan sync (notified_at null)
 //    2. Tugas yang deadline-nya H-3 sampai H-1 dan belum selesai
+//
+//  KEMANA PESANNYA PERGI
+//  Tujuan utamanya WhatsApp. Runner GitHub tidak bisa
+//  menghubungi HP, jadi pesan dititipkan ke tabel
+//  wa_outbox, lalu jembatan yang jalan di HP mengambil dan
+//  mengirimnya ke nomor utama. Telegram hanya salinan.
 //
 //  Kenapa lewat GitHub Actions, bukan halaman web?
 //  Token bot Telegram adalah rahasia. Halaman statis tidak bisa
@@ -13,11 +19,16 @@
 //  Perintah:
 //      node scripts/notify-telegram.mjs
 //      node scripts/notify-telegram.mjs --dry-run
+//      node scripts/notify-telegram.mjs --uji
+//      node scripts/notify-telegram.mjs --uji=tunggu
 //
 //  Secret yang dibutuhkan:
-//      TELEGRAM_BOT_TOKEN   dari @BotFather
-//      TELEGRAM_CHAT_ID     id chat kamu (bisa negatif untuk grup)
-//      SUPABASE_URL, SUPABASE_KEY   sama seperti sync
+//      SUPABASE_URL, SUPABASE_KEY        (wajib)
+//      TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   (kalau NOTIFY_TELEGRAM=1)
+//
+//  Saklar tujuan (opsional, default 1):
+//      NOTIFY_WA=0         jangan titipkan ke antrean WhatsApp
+//      NOTIFY_TELEGRAM=0   jangan kirim salinan ke Telegram
 // =========================================================
 
 import path from "node:path";
@@ -29,6 +40,17 @@ const BATAS_DAFTAR = 30;
 // Nama yang dipakai bot saat menyapa. Bisa ditimpa lewat
 // secret TELEGRAM_NAMA tanpa mengubah kode.
 const NAMA = (process.env.TELEGRAM_NAMA || "").trim() || "Krisna";
+
+// Ke mana notifikasi dikirim.
+//
+// WhatsApp adalah tujuan utama: pesan ditulis ke tabel
+// wa_outbox, lalu jembatan di HP mengambilnya dan mengirim
+// lewat nomor dummy ke nomor utama.
+//
+// Telegram tetap bisa dipakai sebagai salinan/arsip. Bisa
+// dimatikan dengan NOTIFY_TELEGRAM=0 kalau tidak diperlukan.
+const KE_WA = String(process.env.NOTIFY_WA ?? "1") !== "0";
+const KE_TG = String(process.env.NOTIFY_TELEGRAM ?? "1") !== "0";
 
 
 // ---------------------------------------------------------
@@ -486,7 +508,7 @@ async function ambilSelesaiLalu(mulai, selesai) {
 }
 
 
-async function kirimTelegram(teks) {
+async function kirimTelegramSaja(teks) {
 
     const token = wajibEnv("TELEGRAM_BOT_TOKEN");
     const chatId = wajibEnv("TELEGRAM_CHAT_ID");
@@ -515,6 +537,119 @@ async function kirimTelegram(teks) {
         );
 
     }
+
+}
+
+
+// WhatsApp tidak punya format HTML, sedangkan pesan disusun
+// dengan escape HTML untuk Telegram. Tanpa ini, nama tugas
+// yang mengandung "&" akan tampil sebagai "&amp;" di WhatsApp.
+export function untukWhatsApp(teks) {
+
+    return String(teks ?? "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
+
+}
+
+
+// Titipkan pesan ke tabel antrean. Jembatan di HP yang akan
+// benar-benar mengirim ke WhatsApp.
+async function kirimAntrean(teks, sumber = "notify") {
+
+    const res = await supabase("POST", "wa_outbox", {
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+            pesan: untukWhatsApp(teks),
+            status: "menunggu",
+            sumber
+        })
+    });
+
+    return res;
+
+}
+
+
+// Kirim ke semua tujuan yang aktif. Kalau salah satu gagal,
+// tujuan lain tetap dicoba, lalu galatnya dilaporkan setelah
+// itu supaya jelas apa yang belum beres.
+async function kirimPesan(teks, sumber = "notify") {
+
+    const gagal = [];
+    const berhasil = [];
+
+    if (KE_WA) {
+
+        try {
+
+            await kirimAntrean(teks, sumber);
+            berhasil.push("WhatsApp (antrean)");
+
+        }
+        catch (error) {
+
+            gagal.push("WhatsApp: " + error.message);
+
+        }
+
+    }
+
+    if (KE_TG) {
+
+        try {
+
+            await kirimTelegramSaja(teks);
+            berhasil.push("Telegram");
+
+        }
+        catch (error) {
+
+            gagal.push("Telegram: " + error.message);
+
+        }
+
+    }
+
+    if (berhasil.length > 0) {
+
+        console.log("Terkirim ke : " + berhasil.join(", "));
+
+    }
+
+    if (gagal.length > 0) {
+
+        throw new Error(gagal.join(" | "));
+
+    }
+
+    if (berhasil.length === 0) {
+
+        throw new Error(
+            "Tidak ada tujuan yang aktif. " +
+            "NOTIFY_WA dan NOTIFY_TELEGRAM dua-duanya 0."
+        );
+
+    }
+
+}
+
+
+// Cek isi antrean tanpa mengirim apa pun. Dipakai --uji dan
+// pesan galat, supaya kelihatan apakah jembatan benar-benar
+// sudah mengambil pesan.
+async function antreanTerakhir() {
+
+    const res = await supabase(
+        "GET",
+        "wa_outbox?select=id,status,dibuat_at,terkirim_at,galat" +
+        "&order=id.desc&limit=1"
+    );
+
+    const baris = await res.json();
+
+    return baris[0] || null;
 
 }
 
@@ -572,15 +707,74 @@ async function main() {
 
     }
 
-    // Pesan tes: membuktikan token + chat id benar tanpa
-    // menyentuh database atau menandai tugas apa pun.
-    if (process.argv.includes("--uji")) {
+    // Pesan tes: membuktikan jalur pengiriman benar tanpa
+    // menyentuh database tugas atau menandai tugas apa pun.
+    //
+    // --uji=tunggu  tunggu sampai jembatan di HP melaporkan
+    //               pesan sudah terkirim (paling lama 90 detik).
+    //               Ini bukti nyata, bukan sekadar "sudah masuk
+    //               antrean".
+    if (process.argv.some((a) => a.startsWith("--uji"))) {
 
-        await kirimTelegram(
-            "tes. kalau pesan ini masuk, botnya jalan, " + NAMA + "."
+        const argUji = process.argv.find((a) => a.startsWith("--uji"));
+        const tunggu = argUji.includes("tunggu");
+
+        await kirimPesan(
+            "tes. kalau pesan ini masuk, jalur notifikasi tugas " +
+            "sampai ke WhatsApp, " + NAMA + ".",
+            "uji"
         );
 
-        console.log("Pesan tes terkirim.");
+        console.log("Pesan tes dikirim.");
+
+        if (tunggu) {
+
+            const batas = Date.now() + 90000;
+            let baris = null;
+
+            while (Date.now() < batas) {
+
+                baris = await antreanTerakhir();
+
+                if (baris && baris.status !== "menunggu") break;
+
+                await new Promise((r) => setTimeout(r, 3000));
+
+            }
+
+            if (!baris) {
+
+                console.log("Antrean kosong: pesan tidak tercatat.");
+
+            }
+            else if (baris.status === "terkirim") {
+
+                console.log(
+                    "TERBUKTI: jembatan di HP sudah mengirim pesan " +
+                    "ke WhatsApp pada " + baris.terkirim_at + "."
+                );
+
+            }
+            else if (baris.status === "menunggu") {
+
+                console.log(
+                    "BELUM TERKIRIM: pesan masih menunggu di antrean. " +
+                    "Jembatan di HP kemungkinan mati atau WhatsApp " +
+                    "belum tersambung."
+                );
+
+            }
+            else {
+
+                console.log(
+                    "GAGAL: jembatan mencoba mengirim tetapi gagal. " +
+                    (baris.galat || "")
+                );
+
+            }
+
+        }
+
         return;
 
     }
@@ -627,11 +821,10 @@ async function main() {
 
         }
 
-        await kirimTelegram(teks);
+        await kirimPesan(teks, "deadline");
 
         await tandaiIngat(daftar);
 
-        console.log("Terkirim.");
         return;
 
     }
@@ -690,14 +883,12 @@ async function main() {
 
     }
 
-    await kirimTelegram(teks);
+    await kirimPesan(teks, "harian");
 
     // Deadline dekat tidak ditandai: besok masih H-2/H-1 dan
     // memang perlu diingatkan lagi. Hanya tugas baru yang
     // ditandai supaya tidak diulang tiap hari.
     await tandaiTerkirim(baru);
-
-    console.log("Terkirim.");
 
 }
 

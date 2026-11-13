@@ -174,6 +174,7 @@ try {
 
     fs.copyFileSync(path.join(AKAR, "bridge.mjs"), path.join(dirKerja, "bridge.mjs"));
     fs.copyFileSync(path.join(AKAR, "lib.mjs"), path.join(dirKerja, "lib.mjs"));
+    fs.copyFileSync(path.join(AKAR, "outbox.mjs"), path.join(dirKerja, "outbox.mjs"));
 
     const tulisModul = (nama, isi) => {
 
