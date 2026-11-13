@@ -103,24 +103,36 @@ html {
 
 body {
 
-    /* Latar aplikasi. Sebelumnya foto latar menempel di
-       .home-page dan .dashboard-page masing-masing (dua
-       salinan), sehingga halaman-halaman baru tidak punya
-       latar sama sekali dan canvas 3D hanya terlihat di
-       halaman yang fotonya tidak menutupinya.
+    /* Latar aplikasi dipindah ke .bg-photo (position: fixed)
+       supaya foto tidak ikut digambar ulang setiap scroll.
+       `background-attachment: fixed` melakukan hal yang sama
+       tetapi di browser mobile justru memicu repaint seluruh
+       layar tiap frame — sumber patah-patah utama.
 
-       Sekarang satu lapisan latar dipasang di body dan
-       dipakai SEMUA halaman. Urutan lapisan dari bawah:
-         body            -> foto + veil gelap
-         .bg3d-stage     -> bentuk 3D       (z-index 1)
-         .page-decor     -> teks biner      (z-index 0, fixed)
-         .main-content   -> konten          (z-index 3)
-         .navbar         -> navigasi        (z-index 100)
-
-       Dot grid neobrutalism dipertahankan sebagai pola
-       paling atas agar tekstur tetap terasa. */
+       Body sekarang hanya warna dasar; foto, veil, dan pola
+       titik ada di .bg-photo. */
 
     background-color: var(--bg);
+
+    color: var(--text);
+    font-family: var(--ff-heading);
+    font-size: 16px;
+    line-height: 1.65;
+    overflow-x: hidden;
+    letter-spacing: 0.01em;
+
+}
+
+
+/* Foto latar + veil gelap. Satu elemen fixed yang dikomposisi
+   sekali, bukan background-attachment: fixed di body. */
+.bg-photo {
+
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+
     background-image:
         radial-gradient(rgba(77, 255, 178, 0.13) 1.5px, transparent 1.5px),
         linear-gradient(
@@ -130,15 +142,7 @@ body {
         url("BackGround.webp");
     background-size: 28px 28px, cover, cover;
     background-position: 0 0, center, center;
-    background-attachment: fixed;
     background-repeat: repeat, no-repeat, no-repeat;
-
-    color: var(--text);
-    font-family: var(--ff-heading);
-    font-size: 16px;
-    line-height: 1.65;
-    overflow-x: hidden;
-    letter-spacing: 0.01em;
 
 }
 
@@ -5297,6 +5301,40 @@ button {
     .bg3d-stage.is-ready {
 
         opacity: calc(var(--bg3d-opacity, 0.85) * 0.85);
+
+    }
+
+    /* Masking pada canvas WebGL memaksa komposisi ulang tiap
+       frame. Di layar kecil manfaat visualnya kecil dibanding
+       biayanya, jadi dimatikan. */
+    .bg3d-stage {
+
+        -webkit-mask-image: none;
+        mask-image: none;
+
+    }
+
+    /* Scanline fixed + mix-blend-mode menutupi seluruh layar
+       dan ikut dikomposisi ulang setiap scroll. */
+    body::before {
+
+        display: none;
+
+    }
+
+    /* Animasi background-position menggambar ulang seluruh
+       bagian halaman; di mobile ini penyebab scroll tersendat. */
+    .home-page::before {
+
+        animation: none;
+
+    }
+
+    /* Dekorasi teks biner cukup diam di mobile. */
+    .page-decor .binary-field span,
+    .page-decor .error-field span {
+
+        animation: none;
 
     }
 

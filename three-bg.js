@@ -737,8 +737,10 @@
 
         // Glyph dikurangi di layar sempit: 168 sprite terlalu
         // padat di 390px dan mengganggu keterbacaan teks.
+        // 0.32 (~54 sprite) cukup untuk kesan penuh tanpa
+        // membebani GPU saat scroll.
         const glyphLimit = narrow.matches
-            ? Math.round(GLYPH_COUNT * 0.42)
+            ? Math.round(GLYPH_COUNT * 0.32)
             : GLYPH_COUNT;
 
         glyphs.forEach((item, index) => {
@@ -760,8 +762,11 @@
             Math.min(window.devicePixelRatio || 1, narrow.matches ? 1.25 : 1.75)
         );
 
-        // false = jangan ubah style CSS canvas (sudah diatur style.css)
-        renderer.setSize(width, height, false);
+        // true = renderer ikut mengatur style width/height canvas.
+        // Dengan begitu ukuran CSS selalu sama dengan ukuran buffer
+        // yang dipakai menghitung posisi objek — termasuk saat
+        // address bar mobile muncul/hilang dan innerHeight berubah.
+        renderer.setSize(width, height);
 
         applyDensity();
         layout();
@@ -992,11 +997,56 @@
 
     window.addEventListener("resize", resize, { passive: true });
 
-    // Saat animasi dijeda (reduced motion / off-screen), gambar ulang
-    // satu frame ketika halaman digulir. Beberapa browser mengosongkan
-    // buffer WebGL setelah komposisi ulang, sehingga tanpa ini bentuk
-    // 3D bisa hilang dan menyisakan area kosong.
-    window.addEventListener("scroll", requestStaticFrame, { passive: true });
+
+    // Address bar mobile mengubah tinggi viewport tanpa memicu
+    // event resize biasa di sebagian browser. visualViewport
+    // menangkap perubahan itu supaya canvas tidak berhenti di
+    // ukuran lama (bentuk 3D tampak menumpuk di satu bagian).
+    if (window.visualViewport) {
+
+        let vvTimer = 0;
+
+        window.visualViewport.addEventListener("resize", () => {
+
+            window.clearTimeout(vvTimer);
+            vvTimer = window.setTimeout(resize, 120);
+
+        }, { passive: true });
+
+    }
+
+
+    // Animasi dijeda selama halaman digulir. Menggambar WebGL
+    // bersamaan dengan scroll membuat scroll tersendat di HP;
+    // setelah 180 ms tanpa scroll, frame digambar lagi dan
+    // animasi lanjut. Saat reduced motion / off-screen, cukup
+    // satu frame statis seperti sebelumnya.
+    let scrollTimer = 0;
+
+    window.addEventListener("scroll", () => {
+
+        if (reduceMotion.matches) {
+
+            window.clearTimeout(scrollTimer);
+            scrollTimer = window.setTimeout(requestStaticFrame, 120);
+            return;
+
+        }
+
+        if (running) stop();
+
+        window.clearTimeout(scrollTimer);
+
+        scrollTimer = window.setTimeout(() => {
+
+            if (document.hidden || !inViewport) return;
+
+            renderStatic();
+            start();
+
+        }, 180);
+
+    }, { passive: true });
 
 
     /* =====================================================
