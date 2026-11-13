@@ -31,11 +31,12 @@
 
     // Elemen yang diberi efek. Navbar memakai sudut lebih kecil
     // karena permukaannya lebar dan menempel di tepi layar.
+    // Kartu tugas sengaja TIDAK ikut: form submit di dalamnya
+    // jadi sasaran yang bergerak saat kursor mendekat.
     const TARGETS = [
         { selector: ".navbar", max: 1.6, lift: 0 },
         { selector: ".nav-link", max: 5, lift: 0 },
         { selector: ".course-card", max: 6, lift: 4 },
-        { selector: ".task-card", max: 4, lift: 4 },
         { selector: ".stat-card", max: 5, lift: 4 },
         { selector: ".calendar-card", max: 2.5, lift: 0 },
         { selector: ".task-group-header", max: 4, lift: 3 },

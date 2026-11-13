@@ -2793,7 +2793,6 @@ button {
     border-color: var(--border-bright);
     background: var(--panel-raised);
     box-shadow: var(--shadow-hard-lg);
-    transform: translate(-4px, -4px);
 
 }
 
