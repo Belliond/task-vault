@@ -295,21 +295,47 @@ adb shell "settings put global settings_enable_monitor_phantom_procs false"
 Ini sekali saja. Tanpa komputer, coba aktifkan **Developer options → Disable
 child process restrictions** kalau ada di HP kamu.
 
-**e. Nyalakan otomatis setelah HP restart** (opsional)
+**e. Nyalakan otomatis setelah HP restart**
 
-Pasang **Termux:Boot** dari F-Droid, lalu:
+Pasang **Termux:Boot** dari F-Droid (bukan Play Store — harus satu tanda
+tangan dengan Termux, kalau beda Android menolak memasangnya).
+
+Ukurannya kecil: **APK 25 KB**, izin hanya `RECEIVE_BOOT_COMPLETED` dan
+`WAKE_LOCK`. Aplikasi ini **tidak menambah RAM permanen** — dia hanya bangun
+sesaat saat boot untuk menjalankan skrip, lalu tidur lagi. (Kalau kamu membuka
+aplikasinya, ada proses + WebView sekitar 78 MB, tapi itu hilang begitu ditutup.)
+
+Lalu:
 
 ```bash
 mkdir -p ~/.termux/boot
-cat > ~/.termux/boot/wa-bridge.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/sh
-termux-wake-lock
-bash ~/task-vault/wa-telegram-bridge/jalan.sh
-EOF
-chmod +x ~/.termux/boot/wa-bridge.sh
+cp ~/task-vault/wa-telegram-bridge/boot-jembatan.sh ~/.termux/boot/
+chmod +x ~/.termux/boot/boot-jembatan.sh
 ```
 
-Buka Termux:Boot sekali setelah dipasang agar aktif.
+Buka Termux:Boot **sekali** setelah dipasang, kalau tidak Android tidak
+mengizinkannya jalan saat boot.
+
+Isi `boot-jembatan.sh` sengaja menunggu 20 detik sebelum menyalakan jembatan,
+karena saat boot jaringan dan penyimpanan belum tentu siap. Tanpa jeda itu,
+WhatsApp sering gagal menyambung di percobaan pertama.
+
+> **Kalau HP vivo/OPPO/Xiaomi:** pengelola latar belakangnya sering memblokir
+> autostart. Kalau setelah restart jembatan tidak nyala sendiri, buka
+> **Setelan → Aplikasi → Termux:Boot → Autostart** dan izinkan. Itu penyebab
+> paling sering, bukan skripnya.
+
+Cara mengujinya tanpa restart HP:
+
+```bash
+# matikan semua
+pkill -9 node; pkill -9 -f jalan.sh
+# jalankan seperti Termux:Boot akan menjalankannya
+~/.termux/boot/boot-jembatan.sh
+```
+
+Kalau `/sdcard/bridge.log` menampilkan `boot: menyalakan penjaga jembatan`
+lalu `whatsapp tersambung`, artinya beres.
 
 ---
 
@@ -521,6 +547,7 @@ Berkas:
 | `bridge.mjs` | Proses utama: WhatsApp, Telegram, perintah |
 | `lib.mjs` | Fungsi murni: parser, normalisasi nomor, format pesan |
 | `jalan.sh` | Penjaga: jalankan ulang otomatis + log ke `/sdcard` |
+| `boot-jembatan.sh` | Skrip untuk Termux:Boot — nyala otomatis saat HP boot |
 | `qr-laptop.mjs` | Tampilkan QR di laptop, simpan sesi ke `auth-laptop/` |
 | `qr-laptop.html` | Halaman QR auto-refresh untuk dipindai dari HP |
 | `pasang.sh` | Pemasang otomatis untuk Termux |
