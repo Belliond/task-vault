@@ -131,18 +131,19 @@ yang sama**, karena QR-nya tampil di layar yang harus kamu pindai. Karena itu
 jembatan ini memakai **kode 8 digit**, bukan QR.
 
 1. Jalankan `node bridge.mjs`
-2. Di terminal muncul kode, misalnya:
+2. Kirim **`/pasang`** ke bot Telegram kamu
+3. Bot membalas kode, misalnya:
 
    ```
-   KODE PASANGAN: JXNZ79ZH
+   Kode pasangan WhatsApp: JXNZ79ZH
    ```
 
-3. Buka WhatsApp di HP itu juga:
+4. Buka WhatsApp di HP itu juga:
 
    **Pengaturan → Perangkat tertaut → Tautkan perangkat →
    Tautkan dengan nomor telepon**
 
-4. Ketik kode 8 digit tadi.
+5. Ketik kode 8 digit tadi.
 
 Selesai. Kamu akan dapat pesan di Telegram:
 
@@ -154,8 +155,29 @@ WhatsApp 62812xxxxxxx sekarang tersambung ke Telegram ini.
 Kode ini butuh `WA_BRIDGE_PASANGAN` di `.env` terisi nomor WhatsApp kamu
 (contoh `628123456789` — pakai 62, tanpa `+` dan tanpa `0` di depan).
 
+> **Kenapa `/pasang`, bukan kode otomatis?**
+> Kode pasangan hanya berlaku sekitar 60 detik, dan meminta kode baru
+> **membatalkan** kode sebelumnya. Kalau kode dibuat otomatis tiap menit, kamu
+> bisa mengetik kode yang sudah mati. Dengan `/pasang`, kode yang kamu lihat
+> dijamin yang terbaru dan masih hidup.
+>
+> Kalau kode kedaluwarsa, kirim `/pasang` lagi.
+
 > QR tetap ditampilkan sebagai cadangan kalau kamu kebetulan punya perangkat
 > kedua. Tapi untuk HP tunggal, pakai kode pasangan.
+
+---
+
+## Perintah di Telegram
+
+| Perintah | Guna |
+|---|---|
+| `/pasang` | Buat kode pasangan WhatsApp baru |
+| `/status` | Cek WhatsApp tersambung atau tidak |
+| `/to 08123... pesan` | Kirim pesan ke nomor itu |
+| `/to 08123...` | Tanya nomor itu terdaftar atau tidak |
+| `/start` atau `/help` | Bantuan |
+| teks biasa | Dikirim ke `WA_BRIDGE_TUJUAN` kalau diisi |
 
 ---
 

@@ -121,37 +121,48 @@ const NOMOR_PASANGAN = String(
     env.WA_BRIDGE_PASANGAN || ""
 ).trim();
 
-let kodeSudahDiminta = false;
+// Kode pasangan berlaku sekitar 60 detik, dan meminta kode
+// baru MEMBATALKAN kode sebelumnya. Karena itu kode tidak
+// boleh dibuat otomatis berulang-ulang: kalau dibuat tiap
+// menit, orang bisa mengetik kode yang sudah mati.
+//
+// Jalur yang benar: kode dibuat saat diminta lewat /pasang
+// di Telegram, jadi kode yang kamu lihat pasti yang terbaru.
+let kodeTerakhir = "";
+let kodeKedaluwarsa = 0;
+
+const UMUR_KODE_MS = Number(env.WA_BRIDGE_UMUR_KODE_MS || 60000);
 
 
 async function mintaKodePasangan() {
 
-    if (!NOMOR_PASANGAN || kodeSudahDiminta) return;
+    if (!NOMOR_PASANGAN) return false;
 
-    if (!sock || typeof sock.requestPairingCode !== "function") return;
+    if (!sock || typeof sock.requestPairingCode !== "function") return false;
 
-    kodeSudahDiminta = true;
 
     try {
 
         const kode = await sock.requestPairingCode(NOMOR_PASANGAN);
 
-        log("KODE PASANGAN: " + kode);
+        if (!kode) return false;
 
-        await kirimTelegram(
-            `Kode pasangan WhatsApp: ${kode}\n\n` +
-            `Buka WhatsApp di HP ini:\n` +
-            `Pengaturan > Perangkat tertaut > Tautkan perangkat > ` +
-            `Tautkan dengan nomor telepon\n\n` +
-            `Ketik kode di atas.`
-        );
+        kodeTerakhir = String(kode).toUpperCase();
+
+        kodeKedaluwarsa = Date.now() + UMUR_KODE_MS;
+
+        log("KODE PASANGAN: " + kodeTerakhir);
+
+        return true;
 
     }
     catch (error) {
 
         log("gagal minta kode pasangan:", error.message);
 
-        kodeSudahDiminta = false;
+        kodeTerakhir = "";
+
+        return false;
 
     }
 
@@ -277,16 +288,15 @@ async function mulaiWhatsApp() {
             // sama dengan WhatsApp-nya: kamu tidak bisa memindai
             // layar sendiri. Karena itu QR hanya ditampilkan
             // sebagai cadangan.
+            //
+            // Kode pasangan SENGAJA tidak diminta di sini:
+            // meminta kode baru membatalkan kode sebelumnya,
+            // jadi kode dibuat saat diminta lewat /pasang.
             const qrcode = await import("qrcode-terminal");
 
             qrcode.default.generate(qr, { small: true });
 
-            log("QR muncul (cadangan). Utamakan kode pasangan.");
-
-
-            // Kalau nomor sudah diisi di .env, minta kode
-            // pasangan sekali. Ini jalur utama untuk HP tunggal.
-            mintaKodePasangan();
+            log("QR muncul (cadangan). Kalau perlu kode pasangan, kirim /pasang.");
 
         }
 
@@ -448,7 +458,46 @@ async function prosesTelegram(pesan) {
             `/to 08123456789          (tanya nomor itu)\n\n` +
             `Kalau ${tujuanDefault ? "tujuan sudah diset" : "tujuan belum diset"}, ` +
             `pesan tanpa /to ${tujuanDefault ? "dikirim ke " + tujuanDefault : "diabaikan"}.\n\n` +
+            `/pasang  buat kode pasangan WhatsApp\n` +
             `/status  cek koneksi`
+        );
+
+        return;
+
+    }
+
+
+    if (perintah?.nama === "pasang") {
+
+        if (!NOMOR_PASANGAN) {
+
+            await kirimTelegram(
+                `Nomor WhatsApp belum diisi, ${NAMA}. ` +
+                `Isi WA_BRIDGE_PASANGAN di .env dulu.`
+            );
+
+            return;
+
+        }
+
+        const berhasil = await mintaKodePasangan();
+
+        if (!berhasil) {
+
+            await kirimTelegram(
+                `Gagal membuat kode pasangan. Coba /pasang lagi sebentar.`
+            );
+
+            return;
+
+        }
+
+        await kirimTelegram(
+            `Kode pasangan WhatsApp: ${kodeTerakhir}\n\n` +
+            `Buka WhatsApp di HP ini:\n` +
+            `Pengaturan > Perangkat tertaut > Tautkan perangkat > ` +
+            `Tautkan dengan nomor telepon\n\n` +
+            `Ketik kode di atas. Berlaku sekitar 60 detik.`
         );
 
         return;
