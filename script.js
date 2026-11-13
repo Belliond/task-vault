@@ -6078,18 +6078,46 @@ async function submitMoodleAssignment(task, files, catatan) {
         body.append("filearea", "draft");
         body.append("itemid", itemid);
 
-        files.forEach((file, index) => {
-            body.append("file_" + (index + 1), file, file.name);
-        });
+        for (const [index, file] of files.entries()) {
+
+            // Baca isi berkas dulu. Berkas OneDrive "online-only"
+            // atau yang sudah dipindah bisa gagal dibaca saat
+            // fetch berjalan, dan errornya menyesatkan
+            // ("Failed to fetch") seolah jaringan yang salah.
+            let isi;
+
+            try {
+
+                isi = await file.arrayBuffer();
+
+            } catch {
+
+                throw new Error(
+                    "Berkas " + file.name + " tidak bisa dibaca. " +
+                    "Salin dulu ke folder lokal (mis. Desktop), lalu pilih ulang."
+                );
+
+            }
+
+            body.append(
+                "file_" + (index + 1),
+                new Blob([isi], { type: file.type || "application/octet-stream" }),
+                file.name
+            );
+
+        }
 
         const urlUnggah =
             normalizeSiteUrl(config.url) + "/webservice/upload.php";
+
+        const ukuran = files.reduce((n, f) => n + f.size, 0);
 
         const res = await fetch(urlUnggah, { method: "POST", body })
             .catch((error) => {
 
                 throw new Error(
-                    "Cannot reach " + urlUnggah + " (" + error.message + ")."
+                    "Cannot reach " + urlUnggah + " (" + error.message + "). " +
+                    "Ukuran berkas " + (ukuran / 1048576).toFixed(1) + " MB."
                 );
 
             });
