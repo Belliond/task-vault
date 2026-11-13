@@ -28,7 +28,7 @@ pembuka — aplikasi langsung terbuka di Beranda.
 | Halaman | Isi |
 |---|---|
 | **Beranda** (`#homePage`) | Dua kartu statistik (TOTAL TASKS, PRIORITY), direktori mata kuliah, lalu **kalender deadline** di bagian paling bawah |
-| **Tasks** (`#taskListSection`) | Semua tugas, dikelompokkan per mata kuliah |
+| **Tasks** (`#taskListSection`) | Semua tugas, dikelompokkan per mata kuliah. Tiap kartu punya panel **SOAL & SUBMISSION** (isi soal, status pengumpulan, berkas, tautan ke LMS) yang diisi sync |
 | **Schedule** (`#scheduleSection`) | Tabel jadwal kuliah |
 | **Sync** (`#syncSection`) | Koneksi Moodle & Google Classroom |
 | **Detail matkul** (`#courseDetailSection`) | Semua tugas satu mata kuliah; dibuka dari Beranda, bukan dari navbar |
@@ -267,6 +267,12 @@ Migrasi dijalankan berurutan dari `supabase/migrations/`:
 | `..._enable_realtime.sql` | Daftarkan tabel ke publication `supabase_realtime` |
 | `..._sync_upsert_batch.sql` | Fungsi `sync_lms_tasks(jsonb)` untuk upsert batch |
 | `..._status_default_pending.sql` | Default kolom `status` jadi `'Pending'` |
+| `..._drop_deadline_reminders.sql` | Hapus sisa tabel pengingat |
+| `..._sync_settings.sql` | Tabel `sync_settings` untuk filter dari halaman web |
+| `..._classroom_courses.sql` | Tabel `classroom_courses` (daftar kelas) |
+| `..._moodle_courses.sql` | Tabel `moodle_courses` (daftar matkul) |
+| `..._moodle_filter.sql` | Kolom filter Moodle di `sync_settings` |
+| `..._lms_details.sql` | Kolom `lms_details` (isi soal + submission), upsert ikut mengisinya |
 
 Semua idempoten — aman dijalankan berulang.
 

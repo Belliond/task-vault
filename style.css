@@ -2893,15 +2893,16 @@ button {
 
 .lms-detail summary::before {
 
-    content: "▸";
+    content: "+";
     color: var(--green);
+    font-size: 14px;
 
 }
 
 
 .lms-detail[open] summary::before {
 
-    content: "▾";
+    content: "−";
 
 }
 
