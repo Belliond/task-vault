@@ -43,6 +43,104 @@ const CONFIG_HELP =
 
 
 // =========================================================
+// PWA: SHELL OFFLINE
+//  sw.js menyimpan HTML/CSS/JS. Data tugas disimpan di sini
+//  (localStorage) karena Supabase sengaja tidak di-cache:
+//  daftar basi lebih menyesatkan daripada pesan offline.
+// =========================================================
+
+const TASKS_CACHE_KEY = "tasksCacheV1";
+
+
+function simpanCacheTugas(data) {
+
+    try {
+
+        localStorage.setItem(
+            TASKS_CACHE_KEY,
+            JSON.stringify({
+                at: Date.now(),
+                data: data
+            })
+        );
+
+    }
+    catch (error) {
+
+        console.warn("Cache tugas gagal disimpan:", error);
+
+    }
+
+}
+
+
+function bacaCacheTugas() {
+
+    try {
+
+        const cache =
+            JSON.parse(
+                localStorage.getItem(TASKS_CACHE_KEY) || "null"
+            );
+
+
+        return Array.isArray(cache?.data) ? cache : null;
+
+    }
+    catch (error) {
+
+        return null;
+
+    }
+
+}
+
+
+// Penghalang tulis saat offline. Membaca tetap boleh:
+// data terakhir sudah ada di cache.
+function butuhInternet() {
+
+    if (navigator.onLine) {
+
+        return false;
+
+    }
+
+
+    showToast(
+        "Butuh internet untuk menyimpan perubahan.",
+        "warning"
+    );
+
+    return true;
+
+}
+
+
+if ("serviceWorker" in navigator) {
+
+    window.addEventListener(
+        "load",
+        () => {
+
+            navigator.serviceWorker
+                .register("sw.js")
+                .catch((error) => {
+
+                    console.warn(
+                        "Service worker gagal didaftarkan:",
+                        error
+                    );
+
+                });
+
+        }
+    );
+
+}
+
+
+// =========================================================
 // DOM ELEMENT
 // =========================================================
 
@@ -949,6 +1047,13 @@ taskForm.addEventListener(
     async (event) => {
 
         event.preventDefault();
+
+
+        if (butuhInternet()) {
+
+            return;
+
+        }
 
 
         const course =
@@ -3792,6 +3897,51 @@ let dismissSupported = true;
 let loadInFlight = false;
 let loadPendingAgain = false;
 
+let offlineToastShown = false;
+
+
+// Render daftar terakhir yang tersimpan saat jaringan tidak
+// tersedia. Mengembalikan false bila belum pernah ada cache.
+function pakaiCacheOffline() {
+
+    const cached = bacaCacheTugas();
+
+
+    if (!cached) {
+
+        return false;
+
+    }
+
+
+    tasks = cached.data;
+
+    loadFailureMessage = null;
+
+
+    updateStatistics();
+
+    renderTasks();
+
+    refreshActiveView();
+
+
+    if (!offlineToastShown) {
+
+        offlineToastShown = true;
+
+        showToast(
+            "Mode offline: menampilkan data terakhir yang tersimpan.",
+            "warning"
+        );
+
+    }
+
+
+    return true;
+
+}
+
 
 // silent = true dipakai oleh listener realtime: data
 // diperbarui di tempat tanpa mengganti daftar dengan
@@ -3812,6 +3962,27 @@ async function loadTasks({ silent = false } = {}) {
     loadInFlight = true;
 
     loadPendingAgain = false;
+
+
+    // Offline: jangan tunggu timeout jaringan. Shell sudah
+    // dibuka service worker, data diambil dari cache lokal.
+    if (!navigator.onLine) {
+
+        loadInFlight = false;
+
+
+        if (!pakaiCacheOffline()) {
+
+            renderLoadError(
+                "Kamu sedang offline dan belum ada data tersimpan. " +
+                "Buka sekali saat online supaya data terakhir bisa dibaca offline."
+            );
+
+        }
+
+        return;
+
+    }
 
 
     if (!silent) {
@@ -3890,7 +4061,11 @@ async function loadTasks({ silent = false } = {}) {
             // pengguna harus melihat penjelasannya.
             if (!silent || tasks.length === 0) {
 
-                renderLoadError(error.message);
+                if (!pakaiCacheOffline()) {
+
+                    renderLoadError(error.message);
+
+                }
 
             }
 
@@ -3901,9 +4076,14 @@ async function loadTasks({ silent = false } = {}) {
 
         tasks = data || [];
 
+        // Simpan untuk dibaca saat offline berikutnya.
+        simpanCacheTugas(tasks);
+
         // Data berhasil dimuat: bersihkan penanda kegagalan agar
         // pesan lama tidak tertinggal di Beranda.
         loadFailureMessage = null;
+
+        offlineToastShown = false;
 
 
         updateStatistics();
@@ -3921,10 +4101,14 @@ async function loadTasks({ silent = false } = {}) {
 
         if (!silent || tasks.length === 0) {
 
-            renderLoadError(
-                error?.message ||
-                "Could not reach the database. Check your connection and retry."
-            );
+            if (!pakaiCacheOffline()) {
+
+                renderLoadError(
+                    error?.message ||
+                    "Could not reach the database. Check your connection and retry."
+                );
+
+            }
 
         }
 
@@ -7062,6 +7246,13 @@ editForm.addEventListener(
         event.preventDefault();
 
 
+        if (butuhInternet()) {
+
+            return;
+
+        }
+
+
         const id =
             editId.value;
 
@@ -7300,6 +7491,13 @@ confirmModal.addEventListener(
 // =========================================================
 
 async function deleteTask(task) {
+
+    if (butuhInternet()) {
+
+        return;
+
+    }
+
 
     const id = task?.id;
 

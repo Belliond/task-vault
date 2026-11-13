@@ -273,6 +273,9 @@ Migrasi dijalankan berurutan dari `supabase/migrations/`:
 | `..._moodle_courses.sql` | Tabel `moodle_courses` (daftar matkul) |
 | `..._moodle_filter.sql` | Kolom filter Moodle di `sync_settings` |
 | `..._lms_details.sql` | Kolom `lms_details` (isi soal + submission), upsert ikut mengisinya |
+| `..._task_notified.sql` | Kolom `notified_at` (penanda tugas baru sudah dikirim ke Telegram) |
+| `..._deadline_time.sql` | Kolom `deadline_time` (jam deadline WIB), upsert ikut mengisinya |
+| `..._reminder_digest.sql` | Kolom `deadline_reminder_at` + `completed_at`, trigger pengisi `completed_at` |
 
 Semua idempoten — aman dijalankan berulang.
 
@@ -310,6 +313,40 @@ $env:PORT=5174; npm run dev
 Redirect OAuth Google Classroom diturunkan dari `window.location`, jadi
 localhost otomatis terpakai sebagai redirect URI. Tambahkan URL itu ke
 *Authorized redirect URIs* di Google Cloud Console.
+
+---
+
+## PWA & mode offline
+
+Aplikasi bisa dipasang ke home screen dan dibuka tanpa internet untuk
+**membaca** data terakhir. Menulis (tambah/edit/hapus, sync, submit LMS)
+tetap butuh koneksi.
+
+| Berkas | Peran |
+|---|---|
+| `manifest.json` | `display: standalone`, ikon 192 & 512, `theme_color` |
+| `icon-192.png`, `icon-512.png` | Ikon home screen (di-render dari `favicon.svg`) |
+| `sw.js` | Service worker: shell HTML/CSS/JS + font/CDN |
+| `script.js` | Menyimpan hasil query terakhir ke `localStorage` (`tasksCacheV1`) |
+
+Cara kerja:
+
+- **Shell**: `sw.js` menyimpan `index.html`, `style.css`, `script.js`,
+  `three-bg.js`, `pointer-tilt.js`, ikon, dan `privacy.html` saat install.
+- **Navigasi**: jaringan dulu supaya deploy baru langsung terlihat, lalu
+  jatuh ke shell kalau offline.
+- **Aset same-origin**: cache dulu, diperbarui di belakang.
+- **Supabase tidak pernah di-cache.** Data basi di level HTTP lebih
+  menyesatkan daripada pesan offline. Yang dipakai saat offline adalah
+  salinan `localStorage` yang ditulis setiap `loadTasks()` berhasil.
+- **`config.js` tidak di-cache** karena di-generate ulang tiap deploy dari
+  secrets; kunci baru harus langsung berlaku.
+- Saat `navigator.onLine === false`, `loadTasks()` langsung membaca cache
+  tanpa menunggu timeout jaringan, dan form menolak menulis dengan pesan
+  "Butuh internet untuk menyimpan perubahan."
+
+Kalau mengubah `index.html`/`style.css`/`script.js`, naikkan nilai `CACHE`
+di `sw.js` supaya perangkat lama tidak tertinggal versi lama.
 
 ---
 
@@ -720,14 +757,29 @@ perbarui secret-nya.
 
 ## Notifikasi Telegram
 
-Pesan harian jam **08.00 WIB**:
+Tiga jenis pesan:
 
-- tugas LMS yang baru ditemukan sync (sekali per tugas, dijaga kolom
-  `tasks.notified_at`),
-- tugas dengan deadline **H-3 sampai H-1** yang belum selesai.
+| Kapan | Isi |
+|---|---|
+| Tiap hari 08.00 WIB | tugas LMS baru (sekali per tugas, dijaga `tasks.notified_at`) + deadline **H-3 sampai H-1** |
+| Tiap jam menit `:05` | pengingat **3 jam sebelum deadline** untuk tugas yang punya jam (`deadline_reminder_at`) |
+| Senin 08.00 WIB | digest: semua tugas dengan deadline minggu ini + jumlah tugas yang selesai minggu lalu (`completed_at`) |
 
 Tugas yang sudah dikirim ke Moodle/Classroom (`submitted`/`graded`) tidak
 diingatkan lagi.
+
+**Nada pesan** diatur di `scripts/notify-telegram.mjs` (fungsi `susunPesan`,
+`susunPesanDeadline`, `susunDigest`). Gaya saat ini: hangat, singkat, tanpa
+emoji dan tanpa panggilan sayang. Contoh:
+
+```
+Reminder ya
+
+• Tugas 3 (Kriptografi)
+  deadline jam 23.59, sekitar 3 jam lagi
+
+Masih ada waktu kok, jangan lupa dikerjakan ya.
+```
 
 **Setup (sekali saja)**
 
@@ -742,10 +794,15 @@ diingatkan lagi.
    ```
 
 4. Uji tanpa mengirim: Actions -> **Notify Telegram** -> Run workflow ->
-   `dry_run = true`. Log menampilkan pesan yang akan dikirim.
+   `dry_run = true`. Pilih `mode` untuk melihat pesan harian atau pengingat.
 
 Workflow: `.github/workflows/notify.yml`. Skrip: `scripts/notify-telegram.mjs`.
 Token tidak pernah masuk `config.js`, browser, atau tabel database.
+
+Pengingat 3 jam memakai jendela bergulir, bukan jam tetap: cron berjalan tiap
+jam dan hanya tugas dengan sisa waktu 0–3 jam yang dikirim. Karena itu
+deadline lewat tengah malam tetap tertangkap (tugas besok ikut dibaca).
+`deadline_reminder_at` mencegah pesan yang sama terkirim dua kali.
 
 ---
 

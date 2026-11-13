@@ -1,11 +1,15 @@
 name: Notify Telegram
 
 # =========================================================
-#  Ringkasan harian ke Telegram:
-#    - tugas LMS baru yang ditemukan sync
-#    - deadline H-3 sampai H-1 yang belum selesai
+#  Pesan ke Telegram:
+#    - 08.00 WIB tiap hari : tugas LMS baru + deadline
+#                            H-3 sampai H-1
+#    - Senin 08.00 WIB     : ditambah digest mingguan
+#                            (tugas minggu ini + selesai
+#                            minggu lalu)
+#    - tiap jam menit :05  : pengingat 3 jam sebelum
+#                            deadline (hanya tugas berjam)
 #
-#  Dijalankan 08.00 WIB (01.00 UTC), setelah sync 07.17 WIB.
 #  Token bot hanya ada di secret runner, tidak pernah masuk
 #  halaman web.
 #
@@ -16,9 +20,17 @@ name: Notify Telegram
 on:
   schedule:
     - cron: "0 1 * * *"
+    - cron: "5 * * * *"
 
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Jenis pesan"
+        type: choice
+        options:
+          - harian
+          - deadline
+        default: harian
       dry_run:
         description: "Tampilkan pesan, jangan kirim"
         type: boolean
@@ -58,10 +70,20 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
+          MODE="${{ inputs.mode }}"
+
+          if [ "${{ github.event.schedule }}" = "5 * * * *" ]; then
+            MODE=deadline
+          fi
+
+          if [ -z "$MODE" ]; then
+            MODE=harian
+          fi
+
           if [ "${{ inputs.uji }}" = "true" ]; then
             node scripts/notify-telegram.mjs --uji
           elif [ "${{ inputs.dry_run }}" = "true" ]; then
-            node scripts/notify-telegram.mjs --dry-run
+            node scripts/notify-telegram.mjs --dry-run --mode=$MODE
           else
-            node scripts/notify-telegram.mjs
+            node scripts/notify-telegram.mjs --mode=$MODE
           fi

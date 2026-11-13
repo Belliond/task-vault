@@ -6,7 +6,13 @@ import {
     tanggalWib,
     jendelaDeadline,
     sudahDikerjakan,
-    susunPesan
+    susunPesan,
+    awalMinggu,
+    hariTampil,
+    waktuDeadline,
+    perluIngatDeadline,
+    susunPesanDeadline,
+    susunDigest
 } from "./notify-telegram.mjs";
 
 let lulus = 0;
@@ -120,6 +126,136 @@ uji("nama tugas di-escape agar HTML Telegram tidak rusak", () => {
 
     assert.match(teks, /&lt;b&gt;Bocor&lt;\/b&gt; &amp; co/);
     assert.doesNotMatch(teks, /<b>Bocor<\/b>/);
+
+});
+
+
+uji("awal minggu selalu hari Senin", () => {
+
+    assert.equal(awalMinggu("2026-11-13"), "2026-11-09");
+    assert.equal(awalMinggu("2026-11-09"), "2026-11-09");
+    assert.equal(awalMinggu("2026-11-15"), "2026-11-09");
+
+});
+
+
+uji("nama hari pendek dari tanggal", () => {
+
+    assert.equal(hariTampil("2026-11-17"), "Sel");
+
+});
+
+
+uji("deadline berjam dibaca sebagai waktu WIB", () => {
+
+    const waktu = waktuDeadline({
+        deadline: "2026-11-13",
+        deadline_time: "15:00:00"
+    });
+
+    assert.equal(waktu.toISOString(), "2026-11-13T08:00:00.000Z");
+
+    assert.equal(
+        waktuDeadline({ deadline: "2026-11-13", deadline_time: null }),
+        null
+    );
+
+});
+
+
+uji("pengingat hanya 3 jam terakhir", () => {
+
+    const tugas = {
+        deadline: "2026-11-13",
+        deadline_time: "15:00:00",
+        status: "Pending"
+    };
+
+    // 12.00 WIB -> sisa 3 jam, masuk jendela.
+    assert.equal(
+        perluIngatDeadline(tugas, new Date("2026-11-13T05:00:00Z")),
+        true
+    );
+
+    // 11.00 WIB -> sisa 4 jam, belum waktunya.
+    assert.equal(
+        perluIngatDeadline(tugas, new Date("2026-11-13T04:00:00Z")),
+        false
+    );
+
+    // Sudah lewat.
+    assert.equal(
+        perluIngatDeadline(tugas, new Date("2026-11-13T09:00:00Z")),
+        false
+    );
+
+    // Sudah selesai.
+    assert.equal(
+        perluIngatDeadline(
+            { ...tugas, status: "Completed" },
+            new Date("2026-11-13T05:00:00Z")
+        ),
+        false
+    );
+
+    // Tanpa jam (all-day) tidak ikut pengingat 3 jam.
+    assert.equal(
+        perluIngatDeadline(
+            { ...tugas, deadline_time: null },
+            new Date("2026-11-13T05:00:00Z")
+        ),
+        false
+    );
+
+});
+
+
+uji("pesan pengingat memuat jam dan sisa waktu", () => {
+
+    const teks = susunPesanDeadline(
+        [{
+            course: "Kriptografi",
+            class_name: "RA",
+            deadline: "2026-11-13",
+            deadline_time: "15:00:00"
+        }],
+        new Date("2026-11-13T05:00:00Z")
+    );
+
+    assert.match(teks, /Reminder ya/);
+    assert.match(teks, /deadline jam 15\.00/);
+    assert.match(teks, /sekitar 3 jam lagi/);
+
+});
+
+
+uji("digest Senin memuat minggu ini dan minggu lalu", () => {
+
+    const teks = susunDigest(
+        [{
+            course: "Kriptografi",
+            class_name: "RA",
+            deadline: "2026-11-17",
+            deadline_time: "23:59:00"
+        }],
+        [{}, {}, {}]
+    );
+
+    assert.match(teks, /Senin/i);
+    assert.match(teks, /MINGGU INI/);
+    assert.match(teks, /Sel, 17 Nov 2026 · 23\.59/);
+    assert.match(teks, /SELESAI MINGGU LALU/);
+    assert.match(teks, /3 tugas sudah kamu selesaikan/);
+
+});
+
+
+uji("digest tetap terkirim walau tidak ada tugas", () => {
+
+    const teks = susunDigest([], []);
+
+    assert.match(teks, /Belum ada deadline minggu ini/);
+    assert.match(teks, /Belum ada yang tercatat selesai/);
 
 });
 
