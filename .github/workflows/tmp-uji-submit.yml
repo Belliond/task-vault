@@ -1,0 +1,27 @@
+name: TMP Uji Submit
+
+on:
+  workflow_dispatch:
+    inputs:
+      assign_id:
+        description: "Assignment ID"
+        required: true
+        default: "2111"
+
+permissions:
+  contents: read
+
+jobs:
+  uji:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Uji
+        env:
+          MOODLE_URL: ${{ secrets.MOODLE_URL }}
+          MOODLE_TOKEN: ${{ secrets.MOODLE_TOKEN }}
+          ASSIGN_ID: ${{ inputs.assign_id }}
+        run: node scripts/tmp-uji-submit.mjs
