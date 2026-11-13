@@ -109,6 +109,56 @@ function tidur(ms) {
 
 
 // ---------------------------------------------------------
+//  Pasangan lewat kode 8 digit (tanpa QR)
+//
+//  QR hanya bisa dipindai dari perangkat lain. Kalau jembatan
+//  jalan di HP yang sama dengan WhatsApp-nya, tidak ada layar
+//  kedua untuk memindai. Kode pasangan menyelesaikan itu:
+//  kode ditampilkan di terminal, lalu diketik di WhatsApp.
+// ---------------------------------------------------------
+
+const NOMOR_PASANGAN = String(
+    env.WA_BRIDGE_PASANGAN || ""
+).trim();
+
+let kodeSudahDiminta = false;
+
+
+async function mintaKodePasangan() {
+
+    if (!NOMOR_PASANGAN || kodeSudahDiminta) return;
+
+    if (!sock || typeof sock.requestPairingCode !== "function") return;
+
+    kodeSudahDiminta = true;
+
+    try {
+
+        const kode = await sock.requestPairingCode(NOMOR_PASANGAN);
+
+        log("KODE PASANGAN: " + kode);
+
+        await kirimTelegram(
+            `Kode pasangan WhatsApp: ${kode}\n\n` +
+            `Buka WhatsApp di HP ini:\n` +
+            `Pengaturan > Perangkat tertaut > Tautkan perangkat > ` +
+            `Tautkan dengan nomor telepon\n\n` +
+            `Ketik kode di atas.`
+        );
+
+    }
+    catch (error) {
+
+        log("gagal minta kode pasangan:", error.message);
+
+        kodeSudahDiminta = false;
+
+    }
+
+}
+
+
+// ---------------------------------------------------------
 //  Telegram
 // ---------------------------------------------------------
 
@@ -223,13 +273,20 @@ async function mulaiWhatsApp() {
 
         if (qr) {
 
-            // QR ditampilkan di terminal. Di Termux bisa
-            // dipindai langsung dari layar HP lain.
+            // QR tidak berguna kalau jembatan jalan di HP yang
+            // sama dengan WhatsApp-nya: kamu tidak bisa memindai
+            // layar sendiri. Karena itu QR hanya ditampilkan
+            // sebagai cadangan.
             const qrcode = await import("qrcode-terminal");
 
             qrcode.default.generate(qr, { small: true });
 
-            log("QR muncul. Pindai dari WhatsApp > Perangkat tertaut.");
+            log("QR muncul (cadangan). Utamakan kode pasangan.");
+
+
+            // Kalau nomor sudah diisi di .env, minta kode
+            // pasangan sekali. Ini jalur utama untuk HP tunggal.
+            mintaKodePasangan();
 
         }
 
@@ -619,6 +676,15 @@ log(`jembatan mulai. ram ${(process.memoryUsage().rss / 1048576).toFixed(0)} MB`
 if (!fs.existsSync(FOLDER_AUTH)) {
 
     fs.mkdirSync(FOLDER_AUTH, { recursive: true });
+
+}
+
+
+// Panggil kode pasangan begitu socket ada. QR pertama datang
+// setelah handshake, jadi tunggu sebentar agar socket siap.
+if (NOMOR_PASANGAN) {
+
+    log("nomor pasangan terdeteksi, akan memakai kode 8 digit.");
 
 }
 

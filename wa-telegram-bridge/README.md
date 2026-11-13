@@ -41,79 +41,121 @@ tidak resmi karena kamu minta yang gratis dan jalan di HP.
 
 ---
 
+## Seberapa ribet?
+
+Jujur: **sedang, bukan sekali klik.** Sekitar 15–20 menit pertama kali.
+
+Yang gampang:
+
+- Memasang: satu perintah (`pasang.sh`), sisanya otomatis
+- Menghubungkan WhatsApp: ketik kode 8 digit, tidak perlu HP kedua
+- Setelah jalan: tidak perlu diutak-atik lagi
+
+Yang bikin kesal (dan tidak bisa saya hilangkan):
+
+| Bagian | Kenapa ribet | Perlu apa |
+|---|---|---|
+| Termux harus dari F-Droid | Versi Play Store tidak bisa `pkg install` | Unduh APK dari F-Droid, izinkan "install dari sumber tidak dikenal" |
+| `npm install` pertama | Unduh ~44 MB, di HP bisa 3–8 menit | Sabar, jangan ditutup |
+| Android mematikan proses | Perilaku sistem, bukan bug tool | `termux-wake-lock` + matikan optimasi baterai Termux |
+| Android 12+ phantom process | Proses anak dibunuh tanpa peringatan | Kadang perlu satu perintah ADB dari komputer |
+| HP harus tetap hidup | Tidak ada yang jalan kalau HP mati | Cas + jangan matikan |
+
+Kalau kamu tidak nyaman dengan terminal, ini **bukan** tool yang cocok. Tidak
+ada versi aplikasi tinggal-install, karena WhatsApp tidak mengizinkan aplikasi
+seperti ini di Play Store.
+
+**Alternatif kalau ternyata terlalu ribet:** jalankan di laptop/PC yang selalu
+menyala, bukan di HP. Caranya sama persis, tapi tidak ada masalah baterai dan
+phantom process. Cukup lewati bagian Termux.
+
+---
+
 ## Langkah pasang di HP
 
-### 1. Pasang Termux
+### Cara cepat (satu perintah)
 
-Ambil dari **F-Droid**, jangan dari Play Store (versi Play Store sudah usang dan
-tidak bisa `pkg install`):
+Pasang **Termux** dulu dari **F-Droid**, jangan dari Play Store (versi Play Store
+sudah usang dan tidak bisa `pkg install`):
 
 <https://f-droid.org/packages/com.termux/>
 
-### 2. Pasang Node.js dan git
+Buka Termux, tempel satu baris ini:
 
-Buka Termux, lalu:
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Belliond/task-vault/main/wa-telegram-bridge/pasang.sh)
+```
+
+Skrip itu memasang Node.js, mengunduh kode, memasang dependensi, dan menanyakan
+token Telegram + nomor WhatsApp kamu. Selesai dalam sekali jalan.
+
+Kalau `curl` belum ada: `pkg install curl` dulu.
+
+Setelah itu:
+
+```bash
+cd ~/task-vault/wa-telegram-bridge
+termux-wake-lock
+node bridge.mjs
+```
+
+### Cara manual
+
+<details>
+<summary>Klik kalau ingin memasang sendiri langkah demi langkah</summary>
 
 ```bash
 pkg update -y
-pkg install -y nodejs git
-```
+pkg install -y nodejs git curl
+node --version        # harus 20 ke atas
 
-Cek versinya — harus 20 ke atas:
-
-```bash
-node --version
-```
-
-### 3. Ambil kode jembatannya
-
-```bash
 cd ~
 git clone https://github.com/Belliond/task-vault.git
 cd task-vault/wa-telegram-bridge
 npm install
-```
 
-### 4. Siapkan bot Telegram
-
-1. Buka Telegram, cari **@BotFather**, kirim `/newbot`, ikuti langkahnya.
-2. Simpan **token** yang diberikan (bentuknya `123456:ABC-DEF...`).
-3. Cari **@userinfobot**, kirim `/start` — dia membalas **Id** kamu. Itu
-   `TELEGRAM_CHAT_ID`.
-4. Kirim pesan apa saja ke bot barumu sekali, supaya bot boleh membalas.
-
-### 5. Isi konfigurasi
-
-```bash
 cp .env.example .env
-nano .env
+nano .env             # isi TOKEN, CHAT_ID, dan WA_BRIDGE_PASANGAN
 ```
 
-Isi dua baris ini:
+Simpan di nano: `Ctrl+O`, `Enter`, lalu `Ctrl+X`.
 
-```
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-TELEGRAM_CHAT_ID=123456789
-```
+</details>
 
-Simpan: `Ctrl+O`, `Enter`, lalu `Ctrl+X`.
+---
 
-### 6. Jalankan
+## Menghubungkan WhatsApp — tanpa QR
 
-```bash
-node bridge.mjs
-```
+Ini bagian yang biasanya bikin orang menyerah: **QR tidak bisa dipindai dari HP
+yang sama**, karena QR-nya tampil di layar yang harus kamu pindai. Karena itu
+jembatan ini memakai **kode 8 digit**, bukan QR.
 
-Akan muncul **QR di layar**. Di HP:
+1. Jalankan `node bridge.mjs`
+2. Di terminal muncul kode, misalnya:
 
-**WhatsApp → titik tiga ⋮ → Perangkat tertaut → Tautkan perangkat** → pindai QR.
+   ```
+   KODE PASANGAN: JXNZ79ZH
+   ```
 
-Setelah tersambung, kamu akan dapat pesan di Telegram:
+3. Buka WhatsApp di HP itu juga:
+
+   **Pengaturan → Perangkat tertaut → Tautkan perangkat →
+   Tautkan dengan nomor telepon**
+
+4. Ketik kode 8 digit tadi.
+
+Selesai. Kamu akan dapat pesan di Telegram:
 
 ```
 Jembatan aktif, Krisna.
 WhatsApp 62812xxxxxxx sekarang tersambung ke Telegram ini.
 ```
+
+Kode ini butuh `WA_BRIDGE_PASANGAN` di `.env` terisi nomor WhatsApp kamu
+(contoh `628123456789` — pakai 62, tanpa `+` dan tanpa `0` di depan).
+
+> QR tetap ditampilkan sebagai cadangan kalau kamu kebetulan punya perangkat
+> kedua. Tapi untuk HP tunggal, pakai kode pasangan.
 
 ---
 
