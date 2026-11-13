@@ -58,6 +58,10 @@ on:
         description: "Kirim salinan ke Telegram juga"
         type: boolean
         default: true
+      tanggal:
+        description: "Simulasi tanggal (YYYY-MM-DD). Kosong = hari ini"
+        type: string
+        default: ""
 
 concurrency:
   group: notify-telegram
@@ -100,6 +104,14 @@ jobs:
             MODE=harian
           fi
 
+          # Simulasi tanggal, untuk memeriksa isi pesan pada hari
+          # lain tanpa menunggu hari itu tiba.
+          TANGGAL=""
+
+          if [ -n "${{ inputs.tanggal }}" ]; then
+            TANGGAL="--tanggal=${{ inputs.tanggal }}"
+          fi
+
           # Saat dijalankan manual, kotak centang menentukan
           # apakah salinan Telegram ikut dikirim. Pada jadwal
           # otomatis, salinan selalu dikirim.
@@ -116,7 +128,7 @@ jobs:
               node scripts/notify-telegram.mjs --uji
             fi
           elif [ "${{ inputs.dry_run }}" = "true" ]; then
-            node scripts/notify-telegram.mjs --dry-run --mode=$MODE
+            node scripts/notify-telegram.mjs --dry-run --mode=$MODE $TANGGAL
           else
-            node scripts/notify-telegram.mjs --mode=$MODE
+            node scripts/notify-telegram.mjs --mode=$MODE $TANGGAL
           fi
