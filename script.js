@@ -1019,7 +1019,25 @@ function loadMoodleConfig() {
         const raw =
             localStorage.getItem(MOODLE_STORAGE_KEY);
 
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) return null;
+
+        const config = JSON.parse(raw);
+
+        if (config?.url) {
+
+            const url = normalizeSiteUrl(config.url);
+
+            // Perbaiki URL http yang tersimpan lama (diblokir browser).
+            if (url !== config.url) {
+
+                config.url = url;
+                saveMoodleConfig(config);
+
+            }
+
+        }
+
+        return config;
 
     }
     catch (error) {
@@ -1142,6 +1160,12 @@ async function moodlePost(url, params) {
         },
         body:
             new URLSearchParams(params).toString()
+    }).catch((error) => {
+
+        throw new Error(
+            "Cannot reach " + url + " (" + error.message + ")."
+        );
+
     });
 
 
@@ -1175,9 +1199,20 @@ async function moodlePost(url, params) {
 
 function normalizeSiteUrl(url) {
 
-    return String(url || "")
+    let hasil = String(url || "")
         .trim()
         .replace(/\/+$/, "");
+
+    // Halaman https tidak boleh memanggil http: browser memblokirnya
+    // sebagai mixed content dan fetch gagal dengan "Failed to fetch".
+    if (window.location.protocol === "https:" &&
+        /^http:\/\//i.test(hasil)) {
+
+        hasil = hasil.replace(/^http:\/\//i, "https://");
+
+    }
+
+    return hasil;
 
 }
 
@@ -6047,10 +6082,17 @@ async function submitMoodleAssignment(task, files, catatan) {
             body.append("file_" + (index + 1), file, file.name);
         });
 
-        const res = await fetch(
-            normalizeSiteUrl(config.url) + "/webservice/upload.php",
-            { method: "POST", body }
-        );
+        const urlUnggah =
+            normalizeSiteUrl(config.url) + "/webservice/upload.php";
+
+        const res = await fetch(urlUnggah, { method: "POST", body })
+            .catch((error) => {
+
+                throw new Error(
+                    "Cannot reach " + urlUnggah + " (" + error.message + ")."
+                );
+
+            });
 
         const teks = await res.text();
 
