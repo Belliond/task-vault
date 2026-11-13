@@ -2877,7 +2877,7 @@ button {
 
     color: var(--text-soft);
     font-family: var(--ff-mono);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 1.5px;
 
@@ -2911,7 +2911,7 @@ button {
 
     padding: 3px 8px;
     border: 1px solid currentColor;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 1px;
 
 }
@@ -2943,8 +2943,8 @@ button {
 .lms-text {
 
     color: var(--text-soft);
-    font-size: 13px;
-    line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.75;
 
     /* Isi soal sering berisi baris baru dari LMS. */
     white-space: pre-line;
@@ -2957,7 +2957,7 @@ button {
 
     color: var(--text-soft);
     font-family: var(--ff-mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 1px;
 
 }
@@ -2975,7 +2975,7 @@ button {
 .lms-files a {
 
     color: var(--cyan);
-    font-size: 13px;
+    font-size: 14px;
     word-break: break-word;
 
 }
@@ -4517,6 +4517,7 @@ button {
     .task-class,
     .confirm-message,
     .sync-note,
+    .lms-text,
     .schedule-table td {
 
         font-size: 16px;
