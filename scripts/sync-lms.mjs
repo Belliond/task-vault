@@ -117,6 +117,23 @@ export function tanggalWib(unixDetik) {
 }
 
 
+// Jam WIB (HH:MM:SS) dari Unix detik. Dipakai agar deadline
+// menyimpan waktu, bukan hanya tanggal.
+export function jamWib(unixDetik) {
+
+    const fmt = new Intl.DateTimeFormat("en-GB", {
+        timeZone: ZONA,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    });
+
+    return fmt.format(new Date(Number(unixDetik) * 1000));
+
+}
+
+
 export function hariIniWib(sekarangMs = Date.now()) {
 
     const fmt = new Intl.DateTimeFormat("en-CA", {
@@ -349,6 +366,7 @@ export function susunBaris({
                 course: String(tugas.name || "-"),
                 class_name: namaMatkul[idCourse] || "-",
                 deadline: tanggal,
+                deadline_time: jamWib(duedate),
                 category: "Moodle",
                 source: "moodle",
                 external_id: `assign:${idCourse}:${tugas.id}`,
@@ -472,6 +490,34 @@ export function tanggalWibDariUtc(dueDate, dueTime) {
 }
 
 
+// Jam WIB dari pasangan dueDate/dueTime Classroom (keduanya UTC).
+// Null bila tugas tidak punya jam (all-day).
+export function jamWibDariUtc(dueDate, dueTime) {
+
+    if (!dueDate || !dueDate.year) return null;
+
+    if (!dueTime || dueTime.hours == null) return null;
+
+    const unixMs = Date.UTC(
+        dueDate.year,
+        dueDate.month - 1,
+        dueDate.day,
+        Number(dueTime.hours) || 0,
+        Number(dueTime.minutes) || 0,
+        Number(dueTime.seconds) || 0
+    );
+
+    return new Intl.DateTimeFormat("en-GB", {
+        timeZone: ZONA,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).format(new Date(unixMs));
+
+}
+
+
 // Susun baris Classroom siap kirim ke sync_lms_tasks().
 //
 // Aturannya sama dengan versi Moodle: lewati yang tanpa
@@ -520,6 +566,7 @@ export function susunBarisClassroom({ courses, coursework, hariIni }) {
             course: String(kerja.title || "-"),
             class_name: namaKelas[String(kerja.courseId)] || "-",
             deadline: tanggal,
+            deadline_time: jamWibDariUtc(kerja.dueDate, kerja.dueTime),
             category: "Classroom",
             source: "classroom",
             // Bentuknya sama dengan yang dipakai frontend di

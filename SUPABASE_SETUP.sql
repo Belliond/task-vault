@@ -398,3 +398,643 @@ update public.tasks
    set status = 'Pending'
  where status is null
     or status not in ('Pending', 'In Progress', 'Completed');
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261109000000_drop_deadline_reminders.sql
+-- =========================================================
+
+-- =========================================================
+--  HAPUS FITUR PENGINGAT DEADLINE
+--  ---------------------------------------------------------
+--  Fitur pengingat WhatsApp dihentikan atas permintaan
+--  pemilik proyek, setelah pendaftaran WhatsApp Cloud API
+--  terhambat bug verifikasi nomor di sisi Meta dan CallMeBot
+--  menutup pendaftaran baru. Tidak ada jalur gratis yang
+--  tersisa, jadi fitur dibuang seluruhnya alih-alih
+--  dibiarkan setengah hidup.
+--
+--  Yang dihapus:
+--    - tabel reminder_log (riwayat kirim + penjaga anti-dobel)
+--    - tabel reminder_channel (nomor, jadwal, pengaturan jalur)
+--    - semua fungsi pengirim, penilai jawaban gateway, dan
+--      API panel di halaman SYNC
+--    - trigger yang menghapus riwayat saat deadline berubah
+--    - cron job "deadline-reminders"
+--    - sisa respons HTTP pg_net, dan rahasia di Vault
+--
+--  Yang TIDAK dihapus:
+--    - tabel tasks dan seluruh data tugas (tidak disentuh)
+--    - extension pg_cron / pg_net. Keduanya hanya dibutuhkan
+--      fitur ini, tapi membuang extension bisa memutus objek
+--      lain yang tidak terlihat dari repo ini. Membiarkannya
+--      tidak berefek apa pun: tanpa job aktif dan tanpa
+--      konfigurasi, tidak ada satu pun request keluar.
+--
+--  Idempoten: aman dijalankan berulang.
+-- =========================================================
+
+
+-- =========================================================
+--  1. HENTIKAN PENJADWAL
+--  Job harus berhenti SEBELUM fungsinya dihapus, kalau tidak
+--  cron akan gagal pada setiap jam dan menumpuk error.
+--  cron.unschedule menerima nama job (teks) atau jobid; nama
+--  dipakai supaya tidak bergantung pada nomor yang berubah.
+-- =========================================================
+
+do $$
+declare
+    r record;
+begin
+
+    if exists (
+        select 1 from pg_extension where extname = 'pg_cron'
+    ) then
+
+        for r in
+            select jobid
+              from cron.job
+             where jobname = 'deadline-reminders'
+        loop
+            perform cron.unschedule(r.jobid);
+        end loop;
+
+    end if;
+
+end
+$$;
+
+
+-- =========================================================
+--  2. HAPUS TRIGGER
+--  Dibuang bersama fungsinya, supaya tidak ada trigger yang
+--  menunjuk ke fungsi yang sudah tidak ada.
+-- =========================================================
+
+drop trigger if exists tasks_clear_reminders on public.tasks;
+
+
+-- =========================================================
+--  3. HAPUS FUNGSI
+--  Urutan penting: pemanggil lebih dulu, baru yang dipanggil.
+--  drop function tanpa daftar argumen hanya berhasil kalau
+--  namanya unik; di sini semua nama memang unik.
+-- =========================================================
+
+drop function if exists public.reminder_last_test();
+drop function if exists public.reminder_send_test();
+drop function if exists public.reminder_channel_save(
+    text, text, boolean, integer[], integer,
+    text, text, text, text, integer, text
+);
+drop function if exists public.reminder_channel_get();
+drop function if exists public.refresh_reminder_status();
+drop function if exists public.run_deadline_reminders(boolean);
+drop function if exists public.kirim_whatsapp(integer, text, text, date);
+drop function if exists public.gateway_error(integer, text);
+drop function if exists public.gateway_ok(integer, text);
+drop function if exists public.format_deadline_message(text, text, date, integer);
+drop function if exists public.url_encode(text);
+drop function if exists public.tasks_clear_reminders_on_deadline_change();
+
+
+-- =========================================================
+--  4. HAPUS TABEL
+--  reminder_log lebih dulu karena punya foreign key ke
+--  reminder_channel. Data di dalamnya memang sengaja dibuang:
+--  isinya hanya riwayat pengiriman yang tidak dipakai lagi.
+-- =========================================================
+
+drop table if exists public.reminder_log;
+drop table if exists public.reminder_channel;
+
+
+-- =========================================================
+--  5. SISA DATA KELUAR
+--  Respons HTTP yang masih tersimpan di pg_net dan rahasia di
+--  Vault ikut dibersihkan supaya tidak ada token menganggur.
+-- =========================================================
+
+do $$
+begin
+
+    if exists (
+        select 1 from pg_extension where extname = 'pg_net'
+    ) then
+        delete from net._http_response;
+    end if;
+
+    if exists (
+        select 1 from pg_extension where extname = 'supabase_vault'
+    ) then
+        delete from vault.secrets
+         where name in ('callmebot_apikey', 'meta_wa_token');
+    end if;
+
+end
+$$;
+
+
+-- =========================================================
+--  6. VERIFIKASI
+--  Gagal keras kalau masih ada sisa, supaya kesalahan tidak
+--  lolos diam-diam.
+-- =========================================================
+
+do $$
+declare
+    sisa_tabel integer;
+    sisa_fungsi integer;
+    sisa_trigger integer;
+begin
+
+    select count(*) into sisa_tabel
+      from information_schema.tables
+     where table_schema = 'public'
+       and table_name like 'reminder%';
+
+    select count(*) into sisa_fungsi
+      from pg_proc
+     where pronamespace = 'public'::regnamespace
+       and (proname like '%reminder%'
+            or proname in ('kirim_whatsapp', 'gateway_ok', 'gateway_error',
+                           'url_encode', 'format_deadline_message'));
+
+    select count(*) into sisa_trigger
+      from pg_trigger
+     where not tgisinternal
+       and tgname = 'tasks_clear_reminders';
+
+    if sisa_tabel > 0 or sisa_fungsi > 0 or sisa_trigger > 0 then
+        raise exception
+            'Pembersihan belum tuntas: tabel=%, fungsi=%, trigger=%',
+            sisa_tabel, sisa_fungsi, sisa_trigger;
+    end if;
+
+end
+$$;
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261110000000_sync_settings.sql
+-- =========================================================
+
+-- =========================================================
+--  PENGATURAN SYNC OTOMATIS
+--
+--  Halaman web berjalan tanpa server dan tanpa token GitHub.
+--  Menaruh token GitHub di browser berarti siapa pun yang
+--  membuka situs bisa memicu workflow — dan token itu tidak
+--  bisa dirahasiakan di halaman statis.
+--
+--  Karena itu pengaturan ditulis ke tabel ini lewat
+--  publishable key (sama seperti tabel tasks), lalu dibaca
+--  oleh scripts/sync-lms.mjs di GitHub Actions. Dengan begitu
+--  tombol di web cukup mengubah data, bukan memegang rahasia.
+--
+--  Satu baris saja: id = 1. Baris itu dikunci lewat CHECK.
+-- =========================================================
+
+create table if not exists public.sync_settings (
+
+    id              integer primary key default 1
+                    check (id = 1),
+
+    -- Kelas Classroom yang TIDAK ikut disinkronkan.
+    -- Disimpan sebagai teks dipisah koma, sama seperti isi
+    -- variabel CLASSROOM_EXCLUDE_COURSES, supaya satu bentuk
+    -- bisa dipakai di UI maupun di skrip.
+    classroom_exclude   text not null default '',
+
+    -- Batasi hanya kelas ini. Kosong = semua kelas.
+    classroom_only      text not null default '',
+
+    -- Keterangan kapan terakhir diubah dari halaman web.
+    updated_at      timestamptz not null default now(),
+
+    updated_note    text
+
+);
+
+-- RLS dimatikan secara sadar, mengikuti tabel tasks: situs ini
+-- memang berjalan tanpa login (mode kelas bersama).
+alter table public.sync_settings disable row level security;
+
+drop policy if exists "read sync settings" on public.sync_settings;
+drop policy if exists "write sync settings" on public.sync_settings;
+
+-- Baris tunggal. Dibuat kalau belum ada supaya skrip sync
+-- tidak perlu menangani "tabel kosong".
+insert into public.sync_settings (id)
+values (1)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------
+--  Catatan: nilai di tabel ini BUKAN rahasia. Isinya hanya
+--  daftar nama/id kelas yang tidak diinginkan. Yang tetap
+--  rahasia (token Moodle, refresh token Google) tidak pernah
+--  masuk ke tabel mana pun yang bisa dibaca browser.
+-- ---------------------------------------------------------
+
+comment on table public.sync_settings is
+    'Pengaturan sync otomatis yang bisa diubah dari halaman web. '
+    'Bukan rahasia: hanya daftar filter kelas.';
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261111000000_classroom_courses.sql
+-- =========================================================
+
+-- =========================================================
+--  DAFTAR KELAS CLASSROOM YANG DIKENAL SERVER
+--
+--  Masalah yang diperbaiki: panel filter di halaman web dulu
+--  mengambil daftar kelas dari token OAuth browser, yang hanya
+--  berlaku ~1 jam. Akibatnya user harus "hubungkan manual"
+--  dulu setiap kali ingin mengatur filter — padahal server
+--  sudah tahu daftar kelasnya tiap 4 jam.
+--
+--  Sekarang scripts/sync-lms.mjs menulis daftar kelas yang
+--  dilihatnya ke tabel ini, dan halaman web cukup membacanya.
+--  Tidak perlu token apa pun di browser.
+--
+--  Isinya BUKAN rahasia: hanya id dan nama kelas.
+-- =========================================================
+
+create table if not exists public.classroom_courses (
+
+    course_id    text primary key,
+
+    name         text not null default '',
+
+    section      text not null default '',
+
+    -- ACTIVE / PROVISIONED / ARCHIVED, apa adanya dari Google.
+    course_state text not null default '',
+
+    -- Kapan terakhir kelas ini terlihat oleh sync.
+    seen_at      timestamptz not null default now()
+
+);
+
+alter table public.classroom_courses disable row level security;
+
+drop policy if exists "read classroom courses" on public.classroom_courses;
+
+comment on table public.classroom_courses is
+    'Daftar kelas Classroom hasil sync, dipakai halaman web untuk '
+    'menampilkan pilihan filter tanpa perlu token di browser.';
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261112000000_moodle_courses.sql
+-- =========================================================
+
+-- =========================================================
+--  DAFTAR MATA KULIAH MOODLE YANG DIKENAL SERVER
+--
+--  Sama seperti classroom_courses: panel filter di halaman
+--  web tidak boleh bergantung pada token di browser. Server
+--  menyimpan mata kuliah yang dilihatnya saat sync, lalu
+--  halaman web cukup membacanya.
+--
+--  Isinya BUKAN rahasia: hanya id dan nama mata kuliah.
+-- =========================================================
+
+create table if not exists public.moodle_courses (
+
+    course_id  text primary key,
+
+    name       text not null default '',
+
+    seen_at    timestamptz not null default now()
+
+);
+
+alter table public.moodle_courses disable row level security;
+
+drop policy if exists "read moodle courses" on public.moodle_courses;
+
+comment on table public.moodle_courses is
+    'Daftar mata kuliah Moodle hasil sync, dipakai halaman web '
+    'untuk menampilkan pilihan filter tanpa perlu token di browser.';
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261112000001_moodle_filter.sql
+-- =========================================================
+
+-- =========================================================
+--  FILTER MATA KULIAH MOODLE
+--
+--  Sebelumnya hanya Classroom yang bisa diatur dari halaman
+--  web. Moodle hanya bisa lewat secret MOODLE_COURSE_IDS yang
+--  harus diubah di GitHub. Sekarang keduanya bisa diatur dari
+--  halaman Sync.
+--
+--  Bentuknya sama dengan Classroom: teks dipisah koma berisi
+--  id angka (Moodle memakai id numerik, mis. "1016").
+-- =========================================================
+
+alter table public.sync_settings
+    add column if not exists moodle_only    text not null default '',
+    add column if not exists moodle_exclude text not null default '';
+
+comment on column public.sync_settings.moodle_only is
+    'Bila diisi, hanya mata kuliah Moodle ini yang disinkronkan.';
+
+comment on column public.sync_settings.moodle_exclude is
+    'Mata kuliah Moodle yang tidak disinkronkan.';
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261113000000_lms_details.sql
+-- =========================================================
+
+-- =========================================================
+--  ISI SOAL & SUBMISSION LMS
+--
+--  Sebelumnya tabel tasks hanya menyimpan judul + deadline.
+--  Isi soal (description/intro) dan bukti pengumpulan
+--  (status, waktu, nama berkas) tertinggal di Moodle /
+--  Classroom, jadi harus dibuka satu per satu di situsnya.
+--
+--  Disimpan sebagai SATU kolom jsonb, bukan kolom terpisah:
+--  bentuknya berbeda antar sumber (Classroom punya state
+--  CREATED/TURNED_IN, Moodle punya status new/submitted),
+--  dan UI hanya perlu menampilkannya apa adanya. Satu kolom
+--  juga berarti sync tidak perlu diubah setiap kali ada
+--  jenis data baru.
+--
+--  Bentuk yang dipakai sync:
+--    {
+--      "description": "isi soal",
+--      "link": "https://...",
+--      "submission": {
+--        "state": "submitted" | "TURNED_IN" | "CREATED",
+--        "submitted_at": "2026-11-04T05:22:53.778Z",
+--        "files": [{ "name": "...", "url": "..." }]
+--      }
+--    }
+--
+--  Null untuk tugas manual.
+-- =========================================================
+
+alter table public.tasks
+    add column if not exists lms_details jsonb;
+
+
+-- Fungsi upsert yang sama, ditambah lms_details.
+-- Status pilihan user dan dismissed_at tetap TIDAK disentuh.
+
+create or replace function public.sync_lms_tasks(rows jsonb)
+returns table (created integer, updated integer)
+language plpgsql
+security invoker
+as $$
+declare
+    item        jsonb;
+    v_inserted  boolean;
+    v_created   integer := 0;
+    v_updated   integer := 0;
+begin
+
+    for item in select * from jsonb_array_elements(rows)
+    loop
+
+        insert into public.tasks (
+            course,
+            class_name,
+            deadline,
+            category,
+            status,
+            source,
+            external_id,
+            synced_at,
+            lms_details
+        )
+        values (
+            item ->> 'course',
+            item ->> 'class_name',
+            (item ->> 'deadline')::date,
+            item ->> 'category',
+            'Pending',
+            item ->> 'source',
+            item ->> 'external_id',
+            coalesce(
+                (item ->> 'synced_at')::timestamptz,
+                now()
+            ),
+            item -> 'lms_details'
+        )
+        on conflict (source, external_id)
+            where external_id is not null
+        do update set
+            course      = excluded.course,
+            class_name  = excluded.class_name,
+            deadline    = excluded.deadline,
+            category    = excluded.category,
+            synced_at   = excluded.synced_at,
+            -- coalesce, BUKAN excluded langsung: sync manual dari
+            -- browser belum mengirim lms_details, dan tanpa ini
+            -- setiap tombol SYNC akan menghapus isi soal yang
+            -- sudah diambil sync server.
+            lms_details = coalesce(
+                excluded.lms_details,
+                public.tasks.lms_details
+            )
+            -- status dan dismissed_at TIDAK disentuh.
+        returning (xmax = 0) into v_inserted;
+
+        if v_inserted then
+            v_created := v_created + 1;
+        else
+            v_updated := v_updated + 1;
+        end if;
+
+    end loop;
+
+    return query select v_created, v_updated;
+
+end;
+$$;
+
+
+revoke all on function public.sync_lms_tasks(jsonb) from public;
+
+do $$
+begin
+
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        grant execute on function public.sync_lms_tasks(jsonb) to anon;
+    end if;
+
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        grant execute on function public.sync_lms_tasks(jsonb) to authenticated;
+    end if;
+
+end
+$$;
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261113000001_task_notified.sql
+-- =========================================================
+
+-- =========================================================
+--  PENANDA NOTIFIKASI TELEGRAM
+--
+--  Notifier harian mengirim tugas LMS yang belum pernah
+--  diberitahukan, lalu mengisi notified_at. Tanpa kolom ini,
+--  tugas yang sama akan dikirim ulang setiap hari.
+--
+--  Backfill hanya saat kolom baru dibuat: isi database yang
+--  sudah ada tidak boleh membanjiri Telegram. Kalau backfill
+--  dijalankan setiap kali `npm run db:push`, tugas baru yang
+--  belum sempat dikirim akan ikut ditandai dan hilang.
+-- =========================================================
+
+do $$
+begin
+
+    if not exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'tasks'
+          and column_name = 'notified_at'
+    ) then
+
+        alter table public.tasks
+        add column notified_at timestamptz;
+
+        update public.tasks
+        set notified_at = now()
+        where notified_at is null;
+
+    end if;
+
+end
+$$;
+
+comment on column public.tasks.notified_at is
+    'Kapan tugas baru dikirim ke Telegram. NULL = belum dikirim.';
+
+
+-- =========================================================
+--  DARI MIGRASI: 20261113000002_deadline_time.sql
+-- =========================================================
+
+-- =========================================================
+--  JAM DEADLINE
+--
+--  tasks.deadline hanya menyimpan tanggal, sehingga tugas
+--  yang due pukul 23.59 terlihat sama dengan yang due pagi.
+--  Kolom terpisah (bukan mengubah deadline menjadi timestamptz)
+--  dipilih supaya tanggal tetap bisa dipakai kalender, filter,
+--  dan pengingat H-3 tanpa konversi zona tambahan.
+--
+--  NULL = tugas tanpa jam (all-day atau data lama).
+-- =========================================================
+
+alter table public.tasks
+add column if not exists deadline_time time;
+
+
+-- Upsert yang sama, ditambah deadline_time. Status pilihan user
+-- dan dismissed_at tetap TIDAK disentuh.
+create or replace function public.sync_lms_tasks(rows jsonb)
+returns table (created integer, updated integer)
+language plpgsql
+security invoker
+as $$
+declare
+    item        jsonb;
+    v_inserted  boolean;
+    v_created   integer := 0;
+    v_updated   integer := 0;
+begin
+
+    for item in select * from jsonb_array_elements(rows)
+    loop
+
+        insert into public.tasks (
+            course,
+            class_name,
+            deadline,
+            deadline_time,
+            category,
+            status,
+            source,
+            external_id,
+            synced_at,
+            lms_details
+        )
+        values (
+            item ->> 'course',
+            item ->> 'class_name',
+            (item ->> 'deadline')::date,
+            nullif(item ->> 'deadline_time', '')::time,
+            item ->> 'category',
+            'Pending',
+            item ->> 'source',
+            item ->> 'external_id',
+            coalesce(
+                (item ->> 'synced_at')::timestamptz,
+                now()
+            ),
+            item -> 'lms_details'
+        )
+        on conflict (source, external_id)
+            where external_id is not null
+        do update set
+            course        = excluded.course,
+            class_name    = excluded.class_name,
+            deadline      = excluded.deadline,
+            deadline_time = excluded.deadline_time,
+            category      = excluded.category,
+            synced_at     = excluded.synced_at,
+            -- coalesce, BUKAN excluded langsung: sync manual dari
+            -- browser belum mengirim lms_details, dan tanpa ini
+            -- setiap tombol SYNC akan menghapus isi soal yang
+            -- sudah diambil sync server.
+            lms_details   = coalesce(
+                excluded.lms_details,
+                public.tasks.lms_details
+            )
+            -- status dan dismissed_at TIDAK disentuh.
+        returning (xmax = 0) into v_inserted;
+
+        if v_inserted then
+            v_created := v_created + 1;
+        else
+            v_updated := v_updated + 1;
+        end if;
+
+    end loop;
+
+    return query select v_created, v_updated;
+
+end;
+$$;
+
+
+revoke all on function public.sync_lms_tasks(jsonb) from public;
+
+do $$
+begin
+
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        grant execute on function public.sync_lms_tasks(jsonb) to anon;
+    end if;
+
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        grant execute on function public.sync_lms_tasks(jsonb) to authenticated;
+    end if;
+
+end
+$$;
+
+comment on column public.tasks.deadline_time is
+    'Jam deadline WIB. NULL = tanpa jam (all-day / data lama).';

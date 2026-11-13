@@ -92,7 +92,12 @@ uji("pesan memuat bagian baru, deadline, dan H-x", () => {
 
     const teks = susunPesan(
         [{ course: "Kriptografi", class_name: "RA", deadline: "2026-11-20" }],
-        [{ course: "Praktikum", class_name: "RC", deadline: "2026-11-15" }],
+        [{
+            course: "Praktikum",
+            class_name: "RC",
+            deadline: "2026-11-15",
+            deadline_time: "23:59:00"
+        }],
         "2026-11-13"
     );
 
@@ -100,7 +105,7 @@ uji("pesan memuat bagian baru, deadline, dan H-x", () => {
     assert.match(teks, /Kriptografi \(RA\)/);
     assert.match(teks, /DEADLINE DEKAT/);
     assert.match(teks, /H-2/);
-    assert.match(teks, /15 Nov 2026/);
+    assert.match(teks, /15 Nov 2026 · 23\.59/);
 
 });
 

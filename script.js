@@ -326,6 +326,9 @@ const editClassName =
 const editDeadline =
     document.getElementById("editDeadline");
 
+const editDeadlineTime =
+    document.getElementById("editDeadlineTime");
+
 const editCategory =
     document.getElementById("editCategory");
 
@@ -819,6 +822,11 @@ taskForm.addEventListener(
                 .getElementById("deadline")
                 .value;
 
+        const deadlineTime =
+            document
+                .getElementById("deadlineTime")
+                .value;
+
         const category =
             document
                 .getElementById("category")
@@ -863,6 +871,7 @@ taskForm.addEventListener(
             course: course,
             class_name: className,
             deadline: deadline,
+            deadline_time: deadlineTime || null,
             category: category,
             status: status
         };
@@ -1328,6 +1337,26 @@ function unixToLocalDate(unixSeconds) {
         pad(date.getMonth() + 1) +
         "-" +
         pad(date.getDate())
+    );
+
+}
+
+
+function unixToLocalTime(unixSeconds) {
+
+    const date =
+        new Date(Number(unixSeconds) * 1000);
+
+    const pad = (n) =>
+        String(n).padStart(2, "0");
+
+
+    return (
+        pad(date.getHours()) +
+        ":" +
+        pad(date.getMinutes()) +
+        ":" +
+        pad(date.getSeconds())
     );
 
 }
@@ -2132,6 +2161,8 @@ moodleSync.addEventListener(
                     courseNameById[item.courseId] || "-",
                 deadline:
                     unixToLocalDate(item.duedate),
+                deadline_time:
+                    unixToLocalTime(item.duedate),
                 category: "Moodle",
                 source: "moodle",
                 external_id:
@@ -3111,8 +3142,9 @@ async function tryRenderClassroomPicker() {
 }
 
 
-// Ubah dueDate/dueDateTime milik Classroom -> YYYY-MM-DD
-function classroomDeadlineText(work) {
+// Ubah dueDate + dueTime Classroom (keduanya UTC) -> tanggal
+// dan jam lokal. Tanpa dueTime, hanya tanggal yang diisi.
+function classroomDeadline(work) {
 
     const due =
         work.dueDate || work.dueDateTime;
@@ -3120,7 +3152,10 @@ function classroomDeadlineText(work) {
 
     if (!due || !due.year) {
 
-        return "";
+        return {
+            deadline: "",
+            deadlineTime: null
+        };
 
     }
 
@@ -3129,13 +3164,50 @@ function classroomDeadlineText(work) {
         String(n).padStart(2, "0");
 
 
-    return (
-        due.year +
-        "-" +
-        pad(due.month) +
-        "-" +
-        pad(due.day)
-    );
+    const jam = work.dueTime;
+
+
+    if (!jam || jam.hours == null) {
+
+        return {
+            deadline:
+                due.year +
+                "-" +
+                pad(due.month) +
+                "-" +
+                pad(due.day),
+            deadlineTime: null
+        };
+
+    }
+
+
+    const date =
+        new Date(
+            Date.UTC(
+                due.year,
+                due.month - 1,
+                due.day,
+                Number(jam.hours) || 0,
+                Number(jam.minutes) || 0,
+                Number(jam.seconds) || 0
+            )
+        );
+
+
+    return {
+        deadline:
+            date.getFullYear() +
+            "-" +
+            pad(date.getMonth() + 1) +
+            "-" +
+            pad(date.getDate()),
+        deadlineTime:
+            pad(date.getHours()) +
+            ":" +
+            pad(date.getMinutes()) +
+            ":00"
+    };
 
 }
 
@@ -3253,13 +3325,17 @@ classroomSync.addEventListener(
                 workItems.forEach(
                     (item) => {
 
+                        const kapan =
+                            classroomDeadline(item);
+
+
                         assignments.push({
                             id: item.id,
                             title: item.title,
                             courseId: course.id,
                             courseName: course.name,
-                            deadline:
-                                classroomDeadlineText(item)
+                            deadline: kapan.deadline,
+                            deadlineTime: kapan.deadlineTime
                         });
 
                     }
@@ -3320,6 +3396,7 @@ classroomSync.addEventListener(
                 course: item.title,
                 class_name: item.courseName || "-",
                 deadline: item.deadline,
+                deadline_time: item.deadlineTime || null,
                 category: "Classroom",
                 source: "classroom",
                 external_id:
@@ -6394,7 +6471,7 @@ function createTaskCard(task) {
 
 
     const deadlineInfo =
-        getDeadlineInfo(task.deadline);
+        getDeadlineInfo(task);
 
     const statusInfo =
         getStatusInfo(isTaskDone(task) ? "Completed" : task.status);
@@ -6436,7 +6513,7 @@ function createTaskCard(task) {
             </div>
 
             <div class="deadline-date">
-                ${formatDate(task.deadline)}
+                ${formatDeadline(task)}
             </div>
 
             <div class="deadline-warning ${
@@ -6545,6 +6622,9 @@ function openEditModal(task) {
     editDeadline.value =
         normalizeDateInput(task.deadline);
 
+    editDeadlineTime.value =
+        normalizeTimeInput(task.deadline_time);
+
     editCategory.value =
         task.category || "";
 
@@ -6569,6 +6649,20 @@ function normalizeDateInput(dateValue) {
 
 
     return String(dateValue).slice(0, 10);
+
+}
+
+
+function normalizeTimeInput(timeValue) {
+
+    if (!timeValue) {
+
+        return "";
+
+    }
+
+
+    return String(timeValue).slice(0, 5);
 
 }
 
@@ -6822,6 +6916,9 @@ editForm.addEventListener(
         const deadline =
             editDeadline.value;
 
+        const deadlineTime =
+            editDeadlineTime.value;
+
         const category =
             editCategory.value.trim();
 
@@ -6867,6 +6964,7 @@ editForm.addEventListener(
                 course: course,
                 class_name: className,
                 deadline: deadline,
+                deadline_time: deadlineTime || null,
                 category: category,
                 status: status
             })
@@ -7282,17 +7380,29 @@ function isOverdue(task) {
     }
 
 
-    const today =
-        startOfDay(new Date());
+    const moment =
+        deadlineMoment(task);
 
 
-    const target =
-        startOfDay(
-            new Date(task.deadline + "T00:00:00")
-        );
+    return moment < new Date();
+
+}
 
 
-    return target < today;
+// Deadline lengkap: tanggal + jam (WIB). Tanpa jam dianggap
+// akhir hari, supaya tugas all-day tetap berperilaku seperti
+// sebelum kolom deadline_time ada.
+function deadlineMoment(task) {
+
+    const jam =
+        task.deadline_time || "23:59:59";
+
+
+    return new Date(
+        String(task.deadline).slice(0, 10) +
+        "T" +
+        jam
+    );
 
 }
 
@@ -7419,7 +7529,21 @@ function getStatusInfo(statusValue) {
 }
 
 
-function getDeadlineInfo(deadline) {
+function getDeadlineInfo(task) {
+
+    const moment =
+        deadlineMoment(task);
+
+
+    if (Number.isNaN(moment.getTime())) {
+
+        return {
+            text: "-",
+            overdue: false
+        };
+
+    }
+
 
     const today =
         startOfDay(
@@ -7428,11 +7552,7 @@ function getDeadlineInfo(deadline) {
 
 
     const target =
-        startOfDay(
-            new Date(
-                deadline + "T00:00:00"
-            )
-        );
+        startOfDay(moment);
 
 
     const difference =
@@ -7446,11 +7566,13 @@ function getDeadlineInfo(deadline) {
         );
 
 
-    if (days < 0) {
+    if (moment < new Date()) {
 
         return {
             text:
-                `LATE BY ${Math.abs(days)} DAY(S)`,
+                days === 0
+                    ? "LATE TODAY"
+                    : `LATE BY ${Math.abs(days)} DAY(S)`,
             overdue: true
         };
 
@@ -7514,6 +7636,51 @@ function formatDate(dateString) {
             year: "numeric"
         }
     );
+
+}
+
+
+// "14:30:00" -> "14.30" (gaya jam yang dipakai jadwal kuliah).
+function formatTime(timeString) {
+
+    if (!timeString) {
+
+        return "";
+
+    }
+
+
+    const bagian =
+        String(timeString).split(":");
+
+
+    if (bagian.length < 2) {
+
+        return "";
+
+    }
+
+
+    return bagian[0] + "." + bagian[1];
+
+}
+
+
+function formatDeadline(task) {
+
+    if (!task || !task.deadline) {
+
+        return "-";
+
+    }
+
+
+    const jam =
+        formatTime(task.deadline_time);
+
+
+    return formatDate(task.deadline) +
+        (jam ? " · " + jam : "");
 
 }
 

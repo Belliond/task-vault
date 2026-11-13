@@ -549,6 +549,8 @@ Membaca `MOODLE_TOKEN` dari `.env`, atau dari environment kalau `.env` tidak ada
 - **Deadline memakai zona `Asia/Jakarta`.** Runner GitHub berjalan di UTC,
   sedangkan kolom `deadline` bertipe `date`. Tanpa konversi, tugas yang
   deadline-nya lewat tengah malam WIB akan tercatat sehari lebih awal.
+  Jam deadline disimpan terpisah di `deadline_time` (tipe `time`, WIB);
+  `NULL` berarti tugas tanpa jam (all-day atau data lama).
 - **Jadwal setiap 4 jam** pada menit `:17`, bukan `:00`. GitHub memperingatkan
   bahwa jadwal di awal jam paling sering tertunda atau dilewati saat beban
   tinggi. `workflow_dispatch` tidak terkena penundaan ini.

@@ -124,6 +124,20 @@ function labelTugas(task) {
 }
 
 
+// Tanggal + jam (WIB) bila ada. Tanpa deadline_time tetap
+// menampilkan tanggal saja, seperti tugas all-day.
+function deadlineTampil(task) {
+
+    const jam = task.deadline_time
+        ? String(task.deadline_time).slice(0, 5).replace(":", ".")
+        : "";
+
+    return tanggalTampil(task.deadline) +
+        (jam ? " · " + jam : "");
+
+}
+
+
 // Mengembalikan "" kalau tidak ada yang perlu dikirim, supaya
 // bot tidak mengirim pesan kosong setiap hari.
 export function susunPesan(baru, dekat, todayKey) {
@@ -133,7 +147,7 @@ export function susunPesan(baru, dekat, todayKey) {
     if (baru.length > 0) {
 
         const baris = baru.slice(0, BATAS_DAFTAR).map(
-            (task) => `• ${labelTugas(task)}\n  deadline ${tanggalTampil(task.deadline)}`
+            (task) => `• ${labelTugas(task)}\n  deadline ${deadlineTampil(task)}`
         );
 
         if (baru.length > BATAS_DAFTAR) {
@@ -155,7 +169,7 @@ export function susunPesan(baru, dekat, todayKey) {
                  Date.parse(todayKey + "T00:00:00Z")) / 86400000
             );
 
-            return `• H-${selisih} · ${tanggalTampil(task.deadline)}\n  ${labelTugas(task)}`;
+            return `• H-${selisih} · ${deadlineTampil(task)}\n  ${labelTugas(task)}`;
 
         });
 
@@ -236,7 +250,7 @@ async function supabase(metode, jalur, init = {}) {
 
 
 const KOLOM =
-    "select=id,course,class_name,deadline,status,source,lms_details";
+    "select=id,course,class_name,deadline,deadline_time,status,source,lms_details";
 
 
 async function ambilBaru() {

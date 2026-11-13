@@ -12,6 +12,7 @@
 
 import {
     tanggalWib,
+    jamWib,
     tanggalWibDariUtc,
     susunBarisClassroom,
     cariUsang,
@@ -177,6 +178,8 @@ cek("kategori", hasil.baris[0].category, "Classroom");
 cek("source", hasil.baris[0].source, "classroom");
 cek("deadline hari ini tetap aktif", hasil.baris[1].deadline, "2026-11-13");
 cek("kelas kedua benar", hasil.baris[1].class_name, "Metodologi Penelitian");
+cek("jam WIB dari dueTime", hasil.baris[0].deadline_time, "00:00:00");
+cek("tanpa dueTime -> tanpa jam", hasil.baris[1].deadline_time, null);
 
 console.log("\n=== cariUsangClassroom ===");
 
@@ -226,6 +229,13 @@ cek(
     "17:00 UTC -> 16 Nov",
     tanggalWib(Date.UTC(2026, 10, 15, 17, 0, 0) / 1000),
     "2026-11-16"
+);
+
+// Jam deadline harus ikut tersimpan dalam WIB.
+cek(
+    "jam 16:59 UTC -> 23:59:00 WIB",
+    jamWib(Date.UTC(2026, 10, 15, 16, 59, 0) / 1000),
+    "23:59:00"
 );
 
 console.log("\n=== cariUsang dengan mata kuliah dikecualikan ===");
