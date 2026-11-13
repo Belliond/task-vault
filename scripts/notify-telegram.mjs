@@ -26,6 +26,10 @@ import { fileURLToPath } from "node:url";
 const ZONA = "Asia/Jakarta";
 const BATAS_DAFTAR = 30;
 
+// Nama yang dipakai bot saat menyapa. Bisa ditimpa lewat
+// secret TELEGRAM_NAMA tanpa mengubah kode.
+const NAMA = (process.env.TELEGRAM_NAMA || "").trim() || "Krisna";
+
 
 // ---------------------------------------------------------
 //  Fungsi murni (diuji scripts/test-notify.mjs)
@@ -246,7 +250,8 @@ export function susunPesan(baru, dekat, todayKey) {
 
     if (bagian.length === 0) return "";
 
-    return "pagi. ini update tugas kamu\n\n" + bagian.join("\n\n");
+    return "Pagi " + NAMA + ", ini update tugasnya yaaa\n\n" +
+        bagian.join("\n\n");
 
 }
 
@@ -276,9 +281,9 @@ export function susunPesanDeadline(daftar, now = new Date()) {
 
     });
 
-    return "deadline udah deket\n\n" +
+    return "Deadline udah deket, " + NAMA + "\n\n" +
         baris.join("\n") +
-        "\n\nkalau udah beres abaikan aja";
+        "\n\nkalau udah beres abaikan aja ya";
 
 }
 
@@ -318,8 +323,7 @@ export function susunDigest(mingguIni, selesaiLalu) {
             : "minggu lalu belum ada yang kelar, gapapa."
     );
 
-
-    return "senin lagi.\n\n" + bagian.join("\n\n");
+    return "Senin lagi, " + NAMA + ".\n\n" + bagian.join("\n\n");
 
 }
 
@@ -573,7 +577,7 @@ async function main() {
     if (process.argv.includes("--uji")) {
 
         await kirimTelegram(
-            "tes. kalau pesan ini masuk, botnya jalan."
+            "tes. kalau pesan ini masuk, botnya jalan, " + NAMA + "."
         );
 
         console.log("Pesan tes terkirim.");

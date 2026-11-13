@@ -770,18 +770,12 @@ diingatkan lagi.
 
 **Nada pesan** diatur di `scripts/notify-telegram.mjs` (fungsi `susunPesan`,
 `susunPesanDeadline`, `susunDigest`). Gaya saat ini: seperti chat orang,
-huruf kecil, tanpa emoji, tanpa basa-basi. Contoh:
+huruf kecil, menyapa nama, tanpa emoji. Nama diambil dari konstanta `NAMA`
+(`"Krisna"`) dan bisa diganti tanpa mengubah kode lewat secret
+`TELEGRAM_NAMA`. Contoh:
 
 ```
-deadline udah deket
-
-• Tugas 3 (Kriptografi) — jam 23.59, sisa 3 jam
-
-kalau udah beres abaikan aja
-```
-
-```
-pagi. ini update tugas kamu
+Pagi Krisna, ini update tugasnya yaaa
 
 yang udah deket:
 • H-1 · 17 Nov 2026
@@ -789,7 +783,15 @@ yang udah deket:
 ```
 
 ```
-senin lagi.
+Deadline udah deket, Krisna
+
+• Tugas 3 (Kriptografi) — jam 23.59, sisa 3 jam
+
+kalau udah beres abaikan aja ya
+```
+
+```
+Senin lagi, Krisna.
 
 minggu ini:
 • Sel, 17 Nov 2026 · 23.59

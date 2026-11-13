@@ -222,7 +222,7 @@ uji("pesan pengingat memuat jam dan sisa waktu", () => {
         new Date("2026-11-13T05:00:00Z")
     );
 
-    assert.match(teks, /deadline udah deket/);
+    assert.match(teks, /deadline udah deket/i);
     assert.match(teks, /jam 15\.00/);
     assert.match(teks, /sisa 3 jam/);
 
@@ -255,6 +255,40 @@ uji("digest tetap terkirim walau tidak ada tugas", () => {
 
     assert.match(teks, /minggu ini kosong/);
     assert.match(teks, /belum ada yang kelar/);
+
+});
+
+
+uji("setiap pesan menyapa nama", () => {
+
+    const nama = "Krisna";
+
+    assert.match(
+        susunPesan(
+            [{ course: "A", class_name: "B", deadline: "2026-11-20" }],
+            [],
+            "2026-11-13"
+        ),
+        new RegExp("Pagi " + nama + ", ini update tugasnya")
+    );
+
+    assert.match(
+        susunPesanDeadline(
+            [{
+                course: "A",
+                class_name: "B",
+                deadline: "2026-11-13",
+                deadline_time: "15:00:00"
+            }],
+            new Date("2026-11-13T05:00:00Z")
+        ),
+        new RegExp("Deadline udah deket, " + nama)
+    );
+
+    assert.match(
+        susunDigest([], []),
+        new RegExp("Senin lagi, " + nama)
+    );
 
 });
 
