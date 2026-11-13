@@ -5780,7 +5780,9 @@ function formatSubmittedAt(nilai) {
 // bila sync sudah mengisi lms_details. Memakai <details> bawaan
 // browser: bisa dibuka/tutup tanpa JS dan tetap terbaca pembaca
 // layar.
-function buildLmsDetailHtml(details, kategori) {
+function buildLmsDetailHtml(task) {
+
+    const details = task.lms_details;
 
     if (!details) return "";
 
@@ -5845,14 +5847,397 @@ function buildLmsDetailHtml(details, kategori) {
                     : ""}
 
                 ${link
-                    ? `<a class="lms-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">BUKA DI ${escapeHtml(String(kategori || "LMS").toUpperCase())}</a>`
+                    ? `<a class="lms-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">BUKA DI ${escapeHtml(String(task.category || "LMS").toUpperCase())}</a>`
                     : ""}
+
+                ${buildMoodleSubmitHtml(task)}
 
             </div>
 
         </details>
 
     `;
+
+}
+
+
+// =========================================================
+// SUBMIT TUGAS MOODLE DARI WEB
+//
+// Alur (diverifikasi ke Moodle asli):
+//   1. core_files_get_unused_draft_itemid
+//   2. POST webservice/upload.php (multipart, filearea=draft)
+//   3. mod_assign_save_submission
+//   4. mod_assign_submit_for_grading (abaikan warning bila
+//      tugas tidak memakai mode draft — statusnya sudah submitted)
+//   5. mod_assign_get_submission_status untuk memperbarui kartu
+//
+// Pembatalan: mod_assign_remove_submission (assignid + userid).
+// Hanya berhasil selama belum dinilai pengajar.
+// =========================================================
+
+function moodleAssignmentId(task) {
+
+    const bagian = String(task.external_id || "").split(":");
+
+    return bagian[0] === "assign" ? bagian[2] || "" : "";
+
+}
+
+
+function buildMoodleSubmitHtml(task) {
+
+    const assignmentId = moodleAssignmentId(task);
+
+    if (!assignmentId) return "";
+
+    const sudahKirim =
+        String(task.lms_details?.submission?.state || "").toLowerCase() ===
+        "submitted";
+
+    const punyaToken =
+        !!loadMoodleConfig()?.token;
+
+    return `
+
+        <form class="lms-submit" data-assign="${escapeHtml(assignmentId)}">
+
+            ${sudahKirim
+                ? ""
+                : `
+                <label class="lms-field">
+                    <span>BERKAS</span>
+                    <input type="file" class="lms-file" multiple>
+                </label>
+
+                <label class="lms-field">
+                    <span>CATATAN (OPSIONAL)</span>
+                    <textarea class="lms-note" rows="2" maxlength="2000"></textarea>
+                </label>
+                `}
+
+            <div class="lms-submit-actions">
+
+                ${sudahKirim
+                    ? `<button type="button" class="lms-remove-button">BATALKAN PENGUMPULAN</button>`
+                    : `<button type="submit" class="lms-submit-button">KIRIM TUGAS</button>`}
+
+            </div>
+
+            <div class="lms-submit-status" role="status" aria-live="polite">${
+                punyaToken
+                    ? ""
+                    : "Token Moodle belum tersimpan. Hubungkan di halaman SYNC."
+            }</div>
+
+        </form>
+
+    `;
+
+}
+
+
+// Bentuk submission dari balasan Moodle, sama dengan yang
+// dipakai scripts/sync-lms.mjs.
+function ringkasMoodleSubmissionBrowser(status) {
+
+    const sub = status?.lastattempt?.submission;
+
+    if (!sub) return null;
+
+    const files = [];
+
+    for (const plugin of sub.plugins || []) {
+
+        if (plugin.type !== "file") continue;
+
+        for (const area of plugin.fileareas || []) {
+
+            for (const f of area.files || []) {
+
+                files.push({ name: f.filename, url: f.fileurl });
+
+            }
+
+        }
+
+    }
+
+    if (!sub.status && files.length === 0) return null;
+
+    return {
+        state: sub.status || "",
+        submitted_at: sub.timemodified
+            ? new Date(Number(sub.timemodified) * 1000).toISOString()
+            : null,
+        files
+    };
+
+}
+
+
+async function simpanSubmissionLokal(task, config, assignmentId) {
+
+    const status = await moodleRest(config, {
+        wsfunction: "mod_assign_get_submission_status",
+        assignid: assignmentId
+    });
+
+    task.lms_details = task.lms_details || {};
+
+    task.lms_details.submission =
+        ringkasMoodleSubmissionBrowser(status);
+
+    // Simpan juga ke database supaya perangkat lain melihat
+    // status terbaru tanpa menunggu sync berikutnya.
+    if (supabaseClient) {
+
+        const { error } = await supabaseClient
+            .from("tasks")
+            .update({ lms_details: task.lms_details })
+            .eq("id", task.id);
+
+        if (error) console.error(error);
+
+    }
+
+    renderTasks();
+    refreshActiveView();
+
+}
+
+
+async function submitMoodleAssignment(task, files, catatan) {
+
+    const config = loadMoodleConfig();
+
+    if (!config?.token || !config.url) {
+
+        throw new Error(
+            "Token Moodle belum tersimpan. Hubungkan di halaman SYNC."
+        );
+
+    }
+
+    const assignmentId = moodleAssignmentId(task);
+
+    if (!assignmentId) {
+
+        throw new Error("Tugas ini tidak terhubung ke assignment Moodle.");
+
+    }
+
+    // 1. Tempat penampungan sementara untuk berkas.
+    const draft = await moodleRest(config, {
+        wsfunction: "core_files_get_unused_draft_itemid"
+    });
+
+    let itemid = String(draft?.itemid || "0");
+
+    // 2. Unggah berkas. multipart/form-data termasuk "simple
+    // request", jadi tidak memicu preflight CORS.
+    if (files.length) {
+
+        const body = new FormData();
+
+        body.append("token", config.token);
+        body.append("filearea", "draft");
+        body.append("itemid", itemid);
+
+        files.forEach((file, index) => {
+            body.append("file_" + (index + 1), file, file.name);
+        });
+
+        const res = await fetch(
+            normalizeSiteUrl(config.url) + "/webservice/upload.php",
+            { method: "POST", body }
+        );
+
+        const teks = await res.text();
+
+        if (!res.ok) {
+
+            throw new Error("Unggah berkas gagal (HTTP " + res.status + ").");
+
+        }
+
+        let hasil;
+
+        try {
+
+            hasil = JSON.parse(teks);
+
+        } catch {
+
+            throw new Error("Balasan unggah bukan JSON.");
+
+        }
+
+        if (hasil?.error) throw new Error(hasil.error);
+
+        // Moodle mengembalikan itemid baru untuk berkas yang
+        // benar-benar tersimpan.
+        if (Array.isArray(hasil) && hasil[0]?.itemid) {
+
+            itemid = String(hasil[0].itemid);
+
+        }
+
+    }
+
+    // 3. Simpan submission.
+    await moodleRest(config, {
+        wsfunction: "mod_assign_save_submission",
+        assignmentid: assignmentId,
+        "plugindata[files_filemanager]": itemid,
+        "plugindata[onlinetext_editor][text]": catatan,
+        "plugindata[onlinetext_editor][format]": "1",
+        "plugindata[onlinetext_editor][itemid]": "0"
+    });
+
+    // 4. Finalisasi. Tugas tanpa mode draft sudah berstatus
+    // "submitted" setelah langkah 3; Moodle hanya mengembalikan
+    // warning, bukan error, jadi aman diabaikan.
+    await moodleRest(config, {
+        wsfunction: "mod_assign_submit_for_grading",
+        assignmentid: assignmentId,
+        acceptsubmissionstatement: "1"
+    }).catch(() => null);
+
+    // 5. Perbarui kartu.
+    await simpanSubmissionLokal(task, config, assignmentId);
+
+}
+
+
+async function removeMoodleSubmission(task) {
+
+    const config = loadMoodleConfig();
+
+    if (!config?.token || !config.url) {
+
+        throw new Error(
+            "Token Moodle belum tersimpan. Hubungkan di halaman SYNC."
+        );
+
+    }
+
+    const assignmentId = moodleAssignmentId(task);
+
+    const info = await moodleRest(config, {
+        wsfunction: "core_webservice_get_site_info"
+    });
+
+    await moodleRest(config, {
+        wsfunction: "mod_assign_remove_submission",
+        assignid: assignmentId,
+        userid: info.userid
+    });
+
+    await simpanSubmissionLokal(task, config, assignmentId);
+
+}
+
+
+function wireMoodleSubmit(card, task) {
+
+    const form = card.querySelector(".lms-submit");
+
+    if (!form) return;
+
+    const statusEl = form.querySelector(".lms-submit-status");
+
+    const setStatus = (pesan, jenis = "") => {
+
+        statusEl.textContent = pesan;
+
+        statusEl.className = "lms-submit-status" + (jenis ? " " + jenis : "");
+
+    };
+
+    const jalankan = async (kerja, pesanSukses) => {
+
+        const tombol = form.querySelector("button");
+
+        if (tombol) tombol.disabled = true;
+
+        try {
+
+            setStatus("Memproses…");
+
+            await kerja();
+
+            setStatus(pesanSukses, "success");
+
+        } catch (error) {
+
+            setStatus(error.message || "Gagal.", "error");
+
+            if (tombol) tombol.disabled = false;
+
+        }
+
+    };
+
+    form.addEventListener("submit", async (event) => {
+
+        event.preventDefault();
+
+        const files = [
+            ...form.querySelectorAll(".lms-file")
+        ].flatMap((input) => [...input.files]);
+
+        const catatan =
+            form.querySelector(".lms-note")?.value.trim() || "";
+
+        if (!files.length && !catatan) {
+
+            setStatus("Pilih berkas atau isi catatan dulu.", "error");
+
+            return;
+
+        }
+
+        const lanjut = await openConfirmModal({
+            title: "KIRIM TUGAS?",
+            message:
+                "Pengumpulan langsung dikirim ke Moodle dan terlihat " +
+                "oleh pengajar. Masih bisa dibatalkan selama belum dinilai.",
+            acceptLabel: "KIRIM",
+            cancelLabel: "BATAL"
+        });
+
+        if (!lanjut) return;
+
+        jalankan(
+            () => submitMoodleAssignment(task, files, catatan),
+            "Terkirim ke Moodle."
+        );
+
+    });
+
+    form.querySelector(".lms-remove-button")?.addEventListener(
+        "click",
+        async () => {
+
+            const lanjut = await openConfirmModal({
+                title: "BATALKAN PENGUMPULAN?",
+                message:
+                    "Berkas yang sudah dikirim akan dihapus dari Moodle. " +
+                    "Hanya bisa selama tugas belum dinilai.",
+                acceptLabel: "BATALKAN",
+                cancelLabel: "TUTUP"
+            });
+
+            if (!lanjut) return;
+
+            jalankan(
+                () => removeMoodleSubmission(task),
+                "Pengumpulan dibatalkan."
+            );
+
+        }
+    );
 
 }
 
@@ -5945,7 +6330,7 @@ function createTaskCard(task) {
         </div>
 
 
-        ${buildLmsDetailHtml(task.lms_details, task.category)}
+        ${buildLmsDetailHtml(task)}
 
     `;
 
@@ -5975,6 +6360,9 @@ function createTaskCard(task) {
 
         }
     );
+
+
+    wireMoodleSubmit(card, task);
 
 
     return card;

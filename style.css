@@ -3006,6 +3006,135 @@ button {
 }
 
 
+.lms-submit {
+
+    display: grid;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+
+}
+
+
+.lms-field {
+
+    display: grid;
+    gap: 5px;
+
+}
+
+
+.lms-field span {
+
+    color: var(--text-soft);
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+
+}
+
+
+.lms-field input,
+.lms-field textarea {
+
+    width: 100%;
+    min-width: 0;
+
+    padding: 9px 10px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+
+    background: var(--bg-secondary);
+    color: var(--text);
+
+    font-family: var(--ff-mono);
+    font-size: 14px;
+
+}
+
+
+.lms-field input:focus,
+.lms-field textarea:focus {
+
+    border-color: var(--border-bright);
+    outline: none;
+
+}
+
+
+.lms-submit-actions {
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+
+}
+
+
+.lms-submit-button,
+.lms-remove-button {
+
+    min-height: 44px;
+
+    padding: 10px 14px;
+    border: 2px solid var(--border-bright);
+    border-radius: var(--radius);
+
+    background: var(--green-soft);
+    color: var(--green);
+
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+
+    cursor: pointer;
+
+}
+
+
+.lms-remove-button {
+
+    border-color: var(--danger);
+    background: transparent;
+    color: var(--danger);
+
+}
+
+
+.lms-submit-button:disabled,
+.lms-remove-button:disabled {
+
+    opacity: 0.55;
+    cursor: not-allowed;
+
+}
+
+
+.lms-submit-status {
+
+    color: var(--text-soft);
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+
+}
+
+
+.lms-submit-status.success {
+
+    color: var(--green);
+
+}
+
+
+.lms-submit-status.error {
+
+    color: var(--danger);
+
+}
+
+
 .category-badge,
 .status-badge {
 
