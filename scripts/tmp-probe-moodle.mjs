@@ -43,7 +43,7 @@ let totalAssign = 0;
 for (const m of matkul) {
     let asg;
     try {
-        asg = await moodle("mod_assign_get_assignments", { courseids: String(m.id) });
+        asg = await moodle("mod_assign_get_assignments", { "courseids[0]": String(m.id) });
     } catch (e) {
         console.log("\nMATKUL " + m.id + " " + m.fullname + " -> GAGAL " + e.message);
         continue;
