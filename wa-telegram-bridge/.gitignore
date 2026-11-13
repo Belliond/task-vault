@@ -1,0 +1,7 @@
+node_modules/
+auth/
+.env
+bridge.log
+bridge.log.old
+keluar.jsonl
+masuk.json

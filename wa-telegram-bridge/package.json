@@ -1,0 +1,19 @@
+{
+  "name": "wa-telegram-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jembatan WhatsApp <-> Telegram, ringan, jalan di HP lewat Termux",
+  "main": "bridge.mjs",
+  "scripts": {
+    "start": "node bridge.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "baileys": "7.0.0-rc14",
+    "qrcode-terminal": "0.12.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
