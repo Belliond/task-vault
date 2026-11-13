@@ -3899,6 +3899,13 @@ let loadPendingAgain = false;
 
 let offlineToastShown = false;
 
+// Kapan terakhir data benar-benar datang dari jaringan.
+let lastLoadedAt = 0;
+
+// Sedang menampilkan cache offline? Dipakai untuk memberi tahu
+// saat data sudah diperbarui setelah koneksi kembali.
+let wasOffline = false;
+
 
 // Render daftar terakhir yang tersimpan saat jaringan tidak
 // tersedia. Mengembalikan false bila belum pernah ada cache.
@@ -3917,6 +3924,8 @@ function pakaiCacheOffline() {
     tasks = cached.data;
 
     loadFailureMessage = null;
+
+    wasOffline = true;
 
 
     updateStatistics();
@@ -4079,11 +4088,27 @@ async function loadTasks({ silent = false } = {}) {
         // Simpan untuk dibaca saat offline berikutnya.
         simpanCacheTugas(tasks);
 
+        lastLoadedAt = Date.now();
+
         // Data berhasil dimuat: bersihkan penanda kegagalan agar
         // pesan lama tidak tertinggal di Beranda.
         loadFailureMessage = null;
 
         offlineToastShown = false;
+
+
+        // Sebelumnya menampilkan cache offline: beri tahu bahwa
+        // isi layar sekarang sudah versi terbaru.
+        if (wasOffline) {
+
+            wasOffline = false;
+
+            showToast(
+                "Sudah terhubung lagi, data diperbarui.",
+                "success"
+            );
+
+        }
 
 
         updateStatistics();
@@ -4130,6 +4155,110 @@ async function loadTasks({ silent = false } = {}) {
     }
 
 }
+
+
+// =========================================================
+// KEMBALI ONLINE
+//  Saat offline, halaman menampilkan cache localStorage.
+//  Tanpa listener ini, data basi itu bertahan sampai user
+//  pindah halaman atau menekan tombol sendiri.
+//
+//  Tiga pemicu:
+//    - event "offline" : tandai bahwa layar mungkin basi
+//    - event "online"  : jaringan kembali -> ambil data baru
+//    - tab terlihat lagi : HP sering menidurkan tab, dan
+//      event "online" tidak selalu terkirim
+//  Refresh otomatis diberi jeda supaya tidak menembak
+//  berulang saat beberapa pemicu datang berdekatan.
+// =========================================================
+
+// Jarak minimal antar-refresh otomatis.
+const REFRESH_MIN_MS = 15000;
+
+// Data dianggap basi setelah satu menit. Dipakai saat tab
+// kembali terlihat: tidak perlu query kalau data masih baru.
+const REFRESH_STALE_MS = 60000;
+
+let lastAutoRefreshAt = 0;
+
+
+function segarkanData({ paksa = false } = {}) {
+
+    if (!navigator.onLine) {
+
+        return;
+
+    }
+
+
+    if (!paksa &&
+        Date.now() - lastAutoRefreshAt < REFRESH_MIN_MS) {
+
+        return;
+
+    }
+
+
+    lastAutoRefreshAt = Date.now();
+
+    loadTasks({ silent: true });
+
+}
+
+
+window.addEventListener("offline", () => {
+
+    // Layar akan menampilkan cache (atau sudah menampilkannya).
+    // Ditandai di sini supaya toast "sudah terhubung lagi"
+    // muncul juga ketika user sempat offline tanpa reload.
+    wasOffline = true;
+
+});
+
+
+window.addEventListener("online", () => {
+
+    // Jaringan baru hidup: jangan tunda, langsung ambil data.
+    segarkanData({ paksa: true });
+
+
+    // Channel realtime yang mati saat offline tidak selalu
+    // menyambung sendiri. Mulai ulang supaya perubahan dari
+    // perangkat lain kembali terlihat.
+    if (realtimeChannel &&
+        typeof supabaseClient?.removeChannel === "function") {
+
+        supabaseClient.removeChannel(realtimeChannel);
+
+        realtimeChannel = null;
+
+        startRealtime();
+
+    }
+
+});
+
+
+document.addEventListener("visibilitychange", () => {
+
+    if (document.visibilityState !== "visible") {
+
+        return;
+
+    }
+
+
+    // Tab dibuka lagi: hanya query kalau data sudah basi.
+    if (Date.now() - lastLoadedAt < REFRESH_STALE_MS) {
+
+        return;
+
+    }
+
+
+    segarkanData();
+
+});
 
 
 // =========================================================

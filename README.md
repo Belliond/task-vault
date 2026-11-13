@@ -339,8 +339,16 @@ Cara kerja:
 - **Supabase tidak pernah di-cache.** Data basi di level HTTP lebih
   menyesatkan daripada pesan offline. Yang dipakai saat offline adalah
   salinan `localStorage` yang ditulis setiap `loadTasks()` berhasil.
-- **`config.js` tidak di-cache** karena di-generate ulang tiap deploy dari
-  secrets; kunci baru harus langsung berlaku.
+- **`config.js` disimpan di cache.** Isinya hanya publishable key yang
+  memang terlihat publik, tapi tanpanya halaman yang dibuka saat offline
+  kehilangan URL/key Supabase dan tidak bisa menyambung lagi begitu
+  internet hidup. Saat online berkas ini selalu diambil dari jaringan dulu
+  supaya kunci baru langsung berlaku; cache hanya jadi cadangan.
+- **Kembali online**: listener `window "online"` dan `visibilitychange`
+  memanggil `loadTasks()` lagi (dengan jeda 15 detik), lalu menampilkan
+  toast "Sudah terhubung lagi, data diperbarui." Channel realtime juga
+  dimulai ulang karena langganan yang putus saat offline tidak selalu
+  menyambung sendiri.
 - Saat `navigator.onLine === false`, `loadTasks()` langsung membaca cache
   tanpa menunggu timeout jaringan, dan form menolak menulis dengan pesan
   "Butuh internet untuk menyimpan perubahan."

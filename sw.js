@@ -12,7 +12,7 @@
 //    - supabase  : tidak pernah di-cache
 // =========================================================
 
-const CACHE = "task-vault-2026-11-13";
+const CACHE = "task-vault-2026-11-14";
 
 const SHELL = [
     "./",
@@ -25,7 +25,12 @@ const SHELL = [
     "./icon-192.png",
     "./icon-512.png",
     "./manifest.json",
-    "./privacy.html"
+    "./privacy.html",
+    // config.js ikut disimpan supaya saat offline halaman masih
+    // punya URL/key Supabase dan bisa menyambung lagi begitu
+    // internet hidup. Isinya hanya publishable key (terlihat
+    // publik lewat DevTools), jadi aman berada di cache.
+    "./config.js"
 ];
 
 
@@ -85,9 +90,34 @@ self.addEventListener("fetch", (event) => {
 
 
     // config.js di-generate ulang tiap deploy dari secrets.
-    // Sengaja tidak di-cache: kalau kunci diganti, perangkat
-    // tidak boleh terus memakai versi lama.
-    if (url.pathname.endsWith("/config.js")) return;
+    // Jaringan dulu supaya kunci baru langsung terpakai, tetapi
+    // tetap disimpan sebagai cadangan: tanpa berkas ini halaman
+    // yang dibuka saat offline kehilangan URL/key Supabase dan
+    // tidak bisa menyambung lagi saat internet hidup.
+    if (url.pathname.endsWith("/config.js")) {
+
+        event.respondWith(
+            fetch(request)
+                .then((response) => {
+
+                    if (response.ok) {
+
+                        const copy = response.clone();
+
+                        caches.open(CACHE)
+                            .then((cache) => cache.put(request, copy));
+
+                    }
+
+                    return response;
+
+                })
+                .catch(() => caches.match(request))
+        );
+
+        return;
+
+    }
 
 
     // Navigasi: coba jaringan dulu supaya deploy baru langsung
