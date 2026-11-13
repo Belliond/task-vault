@@ -5,17 +5,34 @@
 --  diberitahukan, lalu mengisi notified_at. Tanpa kolom ini,
 --  tugas yang sama akan dikirim ulang setiap hari.
 --
---  Baris lama diisi now() supaya isi database saat fitur ini
---  dipasang tidak langsung membanjiri Telegram. Mulai sekarang
---  hanya baris baru (notified_at null) yang dianggap baru.
+--  Backfill hanya saat kolom baru dibuat: isi database yang
+--  sudah ada tidak boleh membanjiri Telegram. Kalau backfill
+--  dijalankan setiap kali `npm run db:push`, tugas baru yang
+--  belum sempat dikirim akan ikut ditandai dan hilang.
 -- =========================================================
 
-alter table public.tasks
-add column if not exists notified_at timestamptz;
+do $$
+begin
 
-update public.tasks
-set notified_at = now()
-where notified_at is null;
+    if not exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'tasks'
+          and column_name = 'notified_at'
+    ) then
+
+        alter table public.tasks
+        add column notified_at timestamptz;
+
+        update public.tasks
+        set notified_at = now()
+        where notified_at is null;
+
+    end if;
+
+end
+$$;
 
 comment on column public.tasks.notified_at is
     'Kapan tugas baru dikirim ke Telegram. NULL = belum dikirim.';
