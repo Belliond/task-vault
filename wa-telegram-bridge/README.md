@@ -337,6 +337,27 @@ pkill -9 node; pkill -9 -f jalan.sh
 Kalau `/sdcard/bridge.log` menampilkan `boot: menyalakan penjaga jembatan`
 lalu `whatsapp tersambung`, artinya beres.
 
+**f. Menyembunyikan notifikasi Termux (aman)**
+
+Termux wajib menampilkan satu notifikasi permanen selama jembatan jalan — itu
+harga dari *foreground service*, dan tanpanya Android membunuh prosesnya.
+Kalau notifikasi itu mengganggu, ia boleh disembunyikan **tanpa** mematikan
+apa pun:
+
+Setelan → Aplikasi → Termux → Notifikasi → **Termux App** → matikan
+**Tampilkan notifikasi**.
+
+Yang terjadi: `mImportance` channel turun dari 2 ke 0, notifikasi hilang dari
+shade, tetapi `isForeground=true` dan proses `node` tetap hidup dengan
+`oom_score_adj = 0`. Sudah diuji: pesan WhatsApp tetap terkirim saat layar mati.
+
+> **Jangan cabut izin `POST_NOTIFICATIONS`.** Itu berbeda dan berbahaya —
+> `pm revoke com.termux android.permission.POST_NOTIFICATIONS` mematikan
+> seluruh Termux beserta jembatannya. Mematikan tampilan channel lewat menu
+> Setelan tidak melakukan hal itu. Kalau terlanjur mencabut izinnya, pulihkan
+> dengan `pm grant com.termux android.permission.POST_NOTIFICATIONS`, lalu
+> jalankan ulang `jalan.sh`.
+
 ---
 
 ## Cara pakai
