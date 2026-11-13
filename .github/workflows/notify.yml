@@ -1,0 +1,61 @@
+name: Notify Telegram
+
+# =========================================================
+#  Ringkasan harian ke Telegram:
+#    - tugas LMS baru yang ditemukan sync
+#    - deadline H-3 sampai H-1 yang belum selesai
+#
+#  Dijalankan 08.00 WIB (01.00 UTC), setelah sync 07.17 WIB.
+#  Token bot hanya ada di secret runner, tidak pernah masuk
+#  halaman web.
+#
+#  Secret: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+#          SUPABASE_URL, SUPABASE_KEY
+# =========================================================
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Tampilkan pesan, jangan kirim"
+        type: boolean
+        default: false
+
+concurrency:
+  group: notify-telegram
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test
+        run: node scripts/test-notify.mjs
+
+      - name: Kirim
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            node scripts/notify-telegram.mjs --dry-run
+          else
+            node scripts/notify-telegram.mjs
+          fi

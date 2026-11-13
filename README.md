@@ -716,6 +716,37 @@ perbarui secret-nya.
 
 ---
 
+## Notifikasi Telegram
+
+Pesan harian jam **08.00 WIB**:
+
+- tugas LMS yang baru ditemukan sync (sekali per tugas, dijaga kolom
+  `tasks.notified_at`),
+- tugas dengan deadline **H-3 sampai H-1** yang belum selesai.
+
+Tugas yang sudah dikirim ke Moodle/Classroom (`submitted`/`graded`) tidak
+diingatkan lagi.
+
+**Setup (sekali saja)**
+
+1. Chat `@BotFather` -> `/newbot` -> simpan token.
+2. Tekan **START** di chat bot, lalu buka
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` dan catat `chat.id`.
+3. Isi secret repo (Settings -> Secrets and variables -> Actions):
+
+   ```
+   TELEGRAM_BOT_TOKEN
+   TELEGRAM_CHAT_ID
+   ```
+
+4. Uji tanpa mengirim: Actions -> **Notify Telegram** -> Run workflow ->
+   `dry_run = true`. Log menampilkan pesan yang akan dikirim.
+
+Workflow: `.github/workflows/notify.yml`. Skrip: `scripts/notify-telegram.mjs`.
+Token tidak pernah masuk `config.js`, browser, atau tabel database.
+
+---
+
 ## Catatan keamanan
 
 **RLS dimatikan secara sadar** untuk mode kelas tanpa login: siapa pun yang

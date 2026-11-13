@@ -15,8 +15,10 @@
     "db:dry": "node scripts/db-push.mjs --dry-run",
     "sync:dry": "node scripts/sync-lms.mjs --dry-run",
     "sync": "node scripts/sync-lms.mjs",
+    "notify:dry": "node scripts/notify-telegram.mjs --dry-run",
+    "notify": "node scripts/notify-telegram.mjs",
     "classroom:auth": "node scripts/classroom-auth.mjs",
-    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs",
+    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs && node scripts/test-notify.mjs",
     "setup": "npm run env:build && npm run db:sql"
   },
   "devDependencies": {
