@@ -1,0 +1,19 @@
+# =========================================================
+#  ATURAN BARIS — JANGAN DIHAPUS
+# =========================================================
+#  Skrip shell WAJIB LF. Kalau tersimpan sebagai CRLF,
+#  bash di Termux gagal dengan "bad interpreter" dan
+#  jembatan tidak pernah menyala.
+#
+#  Ini bukan teori: pernah terjadi, jalan.sh tersimpan
+#  dengan 42 karakter CR dan skripnya mati total.
+#
+#  Aturan sengaja dibatasi ke folder wa-telegram-bridge/
+#  saja. Berkas frontend task-vault (script.js, index.html,
+#  style.css) memakai CRLF dan TIDAK boleh diubah di sini.
+# =========================================================
+
+wa-telegram-bridge/*.sh   text eol=lf
+wa-telegram-bridge/*.mjs  text eol=lf
+wa-telegram-bridge/*.md   text eol=lf
+wa-telegram-bridge/*.html text eol=lf

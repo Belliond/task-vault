@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Pindai QR WhatsApp</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0f1720; color: #e8eef5;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  .kotak {
+    background: #fff; padding: 14px; border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    line-height: 0;
+  }
+  img { width: 420px; height: 420px; display: block; }
+  ol { font-size: 14px; line-height: 1.7; color: #a9bacb; margin: 0; padding-left: 22px; }
+  .status { font-size: 13px; color: #5f7285; }
+  .hidup { color: #4ade80; }
+</style>
+</head>
+<body>
+
+  <h1>Pindai QR ini dari HP-mu</h1>
+
+  <div class="kotak">
+    <img id="qr" src="qr-laptop.png" alt="QR WhatsApp">
+  </div>
+
+  <ol>
+    <li>Buka <b>WhatsApp</b> di HP</li>
+    <li><b>Perangkat tertaut</b> → <b>Tautkan perangkat</b></li>
+    <li>Arahkan kamera ke QR di atas</li>
+  </ol>
+
+  <div class="status" id="status">QR diperbarui otomatis tiap 2 detik.</div>
+
+<script>
+  const img = document.getElementById("qr");
+  const status = document.getElementById("status");
+  let gagal = 0;
+
+  setInterval(() => {
+    // Tambah waktu supaya browser tidak pakai gambar dari cache.
+    const baru = "qr-laptop.png?t=" + Date.now();
+    const uji = new Image();
+    uji.onload = () => {
+      img.src = baru;
+      gagal = 0;
+      status.textContent = "QR terbaru: " + new Date().toLocaleTimeString("id-ID");
+      status.className = "status hidup";
+    };
+    uji.onerror = () => {
+      gagal += 1;
+      status.textContent = "Menunggu QR... (" + gagal + ")";
+      status.className = "status";
+    };
+    uji.src = baru;
+  }, 2000);
+</script>
+
+</body>
+</html>

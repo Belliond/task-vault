@@ -231,6 +231,7 @@ async function kirimTelegram(teks) {
 let sock = null;
 let siap = false;
 let nomorSendiri = "";
+let qrTerakhir = "";
 
 // Tujuan default untuk /to tanpa argumen, dan untuk pesan
 // Telegram biasa yang tidak memakai /to.
@@ -259,9 +260,14 @@ async function mulaiWhatsApp() {
         version,
         auth: state,
 
-        // Riwayat penuh tidak perlu: menghemat RAM dan
-        // mempercepat start di HP.
+        // Riwayat TIDAK diperlukan sama sekali. Ini penting:
+        // `syncFullHistory: false` saja tidak cukup. Default
+        // Baileys masih menyinkronkan RECENT dan
+        // INITIAL_BOOTSTRAP, yang membanjiri log dan membuat
+        // proses mati di HP. Tolak semua jenis riwayat.
         syncFullHistory: false,
+
+        shouldSyncHistoryMessage: () => false,
 
         // Jangan tandai online terus-menerus; cukup bisa
         // mengirim dan menerima.
@@ -284,19 +290,26 @@ async function mulaiWhatsApp() {
 
         if (qr) {
 
-            // QR tidak berguna kalau jembatan jalan di HP yang
-            // sama dengan WhatsApp-nya: kamu tidak bisa memindai
-            // layar sendiri. Karena itu QR hanya ditampilkan
-            // sebagai cadangan.
+            // Dua jalur, tergantung di mana jembatan jalan:
+            //
+            //  - Di laptop/PC: QR di sini bisa langsung dipindai
+            //    dari HP. Ini paling cepat (~1 detik), jauh
+            //    lebih andal daripada mengetik 8 karakter.
+            //
+            //  - Di HP itu sendiri: tidak ada layar kedua untuk
+            //    memindai, jadi pakai /pasang.
             //
             // Kode pasangan SENGAJA tidak diminta di sini:
-            // meminta kode baru membatalkan kode sebelumnya,
-            // jadi kode dibuat saat diminta lewat /pasang.
+            // meminta kode baru membatalkan kode sebelumnya.
             const qrcode = await import("qrcode-terminal");
 
             qrcode.default.generate(qr, { small: true });
 
-            log("QR muncul (cadangan). Kalau perlu kode pasangan, kirim /pasang.");
+            log("QR muncul. Pindai dari WhatsApp > Perangkat tertaut, atau kirim /pasang untuk kode 8 digit.");
+
+            // Simpan QR terakhir supaya bisa ditampilkan lagi
+            // lewat /qr (mis. setelah layar ter-scroll).
+            qrTerakhir = qr;
 
         }
 
@@ -497,7 +510,43 @@ async function prosesTelegram(pesan) {
             `Buka WhatsApp di HP ini:\n` +
             `Pengaturan > Perangkat tertaut > Tautkan perangkat > ` +
             `Tautkan dengan nomor telepon\n\n` +
-            `Ketik kode di atas. Berlaku sekitar 60 detik.`
+            `PENTING: kode ini hanya hidup sekitar 20 detik. ` +
+            `Siapkan WhatsApp DULU di layar "Masukkan kode", ` +
+            `baru kirim /pasang, lalu langsung ketik.\n\n` +
+            `Kalau gagal, kirim /pasang lagi.`
+        );
+
+        return;
+
+    }
+
+
+    if (perintah?.nama === "qr") {
+
+        if (siap) {
+
+            await kirimTelegram(`WhatsApp sudah tersambung, ${NAMA}. Tidak perlu QR.`);
+
+            return;
+
+        }
+
+        if (!qrTerakhir) {
+
+            await kirimTelegram(
+                `Belum ada QR. Tunggu sebentar, lalu coba /qr lagi.`
+            );
+
+            return;
+
+        }
+
+        // QR dikirim sebagai teks mentah: cukup di-scan dari
+        // layar lain. Tidak perlu gambar.
+        await kirimTelegram(
+            `QR WhatsApp (berlaku ~20 detik):\n\n${qrTerakhir}\n\n` +
+            `Cara pakai: jalankan jembatan di laptop, lalu pindai ` +
+            `QR yang muncul di layar laptop dari HP.`
         );
 
         return;
@@ -676,10 +725,30 @@ async function putarTelegram() {
                 offsetTelegram = update.update_id + 1;
 
 
-                if (!pesan) continue;
+                if (!pesan) {
+
+                    // Update bukan pesan (mis. edited_message).
+                    // Tetap dicatat supaya saat memantau jelas
+                    // bahwa polling memang menerima sesuatu.
+                    log(`update ${update.update_id} tanpa pesan, dilewati`);
+
+                    continue;
+
+                }
 
                 // Hanya pemilik chat yang boleh memerintah.
-                if (String(pesan.chat?.id) !== String(CHAT_ID)) continue;
+                if (String(pesan.chat?.id) !== String(CHAT_ID)) {
+
+                    log(`abaikan pesan dari chat lain: ${pesan.chat?.id}`);
+
+                    continue;
+
+                }
+
+                // Catat perintah yang masuk. Tanpa ini, mustahil
+                // membedakan "pesan tidak sampai" dari "pesan
+                // sampai tapi dibalas diam-diam".
+                log(`perintah masuk: ${String(pesan.text || "").slice(0, 60)}`);
 
                 try {
 
@@ -736,6 +805,22 @@ if (NOMOR_PASANGAN) {
     log("nomor pasangan terdeteksi, akan memakai kode 8 digit.");
 
 }
+
+
+// Tangkap error tak terduga supaya tidak mati diam-diam.
+// Tanpa ini, crash apa pun membuat jembatan berhenti tanpa
+// jejak di log — persis yang bikin bingung saat memasang.
+process.on("uncaughtException", (error) => {
+
+    log("ERROR TAK TERTANGANI:", error?.message || error);
+
+});
+
+process.on("unhandledRejection", (error) => {
+
+    log("JANJI GAGAL:", error?.message || error);
+
+});
 
 
 await mulaiWhatsApp();

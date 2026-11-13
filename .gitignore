@@ -17,6 +17,22 @@ config.js
 # Dependency
 node_modules/
 
+
+# =========================================================
+#  SESI WHATSAPP — SANGAT RAHASIA
+# =========================================================
+#  Folder auth/ dan auth-laptop/ berisi kunci akun WhatsApp.
+#  Siapa pun yang memegang file ini bisa menyamar sebagai
+#  pemilik nomor tanpa perlu kode pairing. JANGAN PERNAH
+#  di-commit, jangan diunggah, jangan dikirim lewat chat.
+# =========================================================
+
+auth/
+auth-laptop/
+auth-laptop.tar.gz
+qr-laptop.png
+auth*.tar.gz
+
 # Supabase CLI state
 supabase/.temp/
 supabase/.branches/

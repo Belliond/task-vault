@@ -95,9 +95,18 @@ Setelah itu:
 
 ```bash
 cd ~/task-vault/wa-telegram-bridge
-termux-wake-lock
-node bridge.mjs
+bash jalan.sh
 ```
+
+`jalan.sh` adalah **penjaga**: ia menjalankan `bridge.mjs` dan menyalakannya
+lagi dalam 5 detik kalau Android membunuh prosesnya. Log ditulis ke
+`/sdcard/bridge.log` supaya bisa dibaca dari komputer lewat `adb` tanpa perlu
+mengetik di layar HP.
+
+> **Kenapa log di `/sdcard`?** Folder Termux (`/data/data/com.termux/...`)
+> tidak bisa dibaca `adb` — hasilnya `Permission denied`. Menaruh log di
+> `/sdcard` membuat pemantauan mungkin dilakukan dari komputer, yang sangat
+> membantu saat memasang.
 
 ### Cara manual
 
@@ -124,26 +133,80 @@ Simpan di nano: `Ctrl+O`, `Enter`, lalu `Ctrl+X`.
 
 ---
 
-## Menghubungkan WhatsApp — tanpa QR
+## Menghubungkan WhatsApp
 
-Ini bagian yang biasanya bikin orang menyerah: **QR tidak bisa dipindai dari HP
-yang sama**, karena QR-nya tampil di layar yang harus kamu pindai. Karena itu
-jembatan ini memakai **kode 8 digit**, bukan QR.
+Ini bagian yang paling sering gagal, jadi baca seluruhnya sebelum mulai.
 
-1. Jalankan `node bridge.mjs`
-2. Kirim **`/pasang`** ke bot Telegram kamu
-3. Bot membalas kode, misalnya:
+### Kenapa QR tidak bisa dipindai dari HP sendiri
 
+QR tampil di layar HP, dan yang memindai juga HP itu. Mustahil. Karena itu ada
+dua jalur.
+
+### Jalur utama: QR dari laptop (paling andal)
+
+Kalau kamu punya komputer, **ini yang harus dipakai.** Terbukti berhasil,
+sekali coba.
+
+1. Di laptop, di folder proyek yang sama:
+
+   ```bash
+   npm install
+   node qr-laptop.mjs
    ```
-   Kode pasangan WhatsApp: JXNZ79ZH
+
+   Atau buka `qr-laptop.html` di browser — halaman itu menampilkan QR dan
+   memperbaruinya otomatis tiap 2 detik, jadi tidak pernah basi.
+
+2. Di HP: **WhatsApp → Perangkat tertaut → Tautkan perangkat** → pindai QR di
+   layar laptop.
+
+3. Tunggu sampai muncul `SESI-SIAP`. Sesi tersimpan di folder `auth-laptop/`.
+
+4. Salin sesi itu ke HP sebagai folder `auth/`:
+
+   ```bash
+   tar -czf auth-laptop.tar.gz auth-laptop
+   adb push auth-laptop.tar.gz /sdcard/
    ```
 
-4. Buka WhatsApp di HP itu juga:
+   Lalu dari Termux di HP:
 
-   **Pengaturan → Perangkat tertaut → Tautkan perangkat →
-   Tautkan dengan nomor telepon**
+   ```bash
+   cd ~/task-vault/wa-telegram-bridge
+   rm -rf auth
+   tar -xzf /sdcard/auth-laptop.tar.gz
+   mv auth-laptop auth
+   bash jalan.sh
+   ```
 
-5. Ketik kode 8 digit tadi.
+   Jembatan di HP langsung tersambung **tanpa pairing ulang**.
+
+> **Kenapa harus begitu?** Sesi WhatsApp adalah kunci akun. Sesi yang dibuat di
+> laptop bisa dipakai di HP karena keduanya memakai kredensial yang sama.
+> Setelah tersalin, HP tidak butuh QR lagi.
+
+### Jalur cadangan: kode 8 digit (kalau tidak ada laptop)
+
+1. Jalankan `bash jalan.sh`
+2. Kirim **`/pasang`** ke bot Telegram
+3. Bot membalas kode, misalnya `Kode pasangan WhatsApp: JXNZ79ZH`
+4. **Siapkan WhatsApp dulu** di layar **Pengaturan → Perangkat tertaut →
+   Tautkan perangkat → Tautkan dengan nomor telepon**
+5. Baru ketik kode 8 digit itu
+
+> **Jujur soal waktunya:** kode ini hanya hidup **sekitar 20 detik**, bukan 60.
+> Di kode Baileys (`socket.js`), QR pertama diberi 60 detik tapi QR berikutnya
+> hanya 20 detik (`qrMs = qrTimeout || 20000`), dan setiap kali koneksi putus
+> Baileys membuat kunci baru — kode lama langsung mati. Mengetik 8 karakter
+> sambil berpindah aplikasi sering kalah cepat.
+>
+> Karena itu: **siapkan layar WhatsApp lebih dulu**, baru kirim `/pasang`.
+> Kalau gagal, kirim `/pasang` lagi. Jangan menyerah di percobaan pertama.
+
+> **Kenapa `/pasang`, bukan kode otomatis?** Meminta kode baru **membatalkan**
+> kode sebelumnya. Kalau kode dibuat otomatis tiap menit, kamu bisa mengetik
+> kode yang sudah mati. Dengan `/pasang`, kode yang kamu lihat dijamin yang
+> terbaru.
 
 Selesai. Kamu akan dapat pesan di Telegram:
 
@@ -152,19 +215,8 @@ Jembatan aktif, Krisna.
 WhatsApp 62812xxxxxxx sekarang tersambung ke Telegram ini.
 ```
 
-Kode ini butuh `WA_BRIDGE_PASANGAN` di `.env` terisi nomor WhatsApp kamu
+Kode pasangan butuh `WA_BRIDGE_PASANGAN` di `.env` terisi nomor WhatsApp kamu
 (contoh `628123456789` — pakai 62, tanpa `+` dan tanpa `0` di depan).
-
-> **Kenapa `/pasang`, bukan kode otomatis?**
-> Kode pasangan hanya berlaku sekitar 60 detik, dan meminta kode baru
-> **membatalkan** kode sebelumnya. Kalau kode dibuat otomatis tiap menit, kamu
-> bisa mengetik kode yang sudah mati. Dengan `/pasang`, kode yang kamu lihat
-> dijamin yang terbaru dan masih hidup.
->
-> Kalau kode kedaluwarsa, kirim `/pasang` lagi.
-
-> QR tetap ditampilkan sebagai cadangan kalau kamu kebetulan punya perangkat
-> kedua. Tapi untuk HP tunggal, pakai kode pasangan.
 
 ---
 
@@ -173,11 +225,21 @@ Kode ini butuh `WA_BRIDGE_PASANGAN` di `.env` terisi nomor WhatsApp kamu
 | Perintah | Guna |
 |---|---|
 | `/pasang` | Buat kode pasangan WhatsApp baru |
+| `/qr` | Tampilkan QR terakhir (kalau ada) |
 | `/status` | Cek WhatsApp tersambung atau tidak |
 | `/to 08123... pesan` | Kirim pesan ke nomor itu |
 | `/to 08123...` | Tanya nomor itu terdaftar atau tidak |
 | `/start` atau `/help` | Bantuan |
 | teks biasa | Dikirim ke `WA_BRIDGE_TUJUAN` kalau diisi |
+
+**Penting:** perintah hanya diproses kalau dikirim dari **aplikasi Telegram
+kamu**. Mengirim lewat Bot API (`sendMessage`) berarti bot yang mengirim pesan
+ke kamu — itu **tidak** menghasilkan update yang bisa dibaca jembatan. Jadi
+jangan menguji dengan `curl`/`sendMessage`; uji dari aplikasi Telegram.
+
+Juga: jangan memanggil `getUpdates` dari tempat lain selagi jembatan jalan.
+Itu **mencuri antrean** — perintahmu diambil proses lain, dan jembatan tidak
+pernah melihatnya.
 
 ---
 
@@ -199,7 +261,17 @@ Setelan → Aplikasi → Termux → Baterai → **Tidak dibatasi / Unrestricted*
 Di HP Xiaomi/OPPO/Vivo/Huawei ada pengelola baterai tambahan — cari "Autostart"
 dan izinkan Termux.
 
-**c. Jalankan di dalam tmux** supaya tetap hidup walau layar Termux ditutup:
+**c. Jalankan lewat penjaga `jalan.sh`** — cara paling praktis, tidak perlu tmux:
+
+```bash
+bash jalan.sh
+```
+
+Skrip ini menyalakan ulang jembatan dalam 5 detik kalau mati, dan menulis log
+ke `/sdcard/bridge.log`. Sudah diuji: proses dibunuh paksa (kode 137), dan
+dalam **6 detik** jembatan hidup lagi dengan WhatsApp tersambung ulang otomatis.
+
+Kalau mau lewat tmux (bisa dilihat langsung):
 
 ```bash
 pkg install -y tmux
@@ -232,8 +304,7 @@ mkdir -p ~/.termux/boot
 cat > ~/.termux/boot/wa-bridge.sh << 'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
 termux-wake-lock
-cd ~/task-vault/wa-telegram-bridge
-node bridge.mjs >> bridge.log 2>&1
+bash ~/task-vault/wa-telegram-bridge/jalan.sh
 EOF
 chmod +x ~/.termux/boot/wa-bridge.sh
 ```
@@ -361,18 +432,68 @@ Kalau sering terjadi, kemungkinan WhatsApp menandai aktivitas ini.
 **Pesan tidak sampai ke Telegram**
 
 Cek `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`. Pastikan kamu pernah mengirim
-pesan ke bot. Lihat `bridge.log` di folder yang sama.
+pesan ke bot. Lihat `/sdcard/bridge.log`.
 
 **Jembatan mati sendiri**
 
-Itu Android mematikan proses. Ulangi bagian "Supaya tidak mati saat layar
-dikunci", terutama wake lock dan matikan optimasi baterai.
+Itu Android mematikan proses. Jalankan lewat `bash jalan.sh` (lihat bagian
+"Supaya tidak mati saat layar dikunci"). Penjaganya akan menyalakan ulang
+otomatis.
+
+**Bot tidak membalas, padahal jembatan katanya jalan**
+
+Periksa dulu apakah perintahmu benar-benar sampai:
+
+```bash
+adb shell "cat /sdcard/bridge.log | grep 'perintah masuk'"
+```
+
+- **Ada baris `perintah masuk: /status`** → perintah sampai, masalahnya di
+  balasan. Cek `TELEGRAM_CHAT_ID` — kalau salah, jembatan membalas ke chat lain
+  dan kamu tidak melihatnya.
+- **Tidak ada baris itu** → perintah tidak sampai. Penyebab paling sering:
+  ada proses lain yang memanggil `getUpdates` dan mencuri antrean, atau kamu
+  menguji dengan Bot API (`sendMessage`) yang tidak menghasilkan update.
+
+**Log tidak bertambah sama sekali**
+
+Jembatan hanya menulis log saat ada kejadian. Diam bukan berarti mati. Cek
+prosesnya:
+
+```bash
+adb shell "ps -A | grep ' node' | grep -v grep"
+```
+
+**Layar Termux terlihat membeku**
+
+Itu tampilan Termux yang tidak ter-update, bukan programnya mati. Prosesnya
+tetap jalan. Jangan di-`force-stop` hanya karena tampilannya diam.
 
 **Mau lihat log sambil jalan**
 
+Log ada di `/sdcard/bridge.log`:
+
 ```bash
-tail -f bridge.log
+adb shell "cat /sdcard/bridge.log"
+# atau dari dalam Termux:
+tail -f /sdcard/bridge.log
 ```
+
+---
+
+## Catatan saat memasang lewat komputer (adb)
+
+Kalau kamu mengendalikan HP dari komputer, ada beberapa jebakan yang sudah
+memakan waktu:
+
+| Jebakan | Kenyataan |
+|---|---|
+| `adb` menulis ke folder Termux | **Tidak bisa**, `Permission denied`. Push ke `/sdcard/...`, lalu `cp` dari dalam Termux |
+| `/tmp` di Termux | **Tidak ada**. Pakai `$PREFIX/tmp` |
+| Karakter pertama hilang saat `adb input text` | Awali perintah dengan spasi |
+| `adb input text` nyasar ke app lain | Teks masuk ke **app yang sedang di depan**. Pastikan Termux di depan dulu (`dumpsys activity activities \| grep topResumedActivity`) |
+| `am force-stop com.termux` | Mematikan semua proses Termux dan mengembalikan folder kerja ke `$HOME`. Selalu pakai path absolut |
+| `node bridge.mjs` di latar depan | Terminal terkunci. Pakai `bash jalan.sh` yang sudah melepaskan diri |
 
 ---
 
@@ -399,9 +520,25 @@ Berkas:
 |---|---|
 | `bridge.mjs` | Proses utama: WhatsApp, Telegram, perintah |
 | `lib.mjs` | Fungsi murni: parser, normalisasi nomor, format pesan |
+| `jalan.sh` | Penjaga: jalankan ulang otomatis + log ke `/sdcard` |
+| `qr-laptop.mjs` | Tampilkan QR di laptop, simpan sesi ke `auth-laptop/` |
+| `qr-laptop.html` | Halaman QR auto-refresh untuk dipindai dari HP |
+| `pasang.sh` | Pemasang otomatis untuk Termux |
 | `test.mjs` | Uji fungsi murni |
 | `test-e2e.mjs` | Uji alur penuh dengan tiruan |
 | `test-tertunda.mjs` | Uji pesan tertunda (jembatan mati lalu hidup) |
+| `test-kode.mjs` | Uji kode pasangan hanya dibuat lewat `/pasang` |
+
+**Catatan untuk yang memodifikasi:**
+
+- `shouldSyncHistoryMessage: () => false` **wajib**. `syncFullHistory: false`
+  saja tidak cukup — default Baileys masih menyinkronkan `RECENT` dan
+  `INITIAL_BOOTSTRAP`, yang membanjiri log dan membebani HP.
+- Baileys akan memperingatkan `DANGER: DISABLING ALL SYNC...`. Peringatan itu
+  **aman**: LID mapping tetap bisa diambil lewat jalur cadangan USync
+  (`pnFromLIDUSync` di `socket.js`) saat dibutuhkan.
+- Offset `getUpdates` harus **selalu** dimajukan, apa pun jenis update-nya.
+  Kalau tidak, update yang sama diambil terus dan antrean tidak pernah habis.
 
 ---
 
@@ -415,3 +552,20 @@ Berkas:
 - **Satu nomor WhatsApp per proses.** Untuk nomor kedua, jalankan salinan folder
   lain dengan port/sesi sendiri.
 - **Bukan API resmi.** Lihat peringatan di atas.
+
+---
+
+## Jaga folder sesi WhatsApp
+
+Folder `auth/` dan `auth-laptop/` berisi **kunci akun WhatsApp**. Siapa pun yang
+memegang file di dalamnya bisa menyamar sebagai pemilik nomor tanpa perlu kode
+pairing.
+
+Karena itu:
+
+- Keduanya sudah masuk `.gitignore`. **Jangan pernah** di-commit atau diunggah.
+- Jangan kirim lewat chat, email, atau cloud drive.
+- Kalau HP hilang atau folder bocor: buka WhatsApp → **Perangkat tertaut** →
+  keluarkan perangkat yang tidak dikenal.
+- `qr-laptop.png` juga berisi QR yang bisa dipakai menautkan perangkat —
+  jangan dibiarkan terbuka di layar publik.
