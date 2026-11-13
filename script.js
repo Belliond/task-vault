@@ -5249,34 +5249,31 @@ function toDateKey(date) {
 
 // Kunci tanggal untuk penanda status. Overdue didahulukan
 // supaya tanggal yang sudah lewat tidak terlihat "aman".
+// Sync tidak mengubah tasks.status, jadi tugas yang sudah dikirim
+// ke Moodle/Classroom tetap "Pending". Status kirim disimpan di
+// lms_details.submission.state.
+function isTaskDone(task) {
+
+    if (normalizeStatus(task.status) === "Completed") {
+
+        return true;
+
+    }
+
+
+    const state =
+        String(task.lms_details?.submission?.state || "")
+            .toLowerCase();
+
+
+    return state === "submitted" || state === "graded";
+
+}
+
+
 function statusDotClass(task) {
 
-    const normalized =
-        normalizeStatus(task.status);
-
-
-    if (normalized === "Completed") {
-
-        return "completed";
-
-    }
-
-
-    if (isOverdue(task)) {
-
-        return "overdue";
-
-    }
-
-
-    if (normalized === "In Progress") {
-
-        return "progress";
-
-    }
-
-
-    return "pending";
+    return isTaskDone(task) ? "completed" : "pending";
 
 }
 
@@ -5457,13 +5454,13 @@ function renderCalendar() {
             ).slice(0, 3);
 
 
-        const hasOverdue =
-            dotClasses.includes("overdue");
+        // Warna sel mengikuti aturan yang sama dengan titik:
+        // hijau hanya bila semua tugas tanggal itu sudah selesai.
+        if (dayTasks.length > 0) {
 
-
-        if (hasOverdue) {
-
-            cell.classList.add("is-urgent");
+            cell.classList.add(
+                dayTasks.every(isTaskDone) ? "is-done" : "is-todo"
+            );
 
         }
 
@@ -6400,7 +6397,7 @@ function createTaskCard(task) {
         getDeadlineInfo(task.deadline);
 
     const statusInfo =
-        getStatusInfo(task.status);
+        getStatusInfo(isTaskDone(task) ? "Completed" : task.status);
 
 
     card.innerHTML = `

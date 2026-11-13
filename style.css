@@ -1161,17 +1161,16 @@ button {
 }
 
 
-/* Garis aksen kiri: penanda "ada deadline" yang tidak
-   bergantung pada warna titik saja (WCAG 1.4.1). */
+/* Dua warna saja: merah = belum dikerjakan, hijau = sudah. */
 
 .calendar-day.has-tasks {
 
-    border-color: var(--border);
+    border-color: rgba(255, 93, 115, 0.55);
     background:
         linear-gradient(
             150deg,
-            rgba(77, 255, 178, 0.14),
-            rgba(18, 33, 26, 0.9)
+            rgba(255, 93, 115, 0.14),
+            rgba(33, 18, 22, 0.9)
         );
     cursor: pointer;
 
@@ -1187,14 +1186,27 @@ button {
     bottom: 0;
     width: 4px;
 
-    background: var(--green);
+    background: var(--danger);
 
 }
 
 
-.calendar-day.has-tasks.is-urgent::before {
+.calendar-day.has-tasks.is-done {
 
-    background: var(--danger);
+    border-color: rgba(77, 255, 178, 0.55);
+    background:
+        linear-gradient(
+            150deg,
+            rgba(77, 255, 178, 0.14),
+            rgba(18, 33, 26, 0.9)
+        );
+
+}
+
+
+.calendar-day.has-tasks.is-done::before {
+
+    background: var(--green);
 
 }
 
@@ -1221,7 +1233,7 @@ button {
 .calendar-day.has-tasks:hover {
 
     border-color: var(--border-bright);
-    background: var(--green-soft);
+    background: rgba(255, 255, 255, 0.07);
     box-shadow: var(--shadow-hard-sm);
     transform: translate(-2px, -2px);
 
@@ -1328,8 +1340,8 @@ button {
     padding: 1px 5px;
 
     border-radius: 999px;
-    background: var(--green);
-    color: #04140d;
+    background: var(--danger);
+    color: #1a0308;
 
     font-family: var(--ff-mono);
     font-size: 10px;
@@ -1340,10 +1352,10 @@ button {
 }
 
 
-.calendar-day.is-urgent .calendar-day-badge {
+.calendar-day.is-done .calendar-day-badge {
 
-    background: var(--danger);
-    color: #1a0308;
+    background: var(--green);
+    color: #04140d;
 
 }
 
@@ -1388,19 +1400,11 @@ button {
 
 
 .calendar-dot.pending {
-    background: var(--green-dark);
-}
-
-.calendar-dot.progress {
-    background: var(--cyan);
+    background: var(--danger);
 }
 
 .calendar-dot.completed {
-    background: var(--text-soft);
-}
-
-.calendar-dot.overdue {
-    background: var(--danger);
+    background: var(--green);
 }
 
 
