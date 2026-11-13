@@ -1141,6 +1141,41 @@ function renderMoodleStatus() {
 // HTTP helper: Moodle REST memakai form-urlencoded (simple request,
 // lolos CORS tanpa preflight — server Moodle ITERA mengirim ACAO *)
 
+// Koneksi keep-alive ke server kampus kadang ditutup sepihak, dan
+// POST tidak diulang otomatis oleh browser. Satu percobaan ulang
+// menghindari "Failed to fetch" yang sebenarnya cuma transien.
+async function fetchUlang(url, init, percobaan = 2) {
+
+    let error;
+
+    for (let i = 0; i < percobaan; i++) {
+
+        try {
+
+            return await fetch(url, init);
+
+        }
+        catch (gagal) {
+
+            error = gagal;
+
+            if (i < percobaan - 1) {
+
+                await new Promise(
+                    (selesai) => setTimeout(selesai, 800)
+                );
+
+            }
+
+        }
+
+    }
+
+    throw error;
+
+}
+
+
 async function moodlePost(url, params) {
 
     if (typeof fetch !== "function") {
@@ -1152,7 +1187,7 @@ async function moodlePost(url, params) {
     }
 
 
-    const response = await fetch(url, {
+    const response = await fetchUlang(url, {
         method: "POST",
         headers: {
             "Content-Type":
@@ -6112,12 +6147,29 @@ async function submitMoodleAssignment(task, files, catatan) {
 
         const ukuran = files.reduce((n, f) => n + f.size, 0);
 
-        const res = await fetch(urlUnggah, { method: "POST", body })
-            .catch((error) => {
+        const res = await fetchUlang(urlUnggah, { method: "POST", body })
+            .catch(async (error) => {
+
+                // Bedakan "berkas ini ditolak" dari "semua unggahan
+                // diblokir": kirim berkas 3 byte. Hasilnya membuat
+                // pesan berikutnya langsung menunjuk penyebabnya.
+                const uji = new FormData();
+                uji.append("token", config.token);
+                uji.append("filearea", "draft");
+                uji.append("itemid", itemid);
+                uji.append("file_1", new Blob(["cek"], { type: "text/plain" }), "cek-task-vault.txt");
+
+                const kecilBerhasil = await fetch(urlUnggah, {
+                    method: "POST",
+                    body: uji
+                }).then(() => true).catch(() => false);
 
                 throw new Error(
                     "Cannot reach " + urlUnggah + " (" + error.message + "). " +
-                    "Ukuran berkas " + (ukuran / 1048576).toFixed(1) + " MB."
+                    "Ukuran berkas " + (ukuran / 1048576).toFixed(1) + " MB. " +
+                    (kecilBerhasil
+                        ? "Unggahan kecil berhasil, jadi berkas ini yang ditolak."
+                        : "Unggahan kecil juga gagal, jadi jaringan memblokir unggahan.")
                 );
 
             });
