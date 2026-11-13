@@ -4022,6 +4022,13 @@ button {
 }
 
 
+.pin-error {
+
+    margin-bottom: 16px;
+
+}
+
+
 .confirm-actions {
 
     display: flex;

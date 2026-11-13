@@ -311,6 +311,26 @@ const confirmAccept =
 const confirmCancel =
     document.getElementById("confirmCancel");
 
+
+// =========================================================
+// PIN HALAMAN SYNC
+// =========================================================
+
+const pinModal =
+    document.getElementById("pinModal");
+
+const pinForm =
+    document.getElementById("pinForm");
+
+const pinInput =
+    document.getElementById("pinInput");
+
+const pinError =
+    document.getElementById("pinError");
+
+const pinCancel =
+    document.getElementById("pinCancel");
+
 const editForm =
     document.getElementById("editForm");
 
@@ -675,27 +695,153 @@ scheduleMenu.addEventListener(
 
 // ---------- SYNC LMS ----------
 
-syncMenu.addEventListener(
+// Penghalang UI, bukan keamanan: PIN hanya dibandingkan di
+// browser, jadi siapa pun yang membuka DevTools tetap bisa
+// memanggil showPage(). Yang disimpan cuma hash SHA-256.
+const PIN_HASH =
+    "0b4ac583b63e5359801f545eaf12af19a978f5512c075e9948c362aa9d584239";
+
+let syncUnlocked =
+    sessionStorage.getItem("syncUnlocked") === "1";
+
+let pinReturnFocus = null;
+
+
+function tampilSync() {
+
+    showPage(syncSection, { button: syncMenu });
+
+    renderMoodleStatus();
+
+
+    // Muat daftar kelas (untuk picker) kalau sudah connect
+    const config = loadMoodleConfig();
+
+
+    if (config?.token) {
+
+        tryRenderCoursePicker(config);
+
+    }
+
+}
+
+
+function bukaSync() {
+
+    if (syncUnlocked) {
+
+        tampilSync();
+
+        return;
+
+    }
+
+
+    pinReturnFocus = document.activeElement;
+
+    pinInput.value = "";
+
+    pinError.classList.add("hidden");
+
+    pinModal.classList.remove("hidden");
+
+    pinInput.focus();
+
+}
+
+
+function closePinModal() {
+
+    pinModal.classList.add("hidden");
+
+
+    if (pinReturnFocus &&
+        typeof pinReturnFocus.focus === "function") {
+
+        pinReturnFocus.focus();
+
+    }
+
+
+    pinReturnFocus = null;
+
+}
+
+
+function isPinModalOpen() {
+
+    return !pinModal.classList.contains("hidden");
+
+}
+
+
+async function pinCocok(nilai) {
+
+    const bytes =
+        new TextEncoder().encode(nilai);
+
+    const buf =
+        await crypto.subtle.digest("SHA-256", bytes);
+
+    const hex =
+        Array.from(new Uint8Array(buf))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+
+    return hex === PIN_HASH;
+
+}
+
+
+pinForm.addEventListener(
+    "submit",
+    async (event) => {
+
+        event.preventDefault();
+
+
+        if (await pinCocok(pinInput.value.trim())) {
+
+            syncUnlocked = true;
+
+            sessionStorage.setItem("syncUnlocked", "1");
+
+            closePinModal();
+
+            tampilSync();
+
+            return;
+
+        }
+
+
+        pinError.classList.remove("hidden");
+
+        pinInput.select();
+
+    }
+);
+
+
+pinCancel.addEventListener("click", closePinModal);
+
+
+pinModal.addEventListener(
     "click",
-    () => {
+    (event) => {
 
-        showPage(syncSection, { button: syncMenu });
+        if (event.target === pinModal) {
 
-        renderMoodleStatus();
-
-
-        // Muat daftar kelas (untuk picker) kalau sudah connect
-        const config = loadMoodleConfig();
-
-
-        if (config?.token) {
-
-            tryRenderCoursePicker(config);
+            closePinModal();
 
         }
 
     }
 );
+
+
+syncMenu.addEventListener("click", bukaSync);
 
 
 // =========================================================
@@ -6362,8 +6508,13 @@ function wireMoodleSubmit(card, task) {
 
     tombolToken?.addEventListener("click", () => {
 
-        showPage(syncSection, { button: syncMenu });
-        moodleUsername.focus();
+        bukaSync();
+
+        if (syncUnlocked) {
+
+            moodleUsername.focus();
+
+        }
 
     });
 
@@ -6802,14 +6953,16 @@ document.addEventListener(
     "keydown",
     (event) => {
 
-        // Modal konfirmasi diprioritaskan: ia berada di lapisan
-        // teratas dan menunggu keputusan pengguna.
+        // Modal PIN paling atas (dibuka dari navbar), lalu
+        // konfirmasi hapus, lalu edit.
         const activeModal =
-            isConfirmModalOpen()
-                ? confirmModal
-                : (isEditModalOpen()
-                    ? editModal
-                    : null);
+            isPinModalOpen()
+                ? pinModal
+                : (isConfirmModalOpen()
+                    ? confirmModal
+                    : (isEditModalOpen()
+                        ? editModal
+                        : null));
 
 
         if (!activeModal) {
@@ -6824,7 +6977,12 @@ document.addEventListener(
             event.preventDefault();
 
 
-            if (activeModal === confirmModal) {
+            if (activeModal === pinModal) {
+
+                closePinModal();
+
+            }
+            else if (activeModal === confirmModal) {
 
                 closeConfirmModal(false);
 

@@ -1782,6 +1782,88 @@
 
 
     <!-- =====================================================
+         PIN HALAMAN SYNC
+         Penghalang UI sederhana: PIN tidak dikirim ke mana pun.
+         Nilai aslinya tidak ada di source, hanya hash SHA-256.
+    ====================================================== -->
+
+    <div
+        id="pinModal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pinTitle"
+    >
+
+        <div class="modal-content confirm-content">
+
+            <div class="section-label">
+                // RESTRICTED AREA
+            </div>
+
+            <h2 id="pinTitle">
+                Sync PIN
+            </h2>
+
+            <p class="confirm-message">
+                Masukkan PIN untuk membuka halaman SYNC.
+            </p>
+
+
+            <form id="pinForm">
+
+                <div class="form-group">
+
+                    <label for="pinInput">
+                        PIN
+                    </label>
+
+                    <input
+                        type="password"
+                        id="pinInput"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        required
+                    >
+
+                </div>
+
+                <p
+                    id="pinError"
+                    class="lms-submit-status error pin-error hidden"
+                    role="alert"
+                >
+                    PIN salah. Coba lagi.
+                </p>
+
+
+                <div class="confirm-actions">
+
+                    <button
+                        type="button"
+                        id="pinCancel"
+                        class="confirm-cancel"
+                    >
+                        ABORT
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="confirm-accept"
+                    >
+                        UNLOCK
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
          KONFIGURASI & SUPABASE
          config.js di-generate dari .env oleh
          `npm run env:build` dan tidak ikut ter-commit.
