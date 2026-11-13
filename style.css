@@ -3121,6 +3121,24 @@ button {
 }
 
 
+.lms-token-link {
+
+    padding: 0;
+    border: 0;
+    background: none;
+
+    color: var(--cyan);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-decoration: underline;
+
+    cursor: pointer;
+
+}
+
+
 .lms-submit-status.success {
 
     color: var(--green);

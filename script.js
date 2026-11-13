@@ -5924,11 +5924,10 @@ function buildMoodleSubmitHtml(task) {
 
             </div>
 
-            <div class="lms-submit-status" role="status" aria-live="polite">${
-                punyaToken
-                    ? ""
-                    : "Token Moodle belum tersimpan. Hubungkan di halaman SYNC."
-            }</div>
+            <div class="lms-submit-status" role="status" aria-live="polite">
+                <span class="lms-token-warning"${punyaToken ? " hidden" : ""}>Token Moodle belum tersimpan.</span>
+                <button type="button" class="lms-token-link"${punyaToken ? " hidden" : ""}>HUBUNGKAN</button>
+            </div>
 
         </form>
 
@@ -6146,6 +6145,31 @@ function wireMoodleSubmit(card, task) {
     if (!form) return;
 
     const statusEl = form.querySelector(".lms-submit-status");
+
+    const peringatanToken = form.querySelector(".lms-token-warning");
+    const tombolToken = form.querySelector(".lms-token-link");
+
+    // Token bisa dihubungkan setelah kartu dirender (atau di tab lain),
+    // jadi status token dicek ulang tiap panel dibuka.
+    const cekToken = () => {
+
+        const ada = !!loadMoodleConfig()?.token;
+
+        if (peringatanToken) peringatanToken.hidden = ada;
+        if (tombolToken) tombolToken.hidden = ada;
+
+    };
+
+    cekToken();
+
+    form.closest("details")?.addEventListener("toggle", cekToken);
+
+    tombolToken?.addEventListener("click", () => {
+
+        showPage(syncSection, { button: syncMenu });
+        moodleUsername.focus();
+
+    });
 
     const setStatus = (pesan, jenis = "") => {
 
