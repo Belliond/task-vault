@@ -97,6 +97,7 @@ jobs:
       - name: Test
         run: |
           node scripts/test-sync.mjs
+          node scripts/test-http.mjs
           node scripts/test-filter-ui.mjs
 
       - name: Check required secrets

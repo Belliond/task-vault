@@ -16,7 +16,7 @@
     "sync:dry": "node scripts/sync-lms.mjs --dry-run",
     "sync": "node scripts/sync-lms.mjs",
     "classroom:auth": "node scripts/classroom-auth.mjs",
-    "test": "node scripts/test-sync.mjs && node scripts/test-filter-ui.mjs",
+    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs",
     "setup": "npm run env:build && npm run db:sql"
   },
   "devDependencies": {

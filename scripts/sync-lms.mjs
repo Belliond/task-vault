@@ -439,7 +439,7 @@ function rapikanUrl(url) {
 }
 
 
-async function ambilJson(url, opsi = {}, percobaan = 2) {
+export async function ambilJson(url, opsi = {}, percobaan = 2) {
 
     let terakhir = null;
 
@@ -455,6 +455,23 @@ async function ambilJson(url, opsi = {}, percobaan = 2) {
             const teks = await res.text();
 
             let data = null;
+
+            // Body kosong BUKAN kesalahan. Supabase membalas
+            // 200/201 tanpa isi ketika diminta `Prefer:
+            // return=minimal` (dipakai simpanDaftarKelas /
+            // simpanDaftarMatkul). Dulu JSON.parse("") melempar
+            // di sini, sehingga log menulis "gagal disimpan"
+            // padahal datanya sudah masuk — dan permintaan
+            // dikirim ulang sia-sia.
+            if (teks.trim() === "") {
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status} tanpa isi`);
+                }
+
+                return null;
+
+            }
 
             try {
                 data = JSON.parse(teks);
