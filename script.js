@@ -469,8 +469,8 @@ function startRealtime() {
 }
 
 
-// Indikator kecil di top bar supaya user tahu apakah
-// perubahan orang lain akan muncul otomatis.
+// Titik indikator di dalam tombol SYNC supaya user tahu apakah
+// perubahan dari perangkat lain akan muncul otomatis.
 function renderRealtimeStatus() {
 
     const badge =
@@ -5702,6 +5702,161 @@ function refreshActiveView() {
 // CREATE TASK CARD
 // =========================================================
 
+// Label status submission yang ramah dibaca.
+function submissionLabel(state) {
+
+    const s = String(state || "").toUpperCase();
+
+    if (s === "TURNED_IN" || s === "SUBMITTED" || s === "RETURNED") {
+        return "SUBMITTED";
+    }
+
+    if (s === "CREATED" || s === "NEW") {
+        return "NOT SUBMITTED";
+    }
+
+    if (s === "DRAFT") {
+        return "DRAFT";
+    }
+
+    if (s === "REOPENED") {
+        return "REOPENED";
+    }
+
+    return s || "UNKNOWN";
+
+}
+
+
+// Hanya izinkan http/https. Tanpa ini, tautan dari data LMS
+// bisa berisi javascript: dan berjalan saat diklik.
+function safeHref(url) {
+
+    try {
+
+        const u = new URL(String(url || ""), window.location.href);
+
+        return u.protocol === "http:" || u.protocol === "https:"
+            ? u.href
+            : "";
+
+    } catch {
+
+        return "";
+
+    }
+
+}
+
+
+// Waktu pengumpulan dari LMS berupa ISO. Ditampilkan dalam WIB
+// supaya cocok dengan deadline yang juga WIB.
+function formatSubmittedAt(nilai) {
+
+    if (!nilai) return "";
+
+    const t = new Date(nilai);
+
+    if (Number.isNaN(t.getTime())) return "";
+
+    try {
+
+        return t.toLocaleString("id-ID", {
+            timeZone: "Asia/Jakarta",
+            dateStyle: "medium",
+            timeStyle: "short"
+        }) + " WIB";
+
+    } catch {
+
+        return t.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+
+    }
+
+}
+
+
+// Bagian "soal & submission" di dalam kartu tugas. Hanya dibuat
+// bila sync sudah mengisi lms_details. Memakai <details> bawaan
+// browser: bisa dibuka/tutup tanpa JS dan tetap terbaca pembaca
+// layar.
+function buildLmsDetailHtml(details, kategori) {
+
+    if (!details) return "";
+
+    const description =
+        String(details.description || "").trim();
+
+    const submission =
+        details.submission || null;
+
+    const link =
+        safeHref(details.link);
+
+    const files =
+        (submission?.files || []).filter(
+            (f) => f && String(f.name || "").trim()
+        );
+
+    if (!description && !submission && !link) return "";
+
+    const badge = submission
+        ? `<span class="lms-state ${
+            submissionLabel(submission.state) === "SUBMITTED"
+                ? "is-done"
+                : "is-open"
+        }">${escapeHtml(submissionLabel(submission.state))}</span>`
+        : "";
+
+    const waktu = formatSubmittedAt(submission?.submitted_at);
+
+    const filesHtml = files.map((f) => {
+
+        const href = safeHref(f.url);
+        const nama = escapeHtml(String(f.name));
+
+        return href
+            ? `<li><a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${nama}</a></li>`
+            : `<li>${nama}</li>`;
+
+    }).join("");
+
+    return `
+
+        <details class="lms-detail">
+
+            <summary>
+                <span>SOAL &amp; SUBMISSION</span>
+                ${badge}
+            </summary>
+
+            <div class="lms-body">
+
+                ${description
+                    ? `<p class="lms-text">${escapeHtml(description)}</p>`
+                    : ""}
+
+                ${waktu
+                    ? `<div class="lms-meta">DIKUMPULKAN // ${escapeHtml(waktu)}</div>`
+                    : ""}
+
+                ${filesHtml
+                    ? `<ul class="lms-files">${filesHtml}</ul>`
+                    : ""}
+
+                ${link
+                    ? `<a class="lms-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">BUKA DI ${escapeHtml(String(kategori || "LMS").toUpperCase())}</a>`
+                    : ""}
+
+            </div>
+
+        </details>
+
+    `;
+
+}
+
+
 function createTaskCard(task) {
 
     const card =
@@ -5788,6 +5943,9 @@ function createTaskCard(task) {
             </button>
 
         </div>
+
+
+        ${buildLmsDetailHtml(task.lms_details, task.category)}
 
     `;
 
@@ -6873,6 +7031,16 @@ const scheduleData = [
         sks: "2",
         dosen: "Bagus Aryatama M.OR",
         ruang: "F001"
+    },
+
+    {
+        hari: "Rabu",
+        jam: "13.00–15.00",
+        mataKuliah: "Praktikum Jaringan Komputer",
+        kelas: "RC",
+        sks: "1",
+        dosen: "Asisten Praktikum",
+        ruang: "Labtek 3, Lantai 3, Lab IOT"
     },
 
     {

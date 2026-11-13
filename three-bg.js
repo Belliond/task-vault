@@ -164,8 +164,156 @@
 
     }
 
+    /* ---------- Penggabung geometri sederhana ----------
+       three.min.js (UMD) TIDAK memuat BufferGeometryUtils, jadi
+       mergeGeometries dari addon tidak tersedia. Fungsi kecil ini
+       menggabungkan beberapa geometri menjadi satu BufferGeometry
+       dengan cara menyalin atribut position & normal.
+
+       Semua geometri diubah ke non-indexed lebih dulu: hasil
+       gabungan jadi seragam, dan tidak perlu menggeser indeks
+       (sumber bug klasik saat menggabungkan mesh berindeks).
+       Dipakai sekali saat halaman dimuat, jadi biayanya kecil. */
+
+    function mergeGeometries(daftar) {
+
+        const posisi = [];
+        const normal = [];
+        let jumlah = 0;
+
+        daftar.forEach((geo) => {
+
+            const g = geo.index ? geo.toNonIndexed() : geo;
+
+            posisi.push(g.getAttribute("position").array);
+
+            const n = g.getAttribute("normal");
+
+            if (n) normal.push(n.array);
+
+            jumlah += g.getAttribute("position").count;
+
+        });
+
+        const gabung = new THREE.BufferGeometry();
+
+        const bufPos = new Float32Array(jumlah * 3);
+        let ofs = 0;
+
+        posisi.forEach((arr) => {
+            bufPos.set(arr, ofs);
+            ofs += arr.length;
+        });
+
+        gabung.setAttribute("position", new THREE.BufferAttribute(bufPos, 3));
+
+        if (normal.length === posisi.length) {
+
+            const bufNorm = new Float32Array(jumlah * 3);
+            let ofsN = 0;
+
+            normal.forEach((arr) => {
+                bufNorm.set(arr, ofsN);
+                ofsN += arr.length;
+            });
+
+            gabung.setAttribute("normal", new THREE.BufferAttribute(bufNorm, 3));
+
+        } else {
+
+            gabung.computeVertexNormals();
+
+        }
+
+        return gabung;
+
+    }
+
+
+    /* ---------- Graph node-link ----------
+       Menggantikan bentuk donat (torus). Donat terbaca sebagai
+       objek dekoratif biasa dan tidak menyuarakan apa pun tentang
+       aplikasi ini; graph node-link justru bahasa visual yang
+       sama dengan isi task-vault: simpul (mata kuliah / sumber
+       data) yang terhubung oleh garis (sinkronisasi).
+
+       Susunannya sengaja asimetris — satu simpul pusat dengan
+       lima simpul luar, plus cincin penghubung antar simpul luar —
+       supaya tetap terlihat "tangan manusia", bukan bola simetris
+       yang membosankan dari sudut mana pun. */
+
+    function createGraphGeometry() {
+
+        const bagian = [];
+
+        const simpul = [
+            new THREE.Vector3(0.00, 0.76, 0.00),
+            new THREE.Vector3(0.72, 0.20, 0.16),
+            new THREE.Vector3(0.46, -0.62, -0.14),
+            new THREE.Vector3(-0.46, -0.62, 0.14),
+            new THREE.Vector3(-0.72, 0.20, -0.16)
+        ];
+
+        const pusat = new THREE.Vector3(0, 0.02, 0);
+
+        // Garis tepi: pusat -> tiap simpul luar, lalu cincin luar.
+        const tepi = [];
+
+        simpul.forEach((s) => tepi.push([pusat, s]));
+
+        for (let i = 0; i < simpul.length; i++) {
+            tepi.push([simpul[i], simpul[(i + 1) % simpul.length]]);
+        }
+
+        const bola = new THREE.SphereGeometry(0.19, 14, 12);
+
+        const semuaSimpul = simpul.concat([pusat]);
+
+        semuaSimpul.forEach((p) => {
+
+            const g = bola.clone();
+            g.translate(p.x, p.y, p.z);
+            bagian.push(g);
+
+        });
+
+        const sumbuY = new THREE.Vector3(0, 1, 0);
+        const skalaSatu = new THREE.Vector3(1, 1, 1);
+
+        tepi.forEach(([a, b]) => {
+
+            const arah = b.clone().sub(a);
+            const panjang = arah.length();
+
+            const tabung = new THREE.CylinderGeometry(
+                0.042, 0.042, panjang, 8, 1
+            );
+
+            const rotasi = new THREE.Quaternion().setFromUnitVectors(
+                sumbuY,
+                arah.clone().normalize()
+            );
+
+            const tengah = a.clone().add(b).multiplyScalar(0.5);
+
+            tabung.applyMatrix4(
+                new THREE.Matrix4().compose(tengah, rotasi, skalaSatu)
+            );
+
+            bagian.push(tabung);
+
+        });
+
+        const hasil = mergeGeometries(bagian);
+        hasil.center();
+
+        return hasil;
+
+    }
+
+
     const GEOMETRY_BUILDERS = {
-        torus: () => new THREE.TorusGeometry(0.68, 0.26, 18, 42),
+        graph: () => createGraphGeometry(),
         ico: () => new THREE.IcosahedronGeometry(0.72, 0),
         octa: () => new THREE.OctahedronGeometry(0.78, 0),
         box: () => createRoundedBoxGeometry(1.05, 0.22, 0.72)
@@ -181,7 +329,7 @@
 
     const SHAPE_SPECS = [
         {
-            type: "torus",
+            type: "graph",
             color: PALETTE.green,
             fx: -0.86, fy: 0.58, z: -0.4,
             scale: 1.00,

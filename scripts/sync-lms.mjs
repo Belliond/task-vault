@@ -174,6 +174,135 @@ export function petikToken(nilai) {
 }
 
 
+// =========================================================
+//  RINGKASAN SOAL & SUBMISSION
+//
+//  Disimpan di kolom tasks.lms_details (jsonb). Dipisah
+//  sebagai fungsi murni supaya bisa diuji tanpa jaringan.
+// =========================================================
+
+// Ubah HTML dari LMS menjadi teks biasa.
+//
+// Tag SELALU dibuang, bukan disimpan: isi soal berasal dari
+// situs luar, dan menaruhnya sebagai HTML di halaman ini
+// membuka celah XSS. Teksnya tetap utuh.
+export function bersihkanTeks(html) {
+
+    if (!html) return "";
+
+    return String(html)
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n")
+        .replace(/<[^>]*>/g, "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/&amp;/gi, "&")
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+}
+
+// Bentuk akhir satu submission. Mengembalikan null bila tidak
+// ada apa pun yang berguna untuk ditampilkan.
+export function ringkasSubmission({ state, submittedAt, files }) {
+
+    const daftar = [];
+
+    for (const f of files || []) {
+
+        if (!f || !f.name) continue;
+
+        daftar.push({
+            name: String(f.name),
+            url: String(f.url || "")
+        });
+
+    }
+
+    if (!state && daftar.length === 0) return null;
+
+    return {
+        state: String(state || ""),
+        submitted_at: submittedAt || null,
+        files: daftar
+    };
+
+}
+
+// Moodle: mod_assign_get_submission_status.
+// status: new | draft | submitted | reopened
+export function ringkasSubmissionMoodle(status) {
+
+    const sub = status?.lastattempt?.submission;
+
+    if (!sub) return null;
+
+    const files = [];
+
+    for (const plugin of sub.plugins || []) {
+
+        if (plugin.type !== "file") continue;
+
+        for (const area of plugin.fileareas || []) {
+
+            for (const f of area.files || []) {
+
+                files.push({ name: f.filename, url: f.fileurl });
+
+            }
+
+        }
+
+    }
+
+    return ringkasSubmission({
+        state: sub.status,
+        submittedAt: sub.timemodified
+            ? new Date(Number(sub.timemodified) * 1000).toISOString()
+            : null,
+        files
+    });
+
+}
+
+// Classroom: studentSubmissions[0].
+// state: CREATED (belum dikirim) | TURNED_IN | RETURNED
+export function ringkasSubmissionClassroom(sub) {
+
+    if (!sub) return null;
+
+    const files = [];
+
+    for (const lampiran of sub.assignmentSubmission?.attachments || []) {
+
+        const f =
+            lampiran.driveFile ||
+            lampiran.link ||
+            lampiran.youTubeVideo ||
+            lampiran.form;
+
+        if (!f) continue;
+
+        files.push({
+            name: f.title || "Lampiran",
+            url: f.alternateLink || ""
+        });
+
+    }
+
+    return ringkasSubmission({
+        state: sub.state,
+        submittedAt: sub.updateTime,
+        files
+    });
+
+}
+
+
 // Susun baris siap kirim ke sync_lms_tasks().
 //
 // Aturannya sengaja sama dengan versi browser:
@@ -185,7 +314,8 @@ export function susunBaris({
     courses,
     namaMatkul,
     idTerpilih,
-    hariIni
+    hariIni,
+    urlMoodle
 }) {
 
     const baris = [];
@@ -222,7 +352,16 @@ export function susunBaris({
                 category: "Moodle",
                 source: "moodle",
                 external_id: `assign:${idCourse}:${tugas.id}`,
-                synced_at: new Date().toISOString()
+                synced_at: new Date().toISOString(),
+                lms_details: {
+                    description: bersihkanTeks(tugas.intro),
+                    link: tugas.cmid && urlMoodle
+                        ? `${urlMoodle}/mod/assign/view.php?id=${tugas.cmid}`
+                        : "",
+                    // Diisi belakangan oleh syncMoodle, karena
+                    // butuh satu panggilan API per tugas.
+                    submission: null
+                }
             });
 
         }
@@ -387,7 +526,13 @@ export function susunBarisClassroom({ courses, coursework, hariIni }) {
             // script.js, supaya sync browser dan sync server
             // tidak membuat baris kembar.
             external_id: `gc:${kerja.courseId}:${kerja.id}`,
-            synced_at: new Date().toISOString()
+            synced_at: new Date().toISOString(),
+            lms_details: {
+                description: bersihkanTeks(kerja.description),
+                link: String(kerja.alternateLink || ""),
+                // Diisi belakangan oleh syncClassroom.
+                submission: null
+            }
         });
 
     }
@@ -1303,7 +1448,8 @@ async function syncMoodle({
         courses: coursesWithAssignments,
         namaMatkul,
         idTerpilih,
-        hariIni
+        hariIni,
+        urlMoodle: moodle.url
     });
 
     console.log(
@@ -1334,6 +1480,33 @@ async function syncMoodle({
         }
 
         return;
+
+    }
+
+    // 4b. Isi soal sudah ikut di baris. Submission butuh satu
+    // panggilan API per tugas, jadi hanya untuk tugas aktif.
+    // Kegagalan satu tugas tidak boleh menggagalkan sync.
+    for (const row of baris) {
+
+        const assignId = row.external_id.split(":")[2];
+
+        try {
+
+            const status = await moodleRest(moodle, {
+                wsfunction: "mod_assign_get_submission_status",
+                assignid: assignId
+            });
+
+            row.lms_details.submission =
+                ringkasSubmissionMoodle(status);
+
+        } catch (error) {
+
+            console.log(
+                `           ! submission ${assignId}: ${error.message}`
+            );
+
+        }
 
     }
 
@@ -1579,6 +1752,34 @@ async function syncClassroom({ classroom, supabase, hariIni, dryRun, env }) {
         }
 
         return;
+
+    }
+
+    // 4b. Submission milik akun ini. Satu panggilan per tugas
+    // aktif; kegagalan satu tugas tidak menggagalkan sync.
+    for (const row of baris) {
+
+        const [, idCourse, idKerja] = row.external_id.split(":");
+
+        try {
+
+            const subs = await classroomGetAll(
+                accessToken,
+                `/v1/courses/${idCourse}/courseWork/${idKerja}` +
+                `/studentSubmissions?userId=me`,
+                "studentSubmissions"
+            );
+
+            row.lms_details.submission =
+                ringkasSubmissionClassroom(subs[0]);
+
+        } catch (error) {
+
+            console.log(
+                `           ! submission ${idKerja}: ${error.message}`
+            );
+
+        }
 
     }
 

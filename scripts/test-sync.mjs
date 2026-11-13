@@ -17,7 +17,11 @@ import {
     cariUsang,
     cariUsangClassroom,
     saringKelasClassroom,
-    petikToken
+    petikToken,
+    bersihkanTeks,
+    ringkasSubmission,
+    ringkasSubmissionMoodle,
+    ringkasSubmissionClassroom
 } from "./sync-lms.mjs";
 
 let lulus = 0;
@@ -354,6 +358,123 @@ cek(
     saringKelasClassroom({ courses: kelasUji, kecuali: ["", "  "] })
         .dipakai.length,
     3
+);
+
+console.log("\n=== bersihkanTeks ===");
+
+cek(
+    "tag HTML dibuang, isi tetap",
+    bersihkanTeks("<p>Halo <b>dunia</b></p><br>Baris 2"),
+    "Halo dunia\n\nBaris 2"
+);
+
+cek(
+    "entitas umum diterjemahkan",
+    bersihkanTeks("A &amp; B &lt; C &quot;D&quot;"),
+    'A & B < C "D"'
+);
+
+cek(
+    "null menjadi string kosong",
+    bersihkanTeks(null),
+    ""
+);
+
+console.log("\n=== ringkasSubmission ===");
+
+cek(
+    "tanpa state dan tanpa berkas -> null",
+    ringkasSubmission({ state: "", files: [] }),
+    null
+);
+
+cek(
+    "berkas tanpa nama dibuang",
+    ringkasSubmission({
+        state: "submitted",
+        files: [{ name: "", url: "x" }, { name: "a.pdf", url: "https://x/a" }]
+    }),
+    {
+        state: "submitted",
+        submitted_at: null,
+        files: [{ name: "a.pdf", url: "https://x/a" }]
+    }
+);
+
+console.log("\n=== ringkasSubmissionMoodle ===");
+
+cek(
+    "belum ada submission -> null",
+    ringkasSubmissionMoodle({ lastattempt: {} }),
+    null
+);
+
+cek(
+    "berkas submission diambil",
+    ringkasSubmissionMoodle({
+        lastattempt: {
+            submission: {
+                status: "submitted",
+                timemodified: 1790501680,
+                plugins: [{
+                    type: "file",
+                    fileareas: [{
+                        files: [{
+                            filename: "Laprak1.pdf",
+                            fileurl: "https://moodle/x/Laprak1.pdf"
+                        }]
+                    }]
+                }]
+            }
+        }
+    }),
+    {
+        state: "submitted",
+        submitted_at: "2026-09-27T09:34:40.000Z",
+        files: [{
+            name: "Laprak1.pdf",
+            url: "https://moodle/x/Laprak1.pdf"
+        }]
+    }
+);
+
+console.log("\n=== ringkasSubmissionClassroom ===");
+
+cek(
+    "CREATED tetap dilaporkan sebagai belum dikirim",
+    ringkasSubmissionClassroom({
+        state: "CREATED",
+        updateTime: "2026-11-11T08:36:58.389Z"
+    }),
+    {
+        state: "CREATED",
+        submitted_at: "2026-11-11T08:36:58.389Z",
+        files: []
+    }
+);
+
+cek(
+    "lampiran drive diambil",
+    ringkasSubmissionClassroom({
+        state: "TURNED_IN",
+        updateTime: "2026-11-04T05:22:53.778Z",
+        assignmentSubmission: {
+            attachments: [{
+                driveFile: {
+                    title: "Laporan.pdf",
+                    alternateLink: "https://drive.google.com/file/d/abc/view"
+                }
+            }]
+        }
+    }),
+    {
+        state: "TURNED_IN",
+        submitted_at: "2026-11-04T05:22:53.778Z",
+        files: [{
+            name: "Laporan.pdf",
+            url: "https://drive.google.com/file/d/abc/view"
+        }]
+    }
 );
 
 console.log(

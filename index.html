@@ -118,26 +118,23 @@
                 >
                     <span aria-hidden="true">⇄</span>
                     SYNC
+                    <span
+                        id="realtimeBadge"
+                        class="realtime-dot hidden"
+                        title="Perubahan dari perangkat lain muncul otomatis"
+                        aria-label="Sinkronisasi realtime aktif"
+                    ></span>
                 </button>
 
             </nav>
 
 
-            <div class="navbar-actions">
-
-                <span
-                    id="realtimeBadge"
-                    class="realtime-badge hidden"
-                    title="Changes from other users appear automatically"
-                >
-                    LIVE SYNC
-                </span>
-
-                <!-- Tombol "+ ADD TASK" dihapus dari navbar: form
-                     tambah tugas sudah tersedia di halaman Tasks
-                     (dan di halaman detail mata kuliah). -->
-
-            </div>
+            <!-- Badge "LIVE SYNC" DIPINDAH dari sini. Di layar
+                 sempit navbar turun jadi dua baris, dan badge di
+                 pojok kanan atas mendorong tautan navigasi ke
+                 bawah. Status realtime sekarang tampil sebagai
+                 titik kecil di dalam tombol SYNC (lihat #syncMenu),
+                 jadi tidak memakan ruang navbar sama sekali. -->
 
         </div>
 

@@ -1875,7 +1875,11 @@ button {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    /* Boleh turun baris: teks status ("Token saved...") bisa panjang
+       dan tombol FORGET TOKEN memakai white-space: nowrap. Tanpa
+       wrap, tombol terdesak keluar tepi kartu di layar sempit. */
+    flex-wrap: wrap;
+    gap: 10px 12px;
     margin-top: 18px;
     min-height: 40px;
 
@@ -1888,6 +1892,14 @@ button {
     font-size: 12px;
     letter-spacing: 0.5px;
     line-height: 1.5;
+
+    /* flex: 1 1 0 + min-width: 0 -> teks boleh menyusut dan
+       membungkus, bukan memaksa baris melebar melewati kartu.
+       overflow-wrap: anywhere menangani URL/token panjang tanpa
+       spasi yang dulu juga menembus border. */
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
 
 }
 
@@ -2090,7 +2102,39 @@ button {
 
 
 /* Indikator langganan realtime aktif — hanya muncul bila
-   WebSocket Supabase benar-benar tersambung. */
+   WebSocket Supabase benar-benar tersambung.
+
+   Bentuknya titik kecil DI DALAM tombol SYNC, bukan badge lebar
+   di pojok kanan navbar. Badge lama memaksa navbar jadi dua
+   baris di layar sempit sehingga tautan navigasi terdorong
+   turun. */
+
+.realtime-dot {
+
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 2px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 2px rgba(77, 255, 178, 0.22);
+    vertical-align: middle;
+    animation: realtimePulse 2.4s ease-in-out infinite;
+
+}
+
+
+/* .hidden dipakai bersama elemen lain; pastikan titik ini benar
+   benar hilang, bukan hanya jadi kotak kosong. */
+.realtime-dot.hidden {
+
+    display: none;
+
+}
+
+
+/* Sisa aturan badge lama dibiarkan sebagai cadangan bila kelak
+   status realtime ingin ditampilkan lagi di tempat lain. */
 
 .realtime-badge {
 
@@ -2804,6 +2848,159 @@ button {
     flex-wrap: wrap;
     gap: 10px;
     margin-top: 17px;
+
+}
+
+
+/* ---------- Soal & submission LMS ----------
+   <details> bawaan browser. Dibuat satu baris penuh di bawah
+   tiga kolom kartu supaya tidak mengubah tata letak yang ada. */
+
+.lms-detail {
+
+    grid-column: 1 / -1;
+    margin-top: -6px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border);
+
+}
+
+
+.lms-detail summary {
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    cursor: pointer;
+    list-style: none;
+
+    color: var(--text-soft);
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+
+}
+
+
+.lms-detail summary::-webkit-details-marker {
+
+    display: none;
+
+}
+
+
+.lms-detail summary::before {
+
+    content: "▸";
+    color: var(--green);
+
+}
+
+
+.lms-detail[open] summary::before {
+
+    content: "▾";
+
+}
+
+
+.lms-state {
+
+    padding: 3px 8px;
+    border: 1px solid currentColor;
+    font-size: 10px;
+    letter-spacing: 1px;
+
+}
+
+
+.lms-state.is-done {
+
+    color: var(--green);
+
+}
+
+
+.lms-state.is-open {
+
+    color: var(--cyan);
+
+}
+
+
+.lms-body {
+
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+
+}
+
+
+.lms-text {
+
+    color: var(--text-soft);
+    font-size: 13px;
+    line-height: 1.6;
+
+    /* Isi soal sering berisi baris baru dari LMS. */
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+
+}
+
+
+.lms-meta {
+
+    color: var(--text-soft);
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+
+}
+
+
+.lms-files {
+
+    display: grid;
+    gap: 6px;
+    list-style: none;
+
+}
+
+
+.lms-files a {
+
+    color: var(--cyan);
+    font-size: 13px;
+    word-break: break-word;
+
+}
+
+
+.lms-link {
+
+    justify-self: start;
+
+    padding: 7px 10px;
+    border: 2px solid var(--border-bright);
+
+    color: var(--green);
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-decoration: none;
+
+}
+
+
+.lms-link:hover,
+.lms-link:focus-visible {
+
+    background: var(--green-soft);
 
 }
 
