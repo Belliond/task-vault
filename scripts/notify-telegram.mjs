@@ -331,6 +331,19 @@ async function main() {
 
     const dryRun = process.argv.includes("--dry-run");
 
+    // Pesan tes: membuktikan token + chat id benar tanpa
+    // menyentuh database atau menandai tugas apa pun.
+    if (process.argv.includes("--uji")) {
+
+        await kirimTelegram(
+            "<b>TASK VAULT</b>\n\nTes koneksi berhasil."
+        );
+
+        console.log("Pesan tes terkirim.");
+        return;
+
+    }
+
     // --tanggal=YYYY-MM-DD hanya untuk memeriksa pesan pada
     // tanggal lain tanpa menunggu hari itu tiba.
     const argTanggal = process.argv.find((a) => a.startsWith("--tanggal="));

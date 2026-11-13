@@ -23,6 +23,10 @@ on:
         description: "Tampilkan pesan, jangan kirim"
         type: boolean
         default: false
+      uji:
+        description: "Kirim pesan tes saja"
+        type: boolean
+        default: false
 
 concurrency:
   group: notify-telegram
@@ -54,7 +58,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ inputs.uji }}" = "true" ]; then
+            node scripts/notify-telegram.mjs --uji
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
             node scripts/notify-telegram.mjs --dry-run
           else
             node scripts/notify-telegram.mjs
