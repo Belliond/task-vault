@@ -102,7 +102,7 @@ export const DisconnectReason = { loggedOut: 401 };
 export default function makeWASocket() {
 
     const sock = {
-        user: { id: "6288276694644@s.whatsapp.net" },
+        user: { id: "628111222333@s.whatsapp.net" },
         ev: { on(nama, fn) { (pendengar[nama] ||= []).push(fn); } },
 
         async requestPairingCode() {
@@ -194,7 +194,7 @@ try {
             TELEGRAM_CHAT_ID: "9988",
             TELEGRAM_API_BASE: `http://127.0.0.1:${port}`,
             WA_BRIDGE_NAMA: "Krisna",
-            WA_BRIDGE_PASANGAN: "6288276694644"
+            WA_BRIDGE_PASANGAN: "628111222333"
         },
         stdio: ["ignore", "pipe", "pipe"]
     });
