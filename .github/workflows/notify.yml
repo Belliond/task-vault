@@ -75,6 +75,10 @@ on:
         description: "Kirim salinan ke Telegram juga"
         type: boolean
         default: true
+      paksa:
+        description: "Kirim ulang walau hari ini sudah pernah dikirim"
+        type: boolean
+        default: false
       tanggal:
         description: "Simulasi tanggal (YYYY-MM-DD). Kosong = hari ini"
         type: string
@@ -129,6 +133,15 @@ jobs:
             TANGGAL="--tanggal=${{ inputs.tanggal }}"
           fi
 
+          # Kirim ulang walau hari ini sudah pernah dikirim.
+          # Dipakai saat menguji jadwal, karena pengaman
+          # anti-dobel akan melewati pesan yang sudah terkirim.
+          PAKSA=""
+
+          if [ "${{ inputs.paksa }}" = "true" ]; then
+            PAKSA="--paksa"
+          fi
+
           # Saat dijalankan manual, kotak centang menentukan
           # apakah salinan Telegram ikut dikirim. Pada jadwal
           # otomatis, salinan selalu dikirim.
@@ -147,5 +160,5 @@ jobs:
           elif [ "${{ inputs.dry_run }}" = "true" ]; then
             node scripts/notify-telegram.mjs --dry-run --mode=$MODE $TANGGAL
           else
-            node scripts/notify-telegram.mjs --mode=$MODE $TANGGAL
+            node scripts/notify-telegram.mjs --mode=$MODE $TANGGAL $PAKSA
           fi
