@@ -249,6 +249,21 @@ Log Baileys juga tidak lagi menulis isi sesi terenkripsi (kunci, chain,
 ratchet). Tanpa itu, `bridge.log` membengkak sampai 2 MB dan baris penting
 seperti `whatsapp terputus` tenggelam.
 
+Ada dua sumber kebocoran log, dan keduanya sudah ditutup:
+
+1. **Baileys sendiri** — memakai `pino` yang mencetak semua isi sesi. Diganti
+   logger kecil berlevel `warn`.
+2. **libsignal** — pustaka enkripsi di dalam Baileys. Ia **tidak** memakai
+   logger Baileys, tapi memanggil `console.info` langsung:
+
+   ```js
+   console.info("Closing session:", session)
+   ```
+
+   `session` berisi `privKey`, `rootKey`, dan `chainKey`. Karena `/sdcard/`
+   bisa dibaca aplikasi lain, ini bukan cuma soal ukuran log — itu kunci sesi
+   WhatsApp yang tergeletak. Baris-baris itu sekarang disaring.
+
 Kalau ingin menyetel sendiri, tambahkan ke `.env`:
 
 | Variabel | Default | Guna |

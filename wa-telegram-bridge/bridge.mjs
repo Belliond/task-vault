@@ -206,6 +206,50 @@ function buatLoggerBaileys(level = "warn") {
 
 
 // ---------------------------------------------------------
+//  Tutup kebocoran log dari libsignal.
+//
+//  libsignal (dipakai Baileys untuk enkripsi) TIDAK memakai
+//  logger Baileys. Ia memanggil console.info/console.warn
+//  langsung, sehingga pengaturan logger di atas tidak
+//  berpengaruh:
+//
+//    console.info("Closing session:", session)
+//    console.info("Opening session:", session)
+//    console.warn("Session already closed", session)
+//
+//  `session` berisi kunci privat (privKey, rootKey, chainKey).
+//  Akibatnya /sdcard/bridge.log -- yang bisa dibaca aplikasi
+//  lain -- menyimpan salinan kunci sesi WhatsApp, dan
+//  ukurannya membengkak sampai 2 MB.
+//
+//  Baris-baris itu dibuang. console.log milik jembatan
+//  sendiri tidak disentuh.
+// ---------------------------------------------------------
+
+function tutupLogLibsignal() {
+
+    const POLA = /^(Closing|Opening) session:|^Session already (closed|open)/;
+
+    const saring = (asli) => (...bagian) => {
+
+        try {
+
+            if (POLA.test(String(bagian[0] ?? ""))) return;
+
+        }
+        catch {}
+
+        return asli(...bagian);
+
+    };
+
+    console.info = saring(console.info);
+    console.warn = saring(console.warn);
+
+}
+
+
+// ---------------------------------------------------------
 //  Pasangan lewat kode 8 digit (tanpa QR)
 //
 //  QR hanya bisa dipindai dari perangkat lain. Kalau jembatan
@@ -1288,6 +1332,10 @@ if (!AKTIF_TELEGRAM) {
 
 
 log(`jembatan mulai. ram ${(process.memoryUsage().rss / 1048576).toFixed(0)} MB`);
+
+// Harus dipasang SEBELUM soket WhatsApp dibuat, karena
+// libsignal menulis dump sesi saat handshake.
+tutupLogLibsignal();
 
 if (!fs.existsSync(FOLDER_AUTH)) {
 
