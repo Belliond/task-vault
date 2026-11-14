@@ -45,6 +45,13 @@
 --  sama di schema lain.
 -- ---------------------------------------------------------
 
+-- Versi pertama fungsi ini tidak punya argumen. `create or
+-- replace` dengan daftar argumen berbeda akan MENAMBAH
+-- overload baru, bukan mengganti -- jadi versi lama harus
+-- dibuang dulu, kalau tidak akan ada dua fungsi serupa dan
+-- pemanggil bisa tidak sengaja memakai yang salah.
+drop function if exists public.picu_notify_github();
+
 create or replace function public.picu_notify_github(paksa boolean default false)
 returns bigint
 language plpgsql
