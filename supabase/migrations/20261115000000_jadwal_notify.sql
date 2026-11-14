@@ -45,7 +45,7 @@
 --  sama di schema lain.
 -- ---------------------------------------------------------
 
-create or replace function public.picu_notify_github()
+create or replace function public.picu_notify_github(paksa boolean default false)
 returns bigint
 language plpgsql
 security definer
@@ -88,6 +88,11 @@ begin
         -- Input workflow: mode harian, tanpa dry-run, dan
         -- salinan Telegram tetap dikirim (sesuai keputusan
         -- menyimpannya sebagai arsip).
+        --
+        -- paksa hanya dipakai saat menguji jadwal, karena
+        -- pengaman anti-dobel akan melewati pesan yang sudah
+        -- terkirim pada tanggal yang sama. Jadwal harian
+        -- memanggil picu_notify_github(false).
         body := jsonb_build_object(
             'ref', 'main',
             'inputs', jsonb_build_object(
@@ -96,6 +101,7 @@ begin
                 'uji', 'false',
                 'tunggu', 'false',
                 'kirim_telegram', 'true',
+                'paksa', case when paksa then 'true' else 'false' end,
                 'tanggal', ''
             )
         ),
@@ -109,14 +115,14 @@ begin
 end;
 $$;
 
-comment on function public.picu_notify_github() is
-    'Memicu workflow Notify Tugas lewat GitHub API. Token dibaca dari Vault.';
+comment on function public.picu_notify_github(boolean) is
+    'Memicu workflow Notify Tugas lewat GitHub API. Token dari Vault. paksa=true melewati pengaman anti-dobel.';
 
 -- Hanya peran internal yang perlu memanggil ini. Browser
 -- (anon/authenticated) tidak boleh bisa memicunya sendiri,
 -- karena itu akan mengirim notifikasi ke WhatsApp pemilik.
-revoke all on function public.picu_notify_github() from public;
-revoke all on function public.picu_notify_github() from anon, authenticated;
+revoke all on function public.picu_notify_github(boolean) from public;
+revoke all on function public.picu_notify_github(boolean) from anon, authenticated;
 
 
 -- ---------------------------------------------------------
@@ -141,7 +147,7 @@ select cron.unschedule('notify-tugas-pagi')
 select cron.schedule(
     'notify-tugas-pagi',
     '7 1 * * *',
-    $$select public.picu_notify_github()$$
+    $$select public.picu_notify_github(false)$$
 );
 
 comment on extension pg_cron is

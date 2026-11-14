@@ -512,6 +512,45 @@ select cron.schedule('notify-tugas-pagi', '7 1 * * *',
 `7 1 * * *` = 01:07 UTC = **08.07 WIB**. Menit :07 dipilih karena menit bulat
 adalah saat paling sibuk.
 
+### Menguji jadwal tanpa menunggu besok
+
+Jadwal harian hanya menyala sekali sehari, jadi mengujinya biasanya berarti
+menunggu sampai besok. Untuk menguji sekarang, buat job sekali-pakai:
+
+```sql
+-- Ganti 0 7 dengan jam UTC yang diinginkan.
+-- 0 7 * * * = 14:00 WIB.
+select cron.schedule('uji-sekali', '0 7 * * *',
+                     $$select public.picu_notify_github(true)$$);
+```
+
+`true` = pakai `--paksa`, karena pengaman anti-dobel akan melewati pesan yang
+sudah terkirim pada tanggal yang sama.
+
+**Job uji wajib dihapus setelah selesai.** Jadwal `0 7 * * *` menyala
+**setiap hari** — kalau dibiarkan, ia akan mengirim pesan dobel tiap pagi
+karena memakai `paksa`:
+
+```sql
+select cron.unschedule('uji-sekali');
+```
+
+Periksa hasilnya:
+
+```sql
+select jobid, status, return_message, start_time
+  from cron.job_run_details
+ where start_time > now() - interval '10 minutes'
+ order by start_time desc;
+
+select id, dibuat_at, status, sumber, terkirim_at
+  from public.wa_outbox order by id desc limit 3;
+```
+
+Yang diharapkan: `cron.job_run_details` mencatat `succeeded`, lalu beberapa detik
+kemudian `wa_outbox` berisi baris baru dengan `sumber = 'harian'` dan
+`status = 'terkirim'`.
+
 ### Kalau HP mati saat notifikasi dikirim
 
 Pesan menunggu di antrean dan terkirim begitu HP hidup lagi — **selama belum
