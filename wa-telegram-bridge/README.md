@@ -220,6 +220,47 @@ Kode pasangan butuh `WA_BRIDGE_PASANGAN` di `.env` terisi nomor WhatsApp kamu
 
 ---
 
+## Kalau WhatsApp putus-sambung terus
+
+WhatsApp kadang memutus koneksi berulang kali dengan kode `428` (connection
+closed) atau `408` (timeout) saat jaringan di HP labil. Pada 14/11/2026 itu
+terjadi **146 kali dalam ~30 menit**.
+
+Masalahnya: jembatan lama mengabari Telegram **setiap kali** koneksi terbuka.
+Akibatnya Telegram dibanjiri pesan "Jembatan aktif" dan pesan penting
+tertutupi.
+
+Sekarang aturannya:
+
+| Kejadian | Yang dikirim ke Telegram |
+|---|---|
+| Jembatan baru dinyalakan | "Jembatan aktif" — selalu |
+| Putus **sekali** setelah koneksi lama normal | "Jembatan tersambung lagi" |
+| Putus-sambung **beruntun** (badai) | **Tidak ada**, sampai koneksi tenang |
+| Badai sudah lewat (2 menit tanpa putus) | **Satu** ringkasan: "sudah stabil lagi" |
+
+Jadi badai 146 putus hanya menghasilkan **satu** pesan di akhir, bukan 146.
+
+Selain itu, jeda sambung ulang kini bertingkat: **5s → 10s → 20s → 40s → 80s →
+160s → maksimal 5 menit**. Jeda tetap 5 detik terbukti memperburuk keadaan —
+jembatan langsung menyambung lagi dan server membalas dengan pemutusan baru.
+
+Log Baileys juga tidak lagi menulis isi sesi terenkripsi (kunci, chain,
+ratchet). Tanpa itu, `bridge.log` membengkak sampai 2 MB dan baris penting
+seperti `whatsapp terputus` tenggelam.
+
+Kalau ingin menyetel sendiri, tambahkan ke `.env`:
+
+| Variabel | Default | Guna |
+|---|---|---|
+| `WA_BRIDGE_JEDA_KABAR_MIN_MS` | `600000` | Jangan mengabari lebih sering dari ini |
+| `WA_BRIDGE_JEDA_STABIL_MS` | `600000` | Sambungan dianggap stabil setelah selama ini |
+| `WA_BRIDGE_JEDA_TENANG_MS` | `120000` | Lama tenang sebelum ringkasan dikirim |
+| `WA_BRIDGE_JEDA_SAMBUNG_ULANG_DASAR_MS` | `5000` | Jeda dasar sambung ulang |
+| `WA_BRIDGE_JEDA_SAMBUNG_ULANG_MAKS_MS` | `300000` | Batas jeda sambung ulang |
+
+---
+
 ## Perintah di Telegram
 
 | Perintah | Guna |

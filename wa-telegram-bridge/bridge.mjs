@@ -29,7 +29,8 @@ import {
     jidDariNomor,
     nomorDariJid,
     potong,
-    formatKeTelegram
+    formatKeTelegram,
+    jedaSambungUlang
 } from "./lib.mjs";
 
 import { buatAntrean, putuskan, tujuanAman } from "./outbox.mjs";
@@ -106,6 +107,100 @@ function log(...bagian) {
 function tidur(ms) {
 
     return new Promise((r) => setTimeout(r, ms));
+
+}
+
+
+// ---------------------------------------------------------
+//  Logger untuk Baileys.
+//
+//  Bawaan Baileys adalah pino yang mencatat SEMUA isi sesi
+//  terenkripsi (kunci, chain, ratchet) ke stdout. Di HP itu
+//  membuat /sdcard/bridge.log cepat membengkak sampai 2 MB
+//  dan menyulitkan mencari baris penting seperti
+//  "whatsapp terputus".
+//
+//  Logger ini SENGAJA dibuat sendiri, tidak mengimpor pino:
+//  pino hanya ikut terpasang sebagai dependensi Baileys, dan
+//  mengimpornya langsung membuat bridge gagal start kalau
+//  pino tidak ada (misalnya di folder uji yang hanya
+//  menyediakan modul tiruan).
+//
+//  Yang dibutuhkan Baileys hanya: trace/debug/info/warn/
+//  error/fatal, child(), dan properti `level`.
+// ---------------------------------------------------------
+
+function buatLoggerBaileys(level = "warn") {
+
+    // Hanya pesan pada level ini dan yang lebih berat yang
+    // dicetak. "warn" membuang trace/debug/info.
+    const URUTAN = ["trace", "debug", "info", "warn", "error", "fatal"];
+
+    const batas = URUTAN.indexOf(level);
+
+    const tulis = (namaLevel, isi) => {
+
+        if (URUTAN.indexOf(namaLevel) < batas) return;
+
+        const bagian = Array.isArray(isi) ? isi : [isi];
+
+        // Baileys memanggil logger.warn({ obj }, "pesan").
+        // Objek dirapikan jadi teks pendek supaya log terbaca;
+        // isi sesi terenkripsi tidak ikut ditulis.
+        const teks = bagian
+            .map((b) => {
+
+                if (b instanceof Error) return b.message;
+
+                if (b && typeof b === "object") {
+
+                    try {
+
+                        const kunci = Object.keys(b);
+
+                        if (!kunci.length) return "";
+
+                        // Ambil hanya nilai pendek yang aman
+                        // dibaca; sisanya cukup disebut namanya.
+                        return "{" + kunci.slice(0, 6).join(", ") + "}";
+
+                    }
+                    catch {
+
+                        return "{...}";
+
+                    }
+
+                }
+
+                return String(b);
+
+            })
+            .filter((t) => t !== "")
+            .join(" ");
+
+        log("baileys " + namaLevel + ":", teks);
+
+    };
+
+    const logger = {
+
+        level,
+
+        trace: (...a) => tulis("trace", a),
+        debug: (...a) => tulis("debug", a),
+        info: (...a) => tulis("info", a),
+        warn: (...a) => tulis("warn", a),
+        error: (...a) => tulis("error", a),
+        fatal: (...a) => tulis("fatal", a),
+
+        // Baileys membuat logger anak per modul. Level dan
+        // tujuan tulisnya sama; cukup kembalikan logger ini.
+        child: () => logger
+
+    };
+
+    return logger;
 
 }
 
@@ -258,6 +353,149 @@ const tujuanAntrean = tujuanAman(env);
 let antreanJalan = false;
 let antreanSibuk = false;
 
+// ---------------------------------------------------------
+//  PENAHAN BANJIR NOTIFIKASI "JEMBATAN AKTIF"
+//
+//  WhatsApp kadang memutus koneksi berulang kali (kode 428)
+//  saat jaringannya labil atau servernya sedang sibuk. Pada
+//  14/11/2026 itu terjadi 146 kali dalam ~30 menit, dan
+//  karena setiap sambungan mengabari Telegram, Telegram jadi
+//  banjir sampai pesan penting tertutupi.
+//
+//  Aturannya sekarang:
+//    - Sambungan PERTAMA: selalu dikabari.
+//    - Putus sekali setelah lama tenang: dikabari biasa.
+//    - Putus-sambung beruntun: DIDIAMKAN sama sekali. Baru
+//      setelah koneksi benar-benar tenang (2 menit tanpa
+//      putus) dikirim SATU ringkasan.
+//
+//  Dengan begitu badai 146 putus hanya menghasilkan satu
+//  pesan di akhir, bukan 146 pesan.
+// ---------------------------------------------------------
+
+// Jangan pernah mengabari lebih sering dari ini, apa pun
+// sebabnya. Ini jaring pengaman terakhir.
+const JEDA_KABAR_MIN_MS = Number(
+    env.WA_BRIDGE_JEDA_KABAR_MIN_MS || 10 * 60 * 1000
+);
+
+// Putus yang terjadi dalam rentang ini dihitung "beruntun".
+// Artinya: sambungan harus bertahan selama ini sebelum
+// dianggap benar-benar stabil. Kalau putus lagi sebelum
+// itu, berarti masih badai.
+const JEDA_STABIL_MS = Number(
+    env.WA_BRIDGE_JEDA_STABIL_MS || 10 * 60 * 1000
+);
+
+// Koneksi harus bertahan selama ini sebelum ringkasan
+// "sudah stabil lagi" dikirim.
+const JEDA_TENANG_MS = Number(
+    env.WA_BRIDGE_JEDA_TENANG_MS || 2 * 60 * 1000
+);
+
+// Jeda sambung ulang maksimum.
+const JEDA_SAMBUNG_ULANG_MAKS_MS = Number(
+    env.WA_BRIDGE_JEDA_SAMBUNG_ULANG_MAKS_MS || 5 * 60 * 1000
+);
+
+// Jeda dasar sambung ulang (sebelum digandakan).
+const JEDA_SAMBUNG_ULANG_DASAR_MS = Number(
+    env.WA_BRIDGE_JEDA_SAMBUNG_ULANG_DASAR_MS || 5000
+);
+
+let waktuPutusTerakhir = 0;
+let jumlahPutusBeruntun = 0;
+let waktuKabarTerakhir = 0;
+let pernahTersambung = false;
+let timerTenang = null;
+
+// Kapan koneksi terakhir kali terbuka, dan berapa lama ia
+// bertahan sebelum putus. Ini pembeda utama antara "putus
+// sekali setelah lama normal" dan "putus-sambung beruntun".
+let waktuSambungTerakhir = 0;
+let lamaSambungSebelumPutus = 0;
+
+
+function batalTimerTenang() {
+
+    if (timerTenang) {
+
+        clearTimeout(timerTenang);
+        timerTenang = null;
+
+    }
+
+}
+
+
+// Kirim kabar kondisi jembatan ke Telegram, sekaligus
+// mencatat waktunya supaya tidak terlalu sering.
+//
+// Catatan: penghitung putus TIDAK direset di sini. Kalau
+// direset setiap kali mengabari, badai putus-sambung tidak
+// akan pernah terdeteksi sebagai badai -- setiap putus
+// dihitung "yang pertama". Penghitung hanya direset saat
+// koneksi benar-benar tenang.
+async function kabariJembatan(teks) {
+
+    await kirimTelegram(teks);
+
+    waktuKabarTerakhir = Date.now();
+
+}
+
+
+// Dijadwalkan saat sambung ulang setelah putus. Kalau
+// koneksi bertahan sampai timer menyala, berarti badainya
+// sudah lewat -- kirim satu ringkasan (kalau memang badai),
+// lalu reset penghitung.
+function pasangTimerTenang() {
+
+    batalTimerTenang();
+
+    const putus = jumlahPutusBeruntun;
+
+    timerTenang = setTimeout(async () => {
+
+        timerTenang = null;
+
+        if (!siap) return;
+
+        // Koneksi bertahan: badai sudah lewat. Hitungan
+        // putus mulai dari nol lagi.
+        jumlahPutusBeruntun = 0;
+
+        // Putus sekali-dua kali bukan badai; tidak perlu
+        // ringkasan.
+        if (putus < 3) return;
+
+        // Jaring pengaman: jangan mengabari kalau baru saja
+        // mengabari hal lain.
+        if (Date.now() - waktuKabarTerakhir < JEDA_KABAR_MIN_MS) {
+
+            log(
+                "koneksi sudah tenang lagi setelah", putus, "kali putus, " +
+                "tapi kabar dilewati (baru saja mengabari " +
+                Math.round((Date.now() - waktuKabarTerakhir) / 60000) +
+                " menit lalu)"
+            );
+
+            return;
+
+        }
+
+        log("koneksi tenang lagi setelah", putus, "kali putus; kirim ringkasan");
+
+        await kabariJembatan(
+            `Jembatan sudah stabil lagi, ${NAMA}.\n` +
+            `WhatsApp ${nomorSendiri} sempat putus ${putus} kali ` +
+            `karena jaringan di HP ini labil, sekarang sudah normal kembali.`
+        );
+
+    }, JEDA_TENANG_MS);
+
+}
+
 
 async function mulaiWhatsApp() {
 
@@ -280,6 +518,14 @@ async function mulaiWhatsApp() {
     sock = makeWASocket({
         version,
         auth: state,
+
+        // Baileys mencatat isi sesi terenkripsi (kunci, chain,
+        // ratchet) ke stdout. Itu membuat /sdcard/bridge.log
+        // cepat membengkak sampai 2 MB, dan menyulitkan
+        // mencari baris penting seperti "whatsapp terputus".
+        // Level "warn" membuang semua itu tapi tetap
+        // menampilkan masalah sungguhan.
+        logger: buatLoggerBaileys("warn"),
 
         // Riwayat TIDAK diperlukan sama sekali. Ini penting:
         // `syncFullHistory: false` saja tidak cukup. Default
@@ -345,10 +591,56 @@ async function mulaiWhatsApp() {
 
             log("whatsapp tersambung sebagai", nomorSendiri || "?");
 
-            await kirimTelegram(
-                `Jembatan aktif, ${NAMA}.\n` +
-                `WhatsApp ${nomorSendiri} sekarang tersambung ke Telegram ini.`
-            );
+            // Berapa kali putus berturut-turut, dan apakah
+            // sambungan sebelumnya sempat bertahan lama?
+            const putusBeruntun = jumlahPutusBeruntun;
+
+            // Sambungan sebelumnya bertahan lama = ini bukan
+            // badai, cuma putus sekali.
+            const sebelumnyaStabil =
+                lamaSambungSebelumPutus >= JEDA_STABIL_MS;
+
+            const terlaluBaru =
+                Date.now() - waktuKabarTerakhir < JEDA_KABAR_MIN_MS;
+
+            waktuSambungTerakhir = Date.now();
+
+            if (!pernahTersambung) {
+
+                // Sambungan pertama sejak jembatan dinyalakan.
+                await kabariJembatan(
+                    `Jembatan aktif, ${NAMA}.\n` +
+                    `WhatsApp ${nomorSendiri} sekarang tersambung ke Telegram ini.`
+                );
+
+            }
+            else if (sebelumnyaStabil && !terlaluBaru) {
+
+                // Putus SEKALI setelah koneksi lama normal:
+                // kejadian biasa (jaringan berganti, HP
+                // sebentar tanpa sinyal). Kabari supaya
+                // pemilik tahu.
+                await kabariJembatan(
+                    `Jembatan tersambung lagi, ${NAMA}.\n` +
+                    `WhatsApp ${nomorSendiri} sempat terputus sebentar, sekarang sudah normal.`
+                );
+
+            }
+            else {
+
+                // Badai putus-sambung. Diamkan total supaya
+                // Telegram tidak banjir. Satu ringkasan akan
+                // dikirim kalau koneksi sudah tenang.
+                log(
+                    "badai putus-sambung; kabar Telegram ditahan " +
+                    "(putus beruntun:", putusBeruntun + ")"
+                );
+
+                pasangTimerTenang();
+
+            }
+
+            pernahTersambung = true;
 
         }
 
@@ -356,6 +648,26 @@ async function mulaiWhatsApp() {
         if (connection === "close") {
 
             siap = false;
+
+            // Koneksi hilang: ringkasan "sudah tenang" tidak
+            // berlaku lagi.
+            batalTimerTenang();
+
+            // Berapa lama sambungan tadi bertahan? Kalau lama,
+            // berarti putus ini kejadian tersendiri, bukan
+            // lanjutan badai.
+            lamaSambungSebelumPutus = waktuSambungTerakhir
+                ? Date.now() - waktuSambungTerakhir
+                : 0;
+
+            if (lamaSambungSebelumPutus >= JEDA_STABIL_MS) {
+
+                jumlahPutusBeruntun = 0;
+
+            }
+
+            waktuPutusTerakhir = Date.now();
+            jumlahPutusBeruntun += 1;
 
             const kode =
                 lastDisconnect?.error?.output?.statusCode;
@@ -388,7 +700,25 @@ async function mulaiWhatsApp() {
 
             // Sambung ulang dengan jeda bertingkat supaya
             // tidak menembak server terus-menerus.
-            setTimeout(mulaiWhatsApp, keluar ? 2000 : 5000);
+            //
+            // Jeda tetap 5 detik terbukti buruk: saat WhatsApp
+            // memutus berulang (kode 428), jembatan langsung
+            // menyambung lagi dan server membalas dengan
+            // pemutusan baru -- 146 kali dalam setengah jam.
+            // Makin sering putus, makin lama menunggu.
+            //
+            // 5s, 10s, 20s, 40s, 80s, lalu mentok 5 menit.
+            const jeda = keluar
+                ? 2000
+                : jedaSambungUlang(
+                    jumlahPutusBeruntun,
+                    JEDA_SAMBUNG_ULANG_DASAR_MS,
+                    JEDA_SAMBUNG_ULANG_MAKS_MS
+                );
+
+            log("sambung ulang dalam", Math.round(jeda / 1000), "detik");
+
+            setTimeout(mulaiWhatsApp, jeda);
 
         }
 

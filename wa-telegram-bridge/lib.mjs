@@ -212,3 +212,33 @@ export function formatKeTelegram({ pengirim, grup, teks }) {
     return `${kepala}\n\n${potong(teks)}`;
 
 }
+
+
+// ---------------------------------------------------------
+//  Jeda sambung ulang WhatsApp.
+//
+//  Saat WhatsApp memutus koneksi berulang (kode 428), jembatan
+//  yang langsung menyambung lagi membuat server membalas
+//  dengan pemutusan baru. Pada 14/11/2026 itu berlangsung 146
+//  kali dalam ~30 menit. Makin sering putus, makin lama
+//  jembatan harus menunggu sebelum mencoba lagi.
+//
+//  Contoh dengan dasar 5 detik: 10s, 20s, 40s, 80s, 160s,
+//  lalu mentok di batas maksimum (5 menit).
+// ---------------------------------------------------------
+
+export function jedaSambungUlang(
+    jumlahPutus,
+    dasarMs = 5000,
+    maksMs = 5 * 60 * 1000
+) {
+
+    const n = Math.max(0, Number(jumlahPutus) || 0);
+
+    // Digandakan tiap putus, tapi jangan sampai meluap:
+    // 2^10 sudah lebih dari cukup untuk mencapai batas.
+    const pangkat = Math.min(n, 10);
+
+    return Math.min(dasarMs * Math.pow(2, pangkat), maksMs);
+
+}

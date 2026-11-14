@@ -9,7 +9,8 @@ import {
     jidDariNomor,
     nomorDariJid,
     potong,
-    formatKeTelegram
+    formatKeTelegram,
+    jedaSambungUlang
 } from "./lib.mjs";
 
 
@@ -265,6 +266,64 @@ uji("formatKeTelegram menyertakan grup", () => {
     });
 
     assert.match(hasil, /di Kelas RA/);
+
+});
+
+
+// ---------------------------------------------------------
+//  Jeda sambung ulang: makin sering putus, makin lama.
+// ---------------------------------------------------------
+
+uji("jeda sambung ulang bertambah tiap putus", () => {
+
+    // Putus ke-1: 5s x 2 = 10s
+    assert.equal(jedaSambungUlang(1, 5000, 300000), 10000);
+
+    // Putus ke-2: 20s, ke-3: 40s, ke-4: 80s
+    assert.equal(jedaSambungUlang(2, 5000, 300000), 20000);
+    assert.equal(jedaSambungUlang(3, 5000, 300000), 40000);
+    assert.equal(jedaSambungUlang(4, 5000, 300000), 80000);
+
+});
+
+uji("jeda sambung ulang mentok di batas maksimum", () => {
+
+    // Berapa pun putusnya, jangan lebih dari 5 menit.
+    assert.equal(jedaSambungUlang(6, 5000, 300000), 300000);
+    assert.equal(jedaSambungUlang(50, 5000, 300000), 300000);
+
+});
+
+uji("jeda sambung ulang tidak meluap untuk angka besar", () => {
+
+    // 2^1000 = Infinity; hasilnya harus tetap batas maksimum,
+    // bukan Infinity atau NaN.
+    const hasil = jedaSambungUlang(1000, 5000, 300000);
+
+    assert.equal(Number.isFinite(hasil), true);
+    assert.equal(hasil, 300000);
+
+});
+
+uji("jeda sambung ulang aman untuk masukan aneh", () => {
+
+    // Nilai kosong/negatif dianggap belum pernah putus.
+    assert.equal(jedaSambungUlang(0, 5000, 300000), 5000);
+    assert.equal(jedaSambungUlang(-5, 5000, 300000), 5000);
+    assert.equal(jedaSambungUlang(undefined, 5000, 300000), 5000);
+    assert.equal(jedaSambungUlang("abc", 5000, 300000), 5000);
+
+});
+
+uji("jeda sambung ulang tidak pernah nol", () => {
+
+    // Jeda 0 akan membuat jembatan menembak server tanpa
+    // henti -- persis yang menyebabkan badai 146 putus.
+    for (let n = 0; n <= 20; n += 1) {
+
+        assert.ok(jedaSambungUlang(n, 5000, 300000) >= 5000);
+
+    }
 
 });
 
