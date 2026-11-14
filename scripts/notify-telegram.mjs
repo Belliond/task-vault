@@ -572,6 +572,43 @@ async function kirimAntrean(teks, sumber = "notify") {
 }
 
 
+// ---------------------------------------------------------
+//  PENGAMAN ANTI-DOBEL
+//
+//  Notifikasi harian sekarang bisa terpicu dari DUA arah:
+//  jadwal pg_cron (utama) dan jadwal GitHub (cadangan).
+//  Kalau keduanya menyala pada hari yang sama, isi pesannya
+//  nyaris identik dan pemilik akan menerima dua kali.
+//
+//  Yang dicek bukan isi pesan, tapi jejak di wa_outbox:
+//  kalau sudah ada pesan harian yang dibuat pada tanggal WIB
+//  yang sama, kiriman berikutnya dilewati.
+//
+//  Sengaja memakai wa_outbox, bukan tabel baru: tabel itu
+//  sudah pasti ditulis setiap kali pesan benar-benar masuk
+//  antrean, jadi tidak perlu menjaga dua sumber kebenaran.
+// ---------------------------------------------------------
+
+async function sudahKirimHarian(todayKey) {
+
+    // Awal hari WIB = 00.00 WIB = 17.00 UTC hari sebelumnya.
+    const mulai = new Date(todayKey + "T00:00:00+07:00");
+
+    const res = await supabase(
+        "GET",
+        "wa_outbox?select=id,dibuat_at,sumber" +
+        "&sumber=eq.harian" +
+        "&dibuat_at=gte." + encodeURIComponent(mulai.toISOString()) +
+        "&limit=1"
+    );
+
+    const baris = await res.json();
+
+    return baris[0] || null;
+
+}
+
+
 // Kirim ke semua tujuan yang aktif. Kalau salah satu gagal,
 // tujuan lain tetap dicoba, lalu galatnya dilaporkan setelah
 // itu supaya jelas apa yang belum beres.
@@ -831,6 +868,30 @@ async function main() {
 
 
     // ---------- MODE HARIAN (+ digest kalau Senin) ----------
+
+    // Pengaman anti-dobel: pg_cron dan jadwal GitHub bisa
+    // sama-sama menyala hari ini. Kalau pesan harian untuk
+    // tanggal ini sudah pernah masuk antrean, jangan ulangi.
+    //
+    // --paksa melewati pemeriksaan ini, untuk keperluan uji
+    // atau kalau memang ingin mengirim ulang.
+    if (!dryRun && !process.argv.includes("--paksa")) {
+
+        const sudah = await sudahKirimHarian(todayKey);
+
+        if (sudah) {
+
+            console.log(
+                `Sudah terkirim hari ini (antrean id ${sudah.id} ` +
+                `dibuat ${sudah.dibuat_at}). Dilewati supaya tidak dobel.`
+            );
+
+            return;
+
+        }
+
+    }
+
     const baru = await ambilBaru();
     const baruIds = new Set(baru.map((task) => task.id));
     const dekat = (await ambilDekat(todayKey))

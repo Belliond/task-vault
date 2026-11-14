@@ -14,12 +14,22 @@ name: Notify Tugas
 #  mati, pesan menunggu di antrean (maksimal 24 jam) dan
 #  terkirim begitu HP hidup lagi.
 #
-#  Jadwal:
-#    - 08.00 WIB tiap hari : tugas LMS baru + deadline
-#                            H-3 sampai H-1
-#    - Senin 08.00 WIB     : ditambah digest mingguan
-#    - tiap jam menit :05  : pengingat 3 jam sebelum
-#                            deadline (hanya tugas berjam)
+#  SIAPA YANG MEMICU?
+#  Bukan jadwal di file ini lagi. Jadwal utama ada di
+#  database: pg_cron menjalankan public.picu_notify_github()
+#  pada 08.07 WIB, lalu pg_net memanggil API GitHub untuk
+#  memicu workflow ini.
+#
+#  Kenapa dipindah? Jadwal `schedule` di GitHub sering
+#  tertunda dan kadang dilewati. Diuji di repo ini: dalam
+#  ~23 jam seharusnya ada ~24 run, yang terjadi cuma 3, dan
+#  tidak satu pun jatuh pada jam yang dijadwalkan. Notifikasi
+#  08.00 WIB tidak pernah terkirim.
+#
+#  Jadwal di bawah ini DIPERTAHANKAN sebagai cadangan kalau
+#  pg_cron mati. Karena itu scripts/notify-telegram.mjs
+#  punya pengaman anti-dobel: pesan harian hanya dikirim
+#  sekali per tanggal WIB, walau terpicu dari dua arah.
 #
 #  Telegram hanya salinan/arsip. Matikan dengan
 #  NOTIFY_TELEGRAM=0 kalau tidak perlu.
@@ -30,6 +40,13 @@ name: Notify Tugas
 
 on:
   schedule:
+    # CADANGAN SAJA. Pemicu utama ada di pg_cron
+    # (public.picu_notify_github, 08.07 WIB).
+    #
+    # Jangan diandalkan: jadwal GitHub sering tertunda atau
+    # dilewati. Pengaman anti-dobel di scripts/notify
+    # telegram.mjs mencegah pesan dobel kalau keduanya
+    # menyala pada hari yang sama.
     - cron: "0 1 * * *"
     - cron: "5 * * * *"
 

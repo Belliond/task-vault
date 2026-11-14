@@ -446,7 +446,10 @@ jam 08.00 WIB, dan runner GitHub tidak punya alamat yang bisa dihubungi HP.
 Karena itu pesannya dititipkan lebih dulu ke tabel `wa_outbox` di Supabase:
 
 ```
-GitHub Actions (08.00 WIB)
+pg_cron di Supabase (08.07 WIB)
+        ↓  public.picu_notify_github()
+        ↓  pg_net → GitHub API /dispatches
+GitHub Actions
         ↓  baca tugas dari tabel tasks
         ↓  susun pesan, saring yang sudah dikumpulkan
    insert ke wa_outbox (status: menunggu)
@@ -465,6 +468,49 @@ klien tidak resmi apa pun.
 `WA_BRIDGE_TUJUAN` di `.env`. Kalau kunci publishable bocor (memang publik di
 halaman web), penyusup paling jauh hanya bisa menitipkan teks ke nomor pemilik
 sendiri — tidak bisa memakai nomor dummy untuk mengirim ke orang lain.
+
+### Kenapa penjadwalnya di Supabase, bukan jadwal GitHub
+
+Jadwal `schedule` di GitHub Actions **sering tertunda dan kadang dilewati**.
+Diuji di repo ini: dalam ~23 jam seharusnya ada ~24 run, yang benar-benar
+terjadi cuma **3** — dan tidak satu pun jatuh pada jam yang dijadwalkan.
+Notifikasi 08.00 WIB tidak pernah terkirim.
+
+`pg_cron` mengeksekusi tepat pada menit yang diminta, dan riwayatnya bisa
+diperiksa:
+
+```sql
+select * from public.status_jadwal_notify;
+```
+
+Jadwal GitHub **tetap dipertahankan sebagai cadangan** kalau pg_cron mati.
+Karena itu ada pengaman anti-dobel: pesan harian hanya dikirim **sekali per
+tanggal WIB**, walau terpicu dari dua arah. Pengaman ini memeriksa `wa_outbox`,
+dan bisa ditembus dengan `--paksa` kalau memang ingin mengirim ulang.
+
+### Mengatur ulang jadwal
+
+Token GitHub disimpan di **Supabase Vault** (terenkripsi), bukan di repo:
+
+```sql
+select vault.update_secret(
+    (select id from vault.secrets where name = 'github_dispatch_token'),
+    'gho_token_baru',
+    'github_dispatch_token',
+    'Token GitHub untuk memicu workflow Notify Tugas'
+);
+```
+
+Mengubah jam cukup lewat SQL, tanpa menyentuh kode:
+
+```sql
+select cron.unschedule('notify-tugas-pagi');
+select cron.schedule('notify-tugas-pagi', '7 1 * * *',
+                     $$select public.picu_notify_github()$$);
+```
+
+`7 1 * * *` = 01:07 UTC = **08.07 WIB**. Menit :07 dipilih karena menit bulat
+adalah saat paling sibuk.
 
 ### Kalau HP mati saat notifikasi dikirim
 
