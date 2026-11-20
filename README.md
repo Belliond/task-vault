@@ -778,34 +778,39 @@ diingatkan lagi.
 
 **Nada pesan** diatur di `scripts/notify-telegram.mjs` (fungsi `susunPesan`,
 `susunPesanDeadline`, `susunDigest`). Gaya saat ini: seperti chat orang,
-huruf kecil, menyapa nama, tanpa emoji. Nama diambil dari konstanta `NAMA`
-(`"Krisna"`) dan bisa diganti tanpa mengubah kode lewat secret
-`TELEGRAM_NAMA`. Contoh:
+huruf kecil, vokal dipanjangkan, tanpa emoji, dan **tanpa menyebut nama** —
+notifikasi ini masuk ke WhatsApp diri sendiri, jadi menyebut nama justru
+membuatnya terasa seperti sistem. Sapaan mengikuti jam WIB sebenarnya
+(`Pagiii` / `Siang` / `Soreee` / `Malammm`). Contoh:
 
 ```
-Pagi Krisna, ini update tugasnya yaaa
+Pagiii, ini update tugas hari ini yaaa
 
-yang udah deket:
-• H-1 · 17 Nov 2026
-  Tugas 3 (Kriptografi)
-```
+ada 1 tugas baru nih:
+• Tugas 3 (Kriptografi) — tenggat 17 Nov 2026
 
-```
-Deadline udah deket, Krisna
+yang udah mepet:
+• Tugas 4 (Kriptografi) — 18 Nov 2026 · 23.59, besok
 
-• Tugas 3 (Kriptografi) — jam 23.59, sisa 3 jam
-
-kalau udah beres abaikan aja ya
+semangatt yaaaa
 ```
 
 ```
-Senin lagi, Krisna.
+hampir kelewatan nih
 
-minggu ini:
+• Tugas 3 (Kriptografi) — jam 23.59, 1 jam setengah lagi
+
+kalau udah beres abaikan aja yaa
+```
+
+```
+senin lagiii
+
+minggu ini cuma ada 1 tugas:
 • Sel, 17 Nov 2026 · 23.59
   Tugas 3 (Kriptografi)
 
-minggu lalu kamu kelar 3 tugas.
+minggu lalu kamu kelar 3 tugas, mantapp.
 ```
 
 **Setup (sekali saja)**

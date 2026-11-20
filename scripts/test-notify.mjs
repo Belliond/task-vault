@@ -108,7 +108,7 @@ uji("pesan memuat bagian baru, deadline, dan sisa hari", () => {
         "2026-11-13"
     );
 
-    assert.match(teks, /tugas baru masuk/i);
+    assert.match(teks, /tugas baru nih/i);
     assert.match(teks, /Kriptografi \(RA\)/);
 
     // "yang udah mepet" menggantikan "yang udah deket".
@@ -327,7 +327,7 @@ uji("nada pengingat makin mendesak saat waktu makin sedikit", () => {
         new Date("2026-11-13T07:40:00Z")   // sisa ~20 menit
     );
 
-    assert.match(santai, /Reminder/);
+    assert.match(santai, /reminder/i);
     assert.match(mepet, /mepet banget/i);
     assert.notEqual(santai, mepet);
 
@@ -404,35 +404,35 @@ uji("pesan untuk WhatsApp bebas dari entitas HTML", () => {
 });
 
 
-uji("setiap pesan menyapa nama", () => {
+// Dulu pesan menyapa nama ("Pagi Krisna, ..."). Sekarang nama
+// sengaja TIDAK disebut: notifikasi ini masuk ke WhatsApp diri
+// sendiri, jadi menyebut nama justru terasa seperti sistem.
+uji("pesan tidak menyebut nama", () => {
+
     const nama = "Krisna";
 
-    assert.match(
-        susunPesan(
-            [{ course: "A", class_name: "B", deadline: "2026-11-20" }],
-            [],
-            "2026-11-13"
-        ),
-        new RegExp(nama)
-    );
+    const tugas = [{ course: "A", class_name: "B", deadline: "2026-11-20" }];
 
-    assert.match(
+    const semua = [
+        susunPesan(tugas, tugas, "2026-11-20"),
         susunPesanDeadline(
             [{
                 course: "A",
                 class_name: "B",
-                deadline: "2026-11-13",
+                deadline: "2026-11-20",
                 deadline_time: "15:00:00"
             }],
-            new Date("2026-11-13T05:00:00Z")
+            new Date("2026-11-20T05:00:00Z")
         ),
-        new RegExp(nama)
-    );
+        susunDigest(tugas, tugas)
+    ];
 
-    assert.match(
-        susunDigest([], []),
-        new RegExp(nama)
-    );
+    for (const teks of semua) {
+
+        assert.ok(teks.length > 0, "pesan tidak boleh kosong");
+        assert.doesNotMatch(teks, new RegExp(nama));
+
+    }
 
 });
 
@@ -456,6 +456,36 @@ uji("sapaan mengikuti jam WIB, bukan selalu Pagi", () => {
 });
 
 
+// Bug yang pernah terjadi: aturan otomatis "panjangkan vokal
+// terakhir" menghasilkan "Siangmm" (siang berakhiran konsonan)
+// dan "Malam" yang tidak dipanjangkan. Sekarang bentuknya
+// ditulis eksplisit, jadi tes ini mengunci hasil akhirnya.
+uji("sapaan akrab ditulis eksplisit, tidak dihasilkan aturan", () => {
+
+    const tugas = [{ course: "A", class_name: "B", deadline: "2026-11-20" }];
+
+    const buat = (iso) =>
+        susunPesan(tugas, [], "2026-11-13", new Date(iso), () => 0);
+
+    assert.match(buat("2026-11-13T00:00:00Z"), /^Pagiii, /);   // 07.00 WIB
+    assert.match(buat("2026-11-13T05:00:00Z"), /^Siang, /);    // 12.00 WIB
+    assert.match(buat("2026-11-13T09:00:00Z"), /^Soreee, /);   // 16.00 WIB
+    assert.match(buat("2026-11-13T12:47:00Z"), /^Malammm, /);  // 19.47 WIB
+
+    // Bentuk yang salah tidak boleh muncul lagi.
+    const semua = [
+        buat("2026-11-13T00:00:00Z"),
+        buat("2026-11-13T05:00:00Z"),
+        buat("2026-11-13T09:00:00Z"),
+        buat("2026-11-13T12:47:00Z")
+    ].join("\n");
+
+    assert.doesNotMatch(semua, /Siangmm/);
+    assert.doesNotMatch(semua, /Pagipagi/);
+
+});
+
+
 // Pembuka dipilih acak supaya tidak terasa seperti template,
 // tetapi `acak` bisa dikunci agar hasilnya bisa diuji.
 uji("pembuka pesan bervariasi tetapi tetap bisa diuji", () => {
@@ -466,8 +496,8 @@ uji("pembuka pesan bervariasi tetapi tetap bisa diuji", () => {
     const b = susunPesan(tugas, [], "2026-11-13", new Date("2026-11-13T00:00:00Z"), () => 0.99);
 
     assert.notEqual(a, b);
-    assert.match(a, /^Pagi, Krisna/);
-    assert.match(b, /^Pagi, Krisna/);
+    assert.match(a, /^Pagiii/);
+    assert.match(b, /^Pagiii/);
 
 });
 

@@ -37,9 +37,9 @@ import { fileURLToPath } from "node:url";
 const ZONA = "Asia/Jakarta";
 const BATAS_DAFTAR = 30;
 
-// Nama yang dipakai bot saat menyapa. Bisa ditimpa lewat
-// secret TELEGRAM_NAMA tanpa mengubah kode.
-const NAMA = (process.env.TELEGRAM_NAMA || "").trim() || "Krisna";
+// Pesan sengaja TIDAK menyebut nama. Notifikasi ini masuk ke
+// WhatsApp diri sendiri, jadi menyebut nama justru membuatnya
+// terasa seperti pengingat dari sistem, bukan chat dari teman.
 
 // Ke mana notifikasi dikirim.
 //
@@ -297,6 +297,26 @@ function sapaanWaktu(now = new Date()) {
 }
 
 
+// Bentuk akrab untuk pembuka pesan, ditulis eksplisit.
+//
+// Sengaja tidak dibuat otomatis dari aturan vokal: hasilnya
+// pernah salah ("siang" -> "siangmm", "malam" -> "malam").
+// Daftar pendek seperti ini lebih mudah diperiksa dan diubah.
+const SAPAAN_AKRAB = {
+    Pagi: "Pagiii",
+    Siang: "Siang",
+    Sore: "Soreee",
+    Malam: "Malammm"
+};
+
+
+function sapaanAkrab(now = new Date()) {
+
+    return SAPAAN_AKRAB[sapaanWaktu(now)];
+
+}
+
+
 // "hari ini juga", "besok", "2 hari lagi" — jauh lebih enak
 // dibaca daripada "H-0", "H-1", "H-2".
 function sisaHariTampil(selisih) {
@@ -335,8 +355,8 @@ export function susunPesan(
 
         bagian.push(
             (baru.length === 1
-                ? "Ada 1 tugas baru masuk:"
-                : `Ada ${baru.length} tugas baru masuk:`) +
+                ? "ada 1 tugas baru nih:"
+                : `ada ${baru.length} tugas baru nih:`) +
             "\n" + baris.join("\n")
         );
 
@@ -363,25 +383,29 @@ export function susunPesan(
         }
 
         bagian.push(
-            "Yang udah mepet:\n" + baris.join("\n")
+            "yang udah mepet:\n" + baris.join("\n")
         );
 
     }
 
     if (bagian.length === 0) return "";
 
+    // Tanpa nama: pesan ini masuk ke WhatsApp diri sendiri, jadi
+    // menyebut nama justru terasa seperti pengingat dari sistem.
+    // Vokal yang dipanjangkan ("pagiii", "semangatt") membuat
+    // nadanya akrab, bukan formal.
     const pembuka = pilih(
         [
-            `${sapaanWaktu(now)}, ${NAMA}. Ini update tugas hari ini.`,
-            `${sapaanWaktu(now)}, ${NAMA}. Ada yang perlu kamu cek nih.`,
-            `${sapaanWaktu(now)}, ${NAMA}. Rangkuman tugas dulu, biar tenang.`
+            `${sapaanAkrab(now)}, ini update tugas hari ini yaaa`,
+            `${sapaanAkrab(now)}, ada yang perlu dicek nih`,
+            `${sapaanAkrab(now)}, rangkuman tugas dulu yaa`
         ],
         acak
     );
 
     return pembuka + "\n\n" +
         bagian.join("\n\n") +
-        "\n\nSemangat ya.";
+        "\n\nsemangatt yaaaa";
 
 }
 
@@ -434,14 +458,14 @@ export function susunPesanDeadline(daftar, now = new Date()) {
     );
 
     const judul = palingMepet <= 1
-        ? `Aduh ${NAMA}, udah mepet banget`
+        ? "aduh, udah mepet banget"
         : palingMepet <= 2
-            ? `Hampir kelewatan nih, ${NAMA}`
-            : `Reminder, ${NAMA} — deadline udah deket`;
+            ? "hampir kelewatan nih"
+            : "reminder, deadline udah deket";
 
     return judul + "\n\n" +
         baris.join("\n") +
-        "\n\nkalau udah beres abaikan aja ya";
+        "\n\nkalau udah beres abaikan aja yaa";
 
 }
 
@@ -467,8 +491,8 @@ export function susunDigest(mingguIni, selesaiLalu) {
 
         bagian.push(
             (mingguIni.length === 1
-                ? "Minggu ini cuma ada 1 tugas:"
-                : `Minggu ini ada ${mingguIni.length} tugas:`) +
+                ? "minggu ini cuma ada 1 tugas:"
+                : `minggu ini ada ${mingguIni.length} tugas:`) +
             "\n" + baris.join("\n")
         );
 
@@ -482,11 +506,11 @@ export function susunDigest(mingguIni, selesaiLalu) {
 
     bagian.push(
         selesaiLalu.length > 0
-            ? `minggu lalu kamu kelar ${selesaiLalu.length} tugas, mantap.`
+            ? `minggu lalu kamu kelar ${selesaiLalu.length} tugas, mantapp.`
             : "minggu lalu belum ada yang kelar, gapapa."
     );
 
-    return "Senin lagi, " + NAMA + ".\n\n" + bagian.join("\n\n");
+    return "senin lagiii\n\n" + bagian.join("\n\n");
 
 }
 
@@ -899,7 +923,7 @@ async function main() {
 
         await kirimPesan(
             "tes. kalau pesan ini masuk, jalur notifikasi tugas " +
-            "sampai ke WhatsApp, " + NAMA + ".",
+            "sampai ke WhatsApp.",
             "uji"
         );
 
