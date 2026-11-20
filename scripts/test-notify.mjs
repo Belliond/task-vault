@@ -95,7 +95,7 @@ uji("tidak ada tugas = tidak ada pesan", () => {
 });
 
 
-uji("pesan memuat bagian baru, deadline, dan H-x", () => {
+uji("pesan memuat bagian baru, deadline, dan sisa hari", () => {
 
     const teks = susunPesan(
         [{ course: "Kriptografi", class_name: "RA", deadline: "2026-11-20" }],
@@ -108,10 +108,17 @@ uji("pesan memuat bagian baru, deadline, dan H-x", () => {
         "2026-11-13"
     );
 
-    assert.match(teks, /tugas baru:/);
+    assert.match(teks, /tugas baru masuk/i);
     assert.match(teks, /Kriptografi \(RA\)/);
-    assert.match(teks, /yang udah deket:/);
-    assert.match(teks, /H-2/);
+
+    // "yang udah mepet" menggantikan "yang udah deket".
+    assert.match(teks, /yang udah mepet/i);
+
+    // "2 hari lagi" menggantikan notasi "H-2" yang terasa
+    // seperti keluaran sistem.
+    assert.match(teks, /2 hari lagi/);
+    assert.doesNotMatch(teks, /H-2/);
+
     assert.match(teks, /15 Nov 2026 · 23\.59/);
 
 });
@@ -225,7 +232,104 @@ uji("pesan pengingat memuat jam dan sisa waktu", () => {
 
     assert.match(teks, /deadline udah deket/i);
     assert.match(teks, /jam 15\.00/);
-    assert.match(teks, /sisa 3 jam/);
+    assert.match(teks, /3 jam/);
+
+});
+
+
+// Bug lama: Math.round membuat sisa 2 jam 30 menit tertulis
+// "sisa 3 jam" — melebihkan waktu yang masih ada. Orang yang
+// membaca "3 jam" akan merasa longgar padahal mepet.
+uji("sisa waktu dibulatkan ke bawah, tidak melebihkan", () => {
+
+    const tugas = {
+        course: "Kriptografi",
+        class_name: "RA",
+        deadline: "2026-11-13",
+        deadline_time: "15:00:00"
+    };
+
+    // 12.30 WIB -> sisa tepat 2,5 jam.
+    const teks = susunPesanDeadline(
+        [tugas],
+        new Date("2026-11-13T05:30:00Z")
+    );
+
+    assert.match(teks, /2 jam setengah/);
+    assert.doesNotMatch(teks, /3 jam/);
+
+});
+
+
+uji("sisa di bawah sejam ditulis dalam menit", () => {
+
+    const tugas = {
+        course: "Kriptografi",
+        class_name: "RA",
+        deadline: "2026-11-13",
+        deadline_time: "15:00:00"
+    };
+
+    // 14.15 WIB -> sisa 45 menit.
+    assert.match(
+        susunPesanDeadline([tugas], new Date("2026-11-13T07:15:00Z")),
+        /45 menit lagi/
+    );
+
+    // 14.59.30 -> sisa 30 detik, tetap "1 menit" bukan "0 menit".
+    assert.match(
+        susunPesanDeadline([tugas], new Date("2026-11-13T07:59:30Z")),
+        /1 menit lagi/
+    );
+
+});
+
+
+// Nada pesan mengikuti tingkat mendesak, bukan satu nada untuk
+// semua. Sisa setengah jam tidak boleh terdengar sama santai
+// dengan sisa tiga jam.
+// Tugas tanpa jam tidak boleh ditulis "1 menit lagi". Sebelum
+// diperbaiki, Math.max(0, null) = 0 sehingga pesannya berbohong
+// tentang sisa waktu yang sebenarnya tidak ada.
+uji("tugas tanpa jam tidak ditulis '1 menit lagi'", () => {
+
+    const tanpaJam = {
+        course: "Laporan",
+        class_name: "RA",
+        deadline: "2026-11-13",
+        deadline_time: null
+    };
+
+    assert.equal(
+        susunPesanDeadline([tanpaJam], new Date("2026-11-13T05:00:00Z")),
+        ""
+    );
+
+});
+
+
+uji("nada pengingat makin mendesak saat waktu makin sedikit", () => {
+
+    const tugas = {
+        course: "Kriptografi",
+        class_name: "RA",
+        deadline: "2026-11-13",
+        deadline_time: "15:00:00"
+    };
+
+    const santai = susunPesanDeadline(
+        [tugas],
+        new Date("2026-11-13T05:10:00Z")   // sisa ~2,8 jam
+    );
+
+    const mepet = susunPesanDeadline(
+        [tugas],
+        new Date("2026-11-13T07:40:00Z")   // sisa ~20 menit
+    );
+
+    assert.match(santai, /Reminder/);
+    assert.match(mepet, /mepet banget/i);
+    assert.notEqual(santai, mepet);
 
 });
 
@@ -243,7 +347,7 @@ uji("digest Senin memuat minggu ini dan minggu lalu", () => {
     );
 
     assert.match(teks, /senin lagi/i);
-    assert.match(teks, /minggu ini:/);
+    assert.match(teks, /cuma ada 1 tugas/i);
     assert.match(teks, /Sel, 17 Nov 2026 · 23\.59/);
     assert.match(teks, /kelar 3 tugas/);
 
@@ -309,7 +413,7 @@ uji("setiap pesan menyapa nama", () => {
             [],
             "2026-11-13"
         ),
-        new RegExp("Pagi " + nama + ", ini update tugasnya")
+        new RegExp(nama)
     );
 
     assert.match(
@@ -322,13 +426,48 @@ uji("setiap pesan menyapa nama", () => {
             }],
             new Date("2026-11-13T05:00:00Z")
         ),
-        new RegExp("Deadline udah deket, " + nama)
+        new RegExp(nama)
     );
 
     assert.match(
         susunDigest([], []),
-        new RegExp("Senin lagi, " + nama)
+        new RegExp(nama)
     );
+
+});
+
+
+// "Pagi" yang dikirim pukul 19.47 langsung terasa seperti
+// template. Sapaan harus ikut jam WIB sebenarnya.
+uji("sapaan mengikuti jam WIB, bukan selalu Pagi", () => {
+
+    const tugas = [{ course: "A", class_name: "B", deadline: "2026-11-20" }];
+
+    const buat = (iso) =>
+        susunPesan(tugas, [], "2026-11-13", new Date(iso), () => 0);
+
+    // WIB = UTC+7.
+    assert.match(buat("2026-11-13T00:00:00Z"), /^Pagi/);      // 07.00 WIB
+    assert.match(buat("2026-11-13T05:00:00Z"), /^Siang/);     // 12.00 WIB
+    assert.match(buat("2026-11-13T09:00:00Z"), /^Sore/);      // 16.00 WIB
+    assert.match(buat("2026-11-13T12:47:00Z"), /^Malam/);     // 19.47 WIB
+    assert.match(buat("2026-11-13T18:00:00Z"), /^Pagi/);      // 01.00 WIB
+
+});
+
+
+// Pembuka dipilih acak supaya tidak terasa seperti template,
+// tetapi `acak` bisa dikunci agar hasilnya bisa diuji.
+uji("pembuka pesan bervariasi tetapi tetap bisa diuji", () => {
+
+    const tugas = [{ course: "A", class_name: "B", deadline: "2026-11-20" }];
+
+    const a = susunPesan(tugas, [], "2026-11-13", new Date("2026-11-13T00:00:00Z"), () => 0);
+    const b = susunPesan(tugas, [], "2026-11-13", new Date("2026-11-13T00:00:00Z"), () => 0.99);
+
+    assert.notEqual(a, b);
+    assert.match(a, /^Pagi, Krisna/);
+    assert.match(b, /^Pagi, Krisna/);
 
 });
 

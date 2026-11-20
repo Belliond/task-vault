@@ -143,6 +143,38 @@ export function sisaJam(task, now = new Date()) {
 }
 
 
+// Sisa waktu dalam bahasa sehari-hari: "3 jam", "2 jam setengah",
+// "45 menit", "10 menit".
+//
+// Dibulatkan ke bawah supaya tidak pernah melebihkan waktu yang
+// masih ada. Sisa 2 jam 30 menit -> "2 jam setengah" (bukan
+// "3 jam"), karena orang yang membaca "3 jam" akan merasa masih
+// longgar padahal cuma punya setengah jam lebih.
+function sisaWaktuTampil(jamSisa) {
+
+    if (jamSisa >= 1) {
+
+        const bulat = Math.floor(jamSisa);
+
+        const lebih = jamSisa - bulat;
+
+        // Setengah jam lebih ditulis "setengah" supaya tidak
+        // hilang begitu saja: 2,5 jam bukan 2 jam.
+        if (lebih >= 0.5) return `${bulat} jam setengah`;
+
+        return `${bulat} jam`;
+
+    }
+
+    // Di bawah satu jam, tampilkan menit. Minimal 1 menit supaya
+    // tidak pernah tertulis "0 menit" pada tugas yang belum lewat.
+    const menit = Math.max(1, Math.floor(jamSisa * 60));
+
+    return `${menit} menit`;
+
+}
+
+
 // Pengingat "3 jam sebelum deadline": hanya tugas berjam yang
 // belum selesai dan masih di dalam jendela.
 export function perluIngatDeadline(task, now = new Date(), batasJam = 3) {
@@ -225,25 +257,88 @@ function deadlineTampil(task) {
 }
 
 
+// ---------------------------------------------------------
+//  GAYA BAHASA
+//
+//  Pesan ini dibaca sebagai chat dari teman, bukan laporan
+//  sistem. Karena itu sapaan mengikuti jam sebenarnya, sisa
+//  waktu ditulis "besok"/"2 hari lagi" (bukan "H-2"), dan
+//  pembukanya tidak selalu sama supaya tidak terasa template.
+// ---------------------------------------------------------
+
+// Ambil satu kalimat secara acak. `acak` bisa diisi supaya
+// hasilnya bisa diuji tanpa bergantung pada keberuntungan.
+function pilih(salinan, acak = Math.random) {
+
+    const posisi = Math.floor(acak() * salinan.length);
+
+    return salinan[Math.min(posisi, salinan.length - 1)];
+
+}
+
+
+// "Pagi" hanya benar kalau memang pagi. Pesan yang dipicu
+// manual pukul 19.47 tidak boleh menyapa "Pagi".
+function sapaanWaktu(now = new Date()) {
+
+    const jam = Number(
+        new Intl.DateTimeFormat(
+            "en-GB",
+            { timeZone: ZONA, hour: "2-digit", hour12: false }
+        ).format(now)
+    ) % 24;
+
+    if (jam < 11) return "Pagi";
+    if (jam < 15) return "Siang";
+    if (jam < 19) return "Sore";
+
+    return "Malam";
+
+}
+
+
+// "hari ini juga", "besok", "2 hari lagi" — jauh lebih enak
+// dibaca daripada "H-0", "H-1", "H-2".
+function sisaHariTampil(selisih) {
+
+    if (selisih <= 0) return "hari ini juga";
+    if (selisih === 1) return "besok";
+
+    return `${selisih} hari lagi`;
+
+}
+
+
 // Mengembalikan "" kalau tidak ada yang perlu dikirim, supaya
 // bot tidak mengirim pesan kosong setiap hari.
-export function susunPesan(baru, dekat, todayKey) {
+export function susunPesan(
+    baru,
+    dekat,
+    todayKey,
+    now = new Date(),
+    acak = Math.random
+) {
 
     const bagian = [];
 
     if (baru.length > 0) {
 
         const baris = baru.slice(0, BATAS_DAFTAR).map(
-            (task) => `• ${labelTugas(task)}\n  deadline ${deadlineTampil(task)}`
+            (task) => `• ${labelTugas(task)} — tenggat ${deadlineTampil(task)}`
         );
 
         if (baru.length > BATAS_DAFTAR) {
 
-            baris.push(`… dan ${baru.length - BATAS_DAFTAR} tugas lain`);
+            baris.push(`… plus ${baru.length - BATAS_DAFTAR} tugas lain`);
 
         }
 
-        bagian.push("tugas baru:\n" + baris.join("\n"));
+        bagian.push(
+            (baru.length === 1
+                ? "Ada 1 tugas baru masuk:"
+                : `Ada ${baru.length} tugas baru masuk:`) +
+            "\n" + baris.join("\n")
+        );
 
     }
 
@@ -256,24 +351,37 @@ export function susunPesan(baru, dekat, todayKey) {
                  Date.parse(todayKey + "T00:00:00Z")) / 86400000
             );
 
-            return `• H-${selisih} · ${deadlineTampil(task)}\n  ${labelTugas(task)}`;
+            return `• ${labelTugas(task)} — ${deadlineTampil(task)}, ` +
+                sisaHariTampil(selisih);
 
         });
 
         if (dekat.length > BATAS_DAFTAR) {
 
-            baris.push(`… dan ${dekat.length - BATAS_DAFTAR} tugas lain`);
+            baris.push(`… plus ${dekat.length - BATAS_DAFTAR} tugas lain`);
 
         }
 
-        bagian.push("yang udah deket:\n" + baris.join("\n"));
+        bagian.push(
+            "Yang udah mepet:\n" + baris.join("\n")
+        );
 
     }
 
     if (bagian.length === 0) return "";
 
-    return "Pagi " + NAMA + ", ini update tugasnya yaaa\n\n" +
-        bagian.join("\n\n");
+    const pembuka = pilih(
+        [
+            `${sapaanWaktu(now)}, ${NAMA}. Ini update tugas hari ini.`,
+            `${sapaanWaktu(now)}, ${NAMA}. Ada yang perlu kamu cek nih.`,
+            `${sapaanWaktu(now)}, ${NAMA}. Rangkuman tugas dulu, biar tenang.`
+        ],
+        acak
+    );
+
+    return pembuka + "\n\n" +
+        bagian.join("\n\n") +
+        "\n\nSemangat ya.";
 
 }
 
@@ -290,20 +398,48 @@ function jamTampil(task) {
 // Pesan "3 jam sebelum deadline".
 // Ditulis seperti orang ngingetin teman: pendek, huruf kecil,
 // tanpa pembuka basa-basi.
+//
+// Sisa waktu dibulatkan KE BAWAH, bukan terdekat. Sisa 2 jam 30
+// menit ditulis "2 jam setengah", bukan "3 jam": melebihkan
+// waktu yang tersisa justru membuat orang santai padahal mepet.
 export function susunPesanDeadline(daftar, now = new Date()) {
 
     if (daftar.length === 0) return "";
 
-    const baris = daftar.map((task) => {
+    // Tugas tanpa jam tidak punya "sisa waktu" yang bisa dihitung.
+    // Tanpa penyaringan ini, sisaJam() mengembalikan null dan
+    // pesannya berbohong: "1 menit lagi" untuk tugas yang
+    // sebenarnya tidak punya tenggat jam sama sekali.
+    const berjam = daftar.filter((task) => sisaJam(task, now) !== null);
 
-        const sisa = Math.max(1, Math.round(sisaJam(task, now)));
+    if (berjam.length === 0) return "";
 
-        return `• ${labelTugas(task)} — jam ${jamTampil(task)}, ` +
-            `sisa ${sisa} jam`;
+    const baris = berjam.map((task) => {
+
+        const sisa = Math.max(0, sisaJam(task, now));
+
+        const jam = jamTampil(task);
+
+        return `• ${labelTugas(task)}` +
+            (jam ? ` — jam ${jam}` : "") +
+            `, ${sisaWaktuTampil(sisa)} lagi`;
 
     });
 
-    return "Deadline udah deket, " + NAMA + "\n\n" +
+    // Judul mengikuti tingkat mendesaknya, bukan satu nada untuk
+    // semua: sisa setengah jam tidak boleh terdengar sama santai
+    // dengan sisa tiga jam.
+    const palingMepet = Math.min(
+        ...berjam.map((task) => Math.max(0, sisaJam(task, now)))
+    );
+
+    const judul = palingMepet <= 1
+        ? `Aduh ${NAMA}, udah mepet banget`
+        : palingMepet <= 2
+            ? `Hampir kelewatan nih, ${NAMA}`
+            : `Reminder, ${NAMA} — deadline udah deket`;
+
+    return judul + "\n\n" +
         baris.join("\n") +
         "\n\nkalau udah beres abaikan aja ya";
 
@@ -325,11 +461,16 @@ export function susunDigest(mingguIni, selesaiLalu) {
 
         if (mingguIni.length > BATAS_DAFTAR) {
 
-            baris.push(`… dan ${mingguIni.length - BATAS_DAFTAR} tugas lain`);
+            baris.push(`… plus ${mingguIni.length - BATAS_DAFTAR} tugas lain`);
 
         }
 
-        bagian.push("minggu ini:\n" + baris.join("\n"));
+        bagian.push(
+            (mingguIni.length === 1
+                ? "Minggu ini cuma ada 1 tugas:"
+                : `Minggu ini ada ${mingguIni.length} tugas:`) +
+            "\n" + baris.join("\n")
+        );
 
     }
     else {
@@ -341,7 +482,7 @@ export function susunDigest(mingguIni, selesaiLalu) {
 
     bagian.push(
         selesaiLalu.length > 0
-            ? `minggu lalu kamu kelar ${selesaiLalu.length} tugas.`
+            ? `minggu lalu kamu kelar ${selesaiLalu.length} tugas, mantap.`
             : "minggu lalu belum ada yang kelar, gapapa."
     );
 
