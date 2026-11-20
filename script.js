@@ -8014,7 +8014,17 @@ function getStatusInfo(statusValue) {
 }
 
 
-function getDeadlineInfo(task) {
+// Sisa waktu dihitung dari SELISIH WAKTU SEBENARNYA, bukan dari
+// selisih tanggal kalender.
+//
+// Kenapa: dulu kedua sisi di-startOfDay(), sehingga tugas yang
+// deadline-nya pukul 00:00 malam ini tetap tertulis "1 DAYS LEFT"
+// padahal tinggal beberapa jam. Jam deadline-nya hilang sama sekali.
+// Sekarang label mengikuti waktu yang benar-benar tersisa.
+//
+// Pembulatan selalu KE BAWAH: "1 DAY LEFT" berarti masih >= 24 jam,
+// bukan 24 jam kurang satu menit.
+function getDeadlineInfo(task, sekarang = new Date()) {
 
     const moment =
         deadlineMoment(task);
@@ -8030,55 +8040,57 @@ function getDeadlineInfo(task) {
     }
 
 
-    const today =
-        startOfDay(
-            new Date()
-        );
+    const sisa =
+        moment.getTime() - sekarang.getTime();
 
 
-    const target =
-        startOfDay(moment);
-
-
-    const difference =
-        target - today;
-
-
-    const days =
-        Math.round(
-            difference /
-            (1000 * 60 * 60 * 24)
-        );
-
-
-    if (moment < new Date()) {
+    if (sisa <= 0) {
 
         return {
-            text:
-                days === 0
-                    ? "LATE TODAY"
-                    : `LATE BY ${Math.abs(days)} DAY(S)`,
+            text: "LATE BY " + durasi(-sisa),
             overdue: true
         };
 
     }
 
 
-    if (days === 0) {
+    return {
+        text: durasi(sisa) + " LEFT",
+        overdue: false
+    };
 
-        return {
-            text: "DUE TODAY",
-            overdue: false
-        };
+}
+
+
+// "5 HOURS", "1 DAY", "30 MINUTES" — satuan terbesar yang masih
+// masuk akal, dibulatkan ke bawah supaya sisa waktu tidak terlihat
+// lebih longgar dari kenyataan. Sisa di bawah satu menit tetap
+// dilaporkan "1 MINUTE", bukan "0".
+function durasi(milidetik) {
+
+    const MENIT = 60 * 1000;
+    const JAM = 60 * MENIT;
+    const HARI = 24 * JAM;
+
+    const satuan = (jumlah, nama) =>
+        `${jumlah} ${nama}${jumlah === 1 ? "" : "S"}`;
+
+    if (milidetik >= HARI) {
+
+        return satuan(Math.floor(milidetik / HARI), "DAY");
 
     }
 
+    if (milidetik >= JAM) {
 
-    return {
-        text:
-            `${days} DAYS LEFT`,
-        overdue: false
-    };
+        return satuan(Math.floor(milidetik / JAM), "HOUR");
+
+    }
+
+    return satuan(
+        Math.max(1, Math.floor(milidetik / MENIT)),
+        "MINUTE"
+    );
 
 }
 
