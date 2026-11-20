@@ -1,7 +1,136 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#050d0b"/>
-  <rect x="2" y="2" width="60" height="60" rx="10" fill="none" stroke="#19d991" stroke-opacity="0.55" stroke-width="2"/>
-  <path d="M22 20 L10 32 L22 44" fill="none" stroke="#4dffb2" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M42 20 L54 32 L42 44" fill="none" stroke="#4dffb2" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M36 16 L28 48" fill="none" stroke="#4fe6ff" stroke-width="4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Task Vault">
+  <!--
+    Naga bergaya logo Kali Linux, memakai palet Task Vault:
+      latar #050a08 · badan #4dffb2 ke #0f8f63 · tanduk #c9ffe8
+      mata #4fe6ff
+
+    Berkas ini DIHASILKAN oleh scripts/gen-ikon-naga.mjs.
+    Jangan diedit tangan: badan naga adalah poligon hasil
+    hitungan. Setelah mengubah, jalankan:
+
+        npm run ikon
+
+    Ikon "any" memakai isi penuh. Ikon "maskable" dibuat
+    terpisah (icon-maskable-512.png) dengan isi diperkecil ke
+    zona aman 80%, karena Android memotongnya jadi lingkaran.
+  -->
+  <defs>
+    <linearGradient id="kulit" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#c9ffe8"/>
+      <stop offset="0.42" stop-color="#4dffb2"/>
+      <stop offset="1" stop-color="#19d991"/>
+    </linearGradient>
+    <linearGradient id="badan" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#4dffb2"/>
+      <stop offset="0.55" stop-color="#2ee6a0"/>
+      <stop offset="1" stop-color="#0b7a54"/>
+    </linearGradient>
+    <linearGradient id="tanduk" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#19d991"/>
+      <stop offset="0.5" stop-color="#4dffb2"/>
+      <stop offset="1" stop-color="#c9ffe8"/>
+    </linearGradient>
+    <radialGradient id="cahaya" cx="0.56" cy="0.38" r="0.62">
+      <stop offset="0" stop-color="#4dffb2" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#4dffb2" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Kerucut meruncing: pangkal di (0,0), ujung di (0,-100).
+         Dipakai ulang untuk tanduk dan duri punggung. -->
+    <path id="kerucut"
+          d="M -27 0 C -25 -34, -13 -70, 0 -100
+             C 13 -70, 25 -34, 27 0 Z"/>
+  </defs>
+
+  <rect width="512" height="512" fill="#050a08"/>
+  <circle cx="268" cy="256" r="238" fill="url(#cahaya)"/>
+
+  <g transform="translate(256 256) scale(1.0171) translate(-284.0 -231.5)">
+  <!-- ============ BADAN (spiral, ekor menirus) ============ -->
+  <path d="M 217.6 318.5 L 221.2 316.3 L 224.8 314.4 L 228.5 312.6 L 232.3 311.1 L 236.2 309.9
+                 L 240.1 308.9 L 244.0 308.1 L 248.0 307.6 L 251.9 307.3 L 255.8 307.2 L 259.7 307.4
+                 L 263.6 307.8 L 267.4 308.4 L 271.1 309.3 L 274.7 310.4 L 278.3 311.7 L 281.7 313.2
+                 L 285.0 314.8 L 288.2 316.7 L 291.3 318.7 L 294.2 320.9 L 296.9 323.3 L 299.5 325.8
+                 L 301.9 328.4 L 304.1 331.2 L 306.1 334.1 L 308.0 337.0 L 309.6 340.1 L 311.1 343.2
+                 L 312.4 346.4 L 313.4 349.6 L 314.3 352.8 L 314.9 356.1 L 315.4 359.4 L 315.6 362.7
+                 L 315.7 366.0 L 315.5 369.2 L 315.2 372.4 L 314.6 375.5 L 313.9 378.6 L 313.0 381.6
+                 L 312.0 384.6 L 310.7 387.4 L 309.3 390.2 L 307.8 392.8 L 306.1 395.3 L 304.3 397.7
+                 L 302.3 399.9 L 300.3 402.1 L 298.1 404.0 L 295.8 405.8 L 293.5 407.5 L 291.0 409.0
+                 L 288.5 410.4 L 286.0 411.5 L 283.4 412.6 L 280.8 413.4 L 278.1 414.1 L 275.4 414.6
+                 L 272.7 415.0 L 270.1 415.1 L 267.4 415.2 L 264.8 415.0 L 262.2 414.7 L 259.6 414.3
+                 L 257.1 413.7 L 254.7 413.0 L 252.3 412.1 L 250.0 411.1 L 247.8 409.9 L 245.7 408.6
+                 L 243.7 407.3 L 241.8 405.8 L 240.0 404.2 L 238.3 402.5 L 236.7 400.7 L 235.3 398.9
+                 L 233.9 397.0 L 232.7 395.0 L 231.7 393.0 L 230.7 390.9 L 229.9 388.8 L 229.3 386.7
+                 L 228.7 384.5 L 228.3 382.3 L 228.1 380.1 L 227.9 378.0 L 227.9 375.8 L 228.1 373.6
+                 L 228.3 371.5 L 228.7 369.4 L 229.2 367.3 L 229.8 365.3 L 230.5 363.3 L 231.2 361.3
+                 L 230.9 358.2 L 230.9 358.2 L 230.9 358.2 L 227.8 358.3 L 225.9 359.9 L 224.2 361.6
+                 L 222.5 363.6 L 221.0 365.7 L 219.6 368.0 L 218.3 370.4 L 217.2 373.0 L 216.3 375.7
+                 L 215.5 378.6 L 214.9 381.5 L 214.6 384.6 L 214.4 387.7 L 214.4 390.9 L 214.7 394.1
+                 L 215.2 397.4 L 215.9 400.7 L 216.8 404.0 L 218.0 407.2 L 219.5 410.5 L 221.1 413.7
+                 L 223.0 416.8 L 225.2 419.9 L 227.5 422.8 L 230.1 425.7 L 232.9 428.4 L 236.0 431.0
+                 L 239.2 433.4 L 242.6 435.6 L 246.2 437.6 L 250.0 439.4 L 254.0 441.0 L 258.1 442.3
+                 L 262.3 443.4 L 266.7 444.3 L 271.1 444.8 L 275.7 445.1 L 280.3 445.1 L 285.0 444.8
+                 L 289.7 444.2 L 294.3 443.3 L 299.0 442.1 L 303.7 440.6 L 308.3 438.8 L 312.8 436.6
+                 L 317.3 434.2 L 321.6 431.4 L 325.8 428.4 L 329.8 425.0 L 333.7 421.4 L 337.4 417.5
+                 L 340.8 413.3 L 344.1 408.9 L 347.0 404.3 L 349.8 399.4 L 352.2 394.3 L 354.3 389.0
+                 L 356.1 383.5 L 357.6 377.9 L 358.7 372.1 L 359.5 366.3 L 359.9 360.3 L 360.0 354.2
+                 L 359.7 348.2 L 359.0 342.0 L 357.9 335.9 L 356.4 329.8 L 354.6 323.8 L 352.3 317.8
+                 L 349.7 311.9 L 346.7 306.2 L 343.3 300.6 L 339.5 295.2 L 335.4 289.9 L 330.9 284.9
+                 L 326.1 280.2 L 320.9 275.7 L 315.5 271.5 L 309.7 267.6 L 303.7 264.0 L 297.4 260.8
+                 L 290.9 258.0 L 284.1 255.5 L 277.2 253.5 L 270.1 251.8 L 262.9 250.6 L 255.5 249.8
+                 L 248.1 249.5 L 240.6 249.7 L 233.1 250.2 L 225.5 251.3 L 218.0 252.8 L 210.6 254.8
+                 L 203.2 257.3 L 195.9 260.3 L 188.8 263.7 Z"
+        fill="url(#badan)"/>
+
+  <!-- ============ DURI PUNGGUNG ============ -->
+  <g fill="#19d991">
+      <use href="#kerucut" transform="translate(229 257) rotate(-16) scale(0.53)"/>
+      <use href="#kerucut" transform="translate(305 272) rotate(23) scale(0.50)"/>
+      <use href="#kerucut" transform="translate(349 328) rotate(63) scale(0.48)"/>
+      <use href="#kerucut" transform="translate(347 391) rotate(103) scale(0.46)"/>
+  </g>
+
+  <!-- ============ TANDUK ============ -->
+  <use href="#kerucut" transform="translate(238 214) rotate(-70) scale(0.7)"
+       fill="#19d991"/>
+  <use href="#kerucut" transform="translate(278 178) rotate(-44) scale(1.05)"
+       fill="url(#tanduk)"/>
+
+  <!-- ============ KEPALA ============ -->
+  <!-- Sisi kiri kepala dibuat sampai x=170 supaya menutup tutup
+       bulat badan (yang mencapai x=172). Tanpa itu, ujung badan
+       menyembul di kiri dan terlihat seperti tonjolan. -->
+  <path d="M 170 306
+           C 180 240, 236 184, 300 172
+           L 360 182
+           L 420 206
+           C 448 218, 458 236, 444 250
+           L 378 262
+           L 306 278
+           L 236 298
+           Z"
+        fill="url(#kulit)"/>
+
+  <!-- kening -->
+  <path d="M 260 212 C 288 198, 322 196, 348 206"
+        fill="none" stroke="#19d991" stroke-width="9"
+        stroke-linecap="round" opacity="0.55"/>
+
+  <!-- mulut -->
+  <path d="M 442 244 C 398 260, 338 272, 260 284"
+        fill="none" stroke="#050a08" stroke-width="7.5"
+        stroke-linecap="round"/>
+
+  <!-- taring -->
+  <path d="M 372 264 L 378 296 L 391 266 Z" fill="#c9ffe8"/>
+  <path d="M 420 256 L 425 282 L 437 258 Z" fill="#c9ffe8"/>
+
+  <!-- mata: sian, supaya beda dari badan hijau -->
+  <ellipse cx="334" cy="224" rx="23" ry="12.5"
+           transform="rotate(-12 334 224)" fill="#050a08"/>
+  <circle cx="342" cy="220" r="5" fill="#4fe6ff"/>
+
+  <!-- lubang hidung -->
+  <circle cx="440" cy="232" r="4.2" fill="#050a08"/>
+  </g>
 </svg>

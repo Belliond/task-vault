@@ -18,7 +18,8 @@
     "notify:dry": "node scripts/notify-telegram.mjs --dry-run",
     "notify": "node scripts/notify-telegram.mjs",
     "classroom:auth": "node scripts/classroom-auth.mjs",
-    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs && node scripts/test-notify.mjs",
+    "ikon": "node scripts/gen-ikon-naga.mjs && node scripts/buat-ikon.mjs && node scripts/uji-zona-aman.mjs",
+    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs && node scripts/test-notify.mjs && node scripts/test-ikon.mjs",
     "setup": "npm run env:build && npm run db:sql"
   },
   "devDependencies": {

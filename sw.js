@@ -12,7 +12,11 @@
 //    - supabase  : tidak pernah di-cache
 // =========================================================
 
-const CACHE = "task-vault-2026-11-14";
+// Dinaikkan setiap kali isi shell berubah, supaya perangkat
+// membuang cache lama. Tanpa ini, ikon naga tidak akan muncul
+// di perangkat yang sudah pernah membuka Task Vault: service
+// worker lama tetap menyajikan icon-192/512 yang lama.
+const CACHE = "task-vault-2026-11-20";
 
 const SHELL = [
     "./",
@@ -24,6 +28,7 @@ const SHELL = [
     "./favicon.svg",
     "./icon-192.png",
     "./icon-512.png",
+    "./icon-maskable-512.png",
     "./manifest.json",
     "./privacy.html",
     // config.js ikut disimpan supaya saat offline halaman masih

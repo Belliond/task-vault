@@ -48,3 +48,18 @@ Thumbs.db
 
 # File uji sementara
 tmp-*
+
+# =========================================================
+#  ALAT UJI LOKAL — JANGAN DI-COMMIT
+# =========================================================
+#  Folder ini berisi adb/platform-tools, APK Termux, tangkapan
+#  layar, dan env-hp / env-push yang memuat TELEGRAM_BOT_TOKEN
+#  serta SUPABASE_KEY asli. Workflow deploy mengunggah seluruh
+#  akar repo ke GitHub Pages, jadi tanpa entri ini isi folder
+#  ikut terbit ke internet.
+# =========================================================
+
+_tools/
+
+# Berkas cangkang kosong yang tidak sengaja terbentuk
+null
