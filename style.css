@@ -3264,6 +3264,13 @@ button {
 
     letter-spacing: 1px;
 
+    /* Label sisa waktu bisa berformat jam:menit:detik dan
+       berubah tiap detik. Dengan angka proporsional, "00:00:00"
+       lebih lebar daripada "23:59:59" sehingga teks di
+       sebelahnya bergeser tiap detik. Angka tabular membuat
+       semua digit sama lebar, jadi lebarnya stabil. */
+    font-variant-numeric: tabular-nums;
+
 }
 
 

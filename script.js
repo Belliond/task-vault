@@ -5395,6 +5395,11 @@ function renderTasks() {
 
     });
 
+
+    // Kartu sudah di DOM; nyalakan hitung mundur kalau ada
+    // deadline yang tinggal kurang dari sehari.
+    aturDetakMundur();
+
 }
 
 
@@ -5734,6 +5739,9 @@ function renderCourseDetail() {
         );
 
     });
+
+
+    aturDetakMundur();
 
 }
 
@@ -6170,6 +6178,9 @@ function renderCalendarDayList(key) {
         );
 
     });
+
+
+    aturDetakMundur();
 
 }
 
@@ -6935,7 +6946,7 @@ function createTaskCard(task) {
 
 
     const deadlineInfo =
-        getDeadlineInfo(task);
+        teksSisaWaktu(task);
 
     const statusInfo =
         getStatusInfo(isTaskDone(task) ? "Completed" : task.status);
@@ -6984,7 +6995,8 @@ function createTaskCard(task) {
                 deadlineInfo.overdue
                     ? "overdue"
                     : ""
-            }">
+            }"
+                 data-deadline="${escapeHtml(String(task.deadline || ""))}T${escapeHtml(String(task.deadline_time || "23:59:59"))}">
 
                 ${deadlineInfo.text}
 
@@ -8066,6 +8078,11 @@ function getDeadlineInfo(task, sekarang = new Date()) {
 // masuk akal, dibulatkan ke bawah supaya sisa waktu tidak terlihat
 // lebih longgar dari kenyataan. Sisa di bawah satu menit tetap
 // dilaporkan "1 MINUTE", bukan "0".
+//
+// Kalau deadline kurang dari sehari lagi, hitungannya dibuat
+// rinci sampai detik (JAM:MENT:DETIK) supaya benar-benar
+// terlihat mendesak. Sehari atau lebih cukup dalam satuan hari:
+// angka detik sepanjang itu tidak ada gunanya.
 function durasi(milidetik) {
 
     const MENIT = 60 * 1000;
@@ -8081,16 +8098,37 @@ function durasi(milidetik) {
 
     }
 
-    if (milidetik >= JAM) {
+    // Sisa di bawah satu detik tetap "00:00:01", bukan "00:00:00".
+    const total = Math.max(1, Math.floor(milidetik / 1000));
 
-        return satuan(Math.floor(milidetik / JAM), "HOUR");
+    const dua = (n) => String(n).padStart(2, "0");
 
-    }
-
-    return satuan(
-        Math.max(1, Math.floor(milidetik / MENIT)),
-        "MINUTE"
+    return (
+        dua(Math.floor(total / 3600)) + ":" +
+        dua(Math.floor((total % 3600) / 60)) + ":" +
+        dua(total % 60)
     );
+
+}
+
+
+// Label sisa waktu untuk satu tugas. Dipakai saat kartu dirender
+// DAN saat label diperbarui tiap detik, supaya teksnya mustahil
+// berbeda antara kedua jalur itu.
+function teksSisaWaktu(task, sekarang = new Date()) {
+
+    const info =
+        getDeadlineInfo(task, sekarang);
+
+
+    // Satuan hari tidak berubah dalam semenit, jadi label itu
+    // cukup dihitung sekali saat kartu dirender. Penanda ini
+    // menentukan label mana yang perlu dihitung ulang tiap detik.
+    return {
+        text: info.text,
+        overdue: info.overdue,
+        rinci: info.text.includes(":")
+    };
 
 }
 
@@ -8104,6 +8142,154 @@ function startOfDay(date) {
     );
 
 }
+
+
+// =========================================================
+//  HITUNG MUNDUR TIAP DETIK
+//
+//  Label berformat jam:menit:detik harus bergerak sendiri, kalau
+//  tidak ia berbohong: angka yang sama terus tertulis sampai
+//  halaman dirender ulang. Yang diperbarui hanya teks label,
+//  bukan seluruh daftar tugas — render ulang akan menghapus
+//  posisi gulir dan menutup grup yang sedang dibuka.
+//
+//  Detak hanya hidup kalau ada minimal satu label berformat
+//  jam:menit:detik, jadi halaman tanpa deadline mendesak tidak
+//  membuang baterai.
+// =========================================================
+
+const DEADLINE_ATRIBUT = "data-deadline";
+
+let detakMundur = null;
+
+
+// Mengubah isi atribut data-deadline ("2026-11-21T00:00:00")
+// menjadi objek tugas yang dimengerti deadlineMoment().
+//
+// PENTING: deadlineMoment() memakai task.deadline (tanggal saja)
+// dan task.deadline_time (jam) secara terpisah. Kalau seluruh
+// "tanggalTjam" dimasukkan sebagai task.deadline, slice(0, 10)
+// membuang jamnya dan diam-diam diganti 23:59:59 — hitung mundur
+// jadi salah tanpa error apa pun. Karena itu dipisah di sini.
+function taskDariAtribut(nilai) {
+
+    const teks = String(nilai || "");
+
+    const posisiT = teks.indexOf("T");
+
+
+    if (posisiT === -1) {
+
+        return { deadline: teks };
+
+    }
+
+
+    return {
+        deadline: teks.slice(0, posisiT),
+        deadline_time: teks.slice(posisiT + 1)
+    };
+
+}
+
+
+function perbaruiLabelMundur() {
+
+    const sekarang =
+        new Date();
+
+    const label =
+        document.querySelectorAll(
+            `[${DEADLINE_ATRIBUT}]`
+        );
+
+
+    let perluDetak = false;
+
+
+    label.forEach((elemen) => {
+
+        const task =
+            taskDariAtribut(
+                elemen.getAttribute(DEADLINE_ATRIBUT)
+            );
+
+
+        const info =
+            teksSisaWaktu(task, sekarang);
+
+
+        if (elemen.textContent.trim() !== info.text) {
+
+            elemen.textContent = info.text;
+
+        }
+
+
+        if (elemen.classList.contains("overdue") !== info.overdue) {
+
+            elemen.classList.toggle("overdue", info.overdue);
+
+        }
+
+
+        if (info.rinci) {
+
+            perluDetak = true;
+
+        }
+
+    });
+
+
+    return perluDetak;
+
+}
+
+
+function aturDetakMundur() {
+
+    const perluDetak =
+        perbaruiLabelMundur();
+
+
+    if (perluDetak && !detakMundur) {
+
+        detakMundur = setInterval(() => {
+
+            // Tab di latar belakang tidak perlu menggambar apa pun.
+            // Saat dibuka lagi, label langsung disegarkan di bawah.
+            if (document.visibilityState === "visible") {
+
+                aturDetakMundur();
+
+            }
+
+        }, 1000);
+
+    }
+    else if (!perluDetak && detakMundur) {
+
+        clearInterval(detakMundur);
+
+        detakMundur = null;
+
+    }
+
+}
+
+
+// Begitu tab dibuka lagi, angka yang tertinggal (misalnya sisa
+// "00:04:12" padahal sudah lewat) langsung dibetulkan.
+document.addEventListener("visibilitychange", () => {
+
+    if (document.visibilityState === "visible") {
+
+        aturDetakMundur();
+
+    }
+
+});
 
 
 // =========================================================
