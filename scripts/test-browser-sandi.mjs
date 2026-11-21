@@ -56,8 +56,13 @@ const chrome = spawn(CHROME, [
     "--no-default-browser-check",
     "--disable-gpu",
     "--disable-extensions",
+    // Proxy sistem Windows (127.0.0.1:8080) sering mati dan membuat
+    // halaman gagal dimuat dengan ERR_PROXY_CONNECTION_FAILED.
+    // Uji ini tidak butuh proxy, jadi koneksi dibuat langsung.
+    "--proxy-server=direct://",
+    "--proxy-bypass-list=*",
     "--window-size=1280,900",
-    URL_UJI
+    "about:blank"
 ], { stdio: "ignore" });
 
 async function target() {
@@ -148,6 +153,21 @@ async function eval_ (ekspresi) {
 
 await kirim("Runtime.enable");
 await kirim("Page.enable");
+
+// Navigasi lewat CDP, bukan argumen CLI: kalau URL diberikan sebagai
+// argumen, Chrome bisa langsung menampilkan halaman error dan
+// script.js tidak pernah termuat — uji akan gagal dengan pesan
+// membingungkan seolah kodenya rusak.
+const navigasi = await kirim("Page.navigate", { url: URL_UJI });
+
+if (navigasi.errorText) {
+    console.log(
+        "GAGAL membuka " + URL_UJI + " : " + navigasi.errorText
+    );
+    ws.close();
+    chrome.kill();
+    process.exit(1);
+}
 
 // Tunggu halaman selesai dimuat.
 for (let i = 0; i < 100; i += 1) {
@@ -454,9 +474,20 @@ const warnaFokusAbort = await eval_(`
 
 const merahMuda = /^rgb\(255, 1[0-9]{2}, 1[0-9]{2}\)$/;
 
+// Yang penting bukan nuansa merahnya, melainkan: masih merah dan
+// BUKAN hijau. Warna bisa rgb(255,93,115) (normal) atau
+// rgb(255,133,133) (:focus-visible) tergantung modalitas input
+// browser, jadi keduanya harus diterima.
+function merahBukanHijau(nilai) {
+    const m = String(nilai).match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+    if (!m) return false;
+    const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    return r >= 240 && g >= 60 && g <= 170 && b >= 60 && b <= 170;
+}
+
 cek(
     "ABORT saat difokuskan tetap merah (bukan hijau)",
-    merahMuda.test(warnaFokusAbort) && warnaFokusAbort !== HIJAU,
+    merahBukanHijau(warnaFokusAbort),
     true
 );
 
