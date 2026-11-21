@@ -1,17 +1,32 @@
 // =========================================================
 //  PENGHASIL IKON NAGA — TASK VAULT
 //
-//  Badan naga dihitung sebagai POLIGON (garis + lebar yang
-//  menyusut), karena SVG tidak bisa membuat garis menirus.
+//  Karakter yang dituju: logo Kali Linux. Yang membuat logo
+//  itu terasa GARANG bukan warnanya, melainkan bentuknya:
 //
-//  Setelah dirangkai, ikon DIUKUR dengan sharp: kotak isinya
-//  dicari, lalu seluruh gambar digeser & diskalakan supaya
-//  tepat di tengah. Penempatan tidak ditebak.
+//    - badan berupa GARIS TIPIS memanjang (kaligrafi), bukan
+//      gumpalan tebal
+//    - kepala KECIL dan bersudut, moncong meruncing
+//    - sulur panjang menjulur dari belakang kepala
+//    - duri kecil di sepanjang leher
+//    - TANPA mata bulat: matanya celah sempit
 //
-//  Palet mengikuti tema Task Vault (bukan matcha, bukan Kali):
+//  Versi sebelumnya gagal karena kebalikannya: badan gempal,
+//  kepala besar membulat, mata bulat dengan pupil, taring
+//  mungil. Proporsi seperti itu terbaca sebagai maskot lucu.
+//
+//  Warna tetap palet Task Vault, tetapi PORSINYA dibalik:
+//  bidang gelap yang dominan, hijau hanya sebagai garis tipis
+//  menyala. Itu yang membuat ikon ini terasa satu keluarga
+//  dengan webnya, yang juga hitam dengan aksen neon tipis.
+//
 //    latar  #050a08
 //    hijau  #4dffb2 (--green)  · gelap #19d991 (--green-dark)
 //    sian   #4fe6ff (--cyan)
+//
+//  Seluruh geometri DIHITUNG (spine spline -> poligon menirus),
+//  lalu hasilnya diukur dengan sharp dan dipusatkan otomatis.
+//  Tidak ada posisi yang ditebak.
 //
 //      node scripts/gen-ikon-naga.mjs
 // =========================================================
@@ -27,8 +42,6 @@ const AKAR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // ia dicari di tempat lain kalau tidak ada di node_modules lokal:
 //
 //     SHARP_DIR=C:\path\ke\node_modules\sharp node scripts/gen-ikon-naga.mjs
-//
-// Tanpa SHARP_DIR, dipakai node_modules proyek ini (kalau ada).
 async function muatSharp() {
     const kandidat = [];
 
@@ -60,85 +73,187 @@ const HIJAU = "#4dffb2";
 const HIJAU_GELAP = "#19d991";
 const HIJAU_TERANG = "#c9ffe8";
 const HIJAU_TENGAH = "#2ee6a0";
+const HIJAU_GELAP_SEKALI = "#0d6b4a";
 const SIAN = "#4fe6ff";
 
 // ---------------------------------------------------------
-//  BADAN: spiral yang menirus jadi ekor
+//  GEOMETRI DASAR
 // ---------------------------------------------------------
 
-const CX = 262, CY = 372;          // pusat lingkaran badan
-const R0 = 100, R1 = 34;           // jari-jari pangkal & ujung
-const TH0 = -126 * Math.PI / 180;  // mulai di kiri-atas (leher)
-const SWEEP = 330 * Math.PI / 180; // berputar 330 derajat
-const W0 = 62, W1 = 3;             // lebar pangkal & ujung
-const N = 96;
+// Spline Catmull-Rom: kurva halus yang melewati SEMUA titik
+// kendali. Dipakai supaya badan dan sulur tidak terlihat
+// patah-patah seperti polyline.
+function spline(titikKendali, perSegmen = 14) {
+    const p = [
+        titikKendali[0],
+        ...titikKendali,
+        titikKendali[titikKendali.length - 1]
+    ];
 
-function titik(t) {
-    const r = R0 + (R1 - R0) * t;
-    const th = TH0 + SWEEP * t;
-    return [CX + r * Math.cos(th), CY + r * Math.sin(th)];
-}
+    const hasil = [];
 
-// Menyusut dengan eksponen 0.8: tetap tebal lebih lama, lalu
-// menipis cepat di ujung. Hasilnya terbaca sebagai ekor.
-function lebar(t) {
-    return W1 + (W0 - W1) * Math.pow(1 - t, 0.8);
-}
+    for (let i = 0; i < p.length - 3; i += 1) {
+        const [a, b, c, d] = [p[i], p[i + 1], p[i + 2], p[i + 3]];
 
-function badan() {
-    const kiri = [], kanan = [];
+        for (let j = 0; j < perSegmen; j += 1) {
+            const t = j / perSegmen;
+            const t2 = t * t;
+            const t3 = t2 * t;
 
-    for (let i = 0; i <= N; i += 1) {
-        const t = i / N;
-        const [x, y] = titik(t);
-        const [x2, y2] = titik(Math.min(1, t + 1 / N));
+            const f = (k) =>
+                0.5 * (
+                    2 * b[k] +
+                    (-a[k] + c[k]) * t +
+                    (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * t2 +
+                    (-a[k] + 3 * b[k] - 3 * c[k] + d[k]) * t3
+                );
 
-        const dx = x2 - x, dy = y2 - y;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = -dy / len, ny = dx / len;
-        const h = lebar(t) / 2;
-
-        kiri.push([x + nx * h, y + ny * h]);
-        kanan.push([x - nx * h, y - ny * h]);
+            hasil.push([f(0), f(1)]);
+        }
     }
 
-    const ujung = titik(1);
-    const semua = [...kiri, ujung, ...kanan.reverse()];
+    hasil.push(titikKendali[titikKendali.length - 1]);
 
-    const f = (p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
-    const per = 6;
+    return hasil;
+}
+
+function pathDari(points, desimal = 1) {
+    const f = (p) => `${p[0].toFixed(desimal)} ${p[1].toFixed(desimal)}`;
+
+    const per = 7;
     const baris = [];
 
-    for (let i = 0; i < semua.length; i += per) {
-        const potong = semua.slice(i, i + per).map(f).join(" L ");
+    for (let i = 0; i < points.length; i += per) {
+        const potong = points.slice(i, i + per).map(f).join(" L ");
         baris.push((i === 0 ? "M " : "L ") + potong);
     }
 
     return baris.join("\n                 ") + " Z";
 }
 
-// Duri di tepi luar badan, menghadap keluar.
+// Mengubah SPINE (garis tengah) menjadi POLIGON yang lebarnya
+// menirus dari w0 ke w1.
 //
-// Hanya dipasang di bagian badan yang masih TEBAL (t 0.06-0.44).
-// Kalau dipasang sampai ke ekor yang sudah menipis, durinya
-// terlihat seperti sirip lepas yang mengambang.
-function duri() {
+// SVG tidak bisa membuat garis menirus, jadi sisi kiri dan
+// kanan dihitung sendiri dari garis normal di tiap titik.
+// Eksponen < 1 membuat badan tetap tebal lebih lama lalu
+// menipis cepat di ujung — persis seperti sapuan kuas.
+function menirus(spine, w0, w1, eksponen = 0.85) {
+    const kiri = [];
+    const kanan = [];
+    const n = spine.length - 1;
+
+    for (let i = 0; i <= n; i += 1) {
+        const t = i / n;
+
+        const [x, y] = spine[i];
+        const [xa, ya] = spine[Math.max(0, i - 1)];
+        const [xb, yb] = spine[Math.min(n, i + 1)];
+
+        const dx = xb - xa;
+        const dy = yb - ya;
+        const len = Math.hypot(dx, dy) || 1;
+
+        const nx = -dy / len;
+        const ny = dx / len;
+
+        const h = (w1 + (w0 - w1) * Math.pow(1 - t, eksponen)) / 2;
+
+        kiri.push([x + nx * h, y + ny * h]);
+        kanan.push([x - nx * h, y - ny * h]);
+    }
+
+    return pathDari([...kiri, ...kanan.reverse()]);
+}
+
+// ---------------------------------------------------------
+//  BADAN: huruf S memanjang, menirus jadi ekor
+// ---------------------------------------------------------
+
+// Bentuk akhir: huruf S yang TERBUKA. Leher turun ke kiri,
+// badan menyapu ke bawah, lalu ekor memanjang ke kanan dan
+// berhenti sebelum tepi kanvas.
+//
+// Catatan penting: ekor yang terlalu panjang ke sudut kanan-bawah
+// membuat isi keluar dari zona aman ikon maskable (Android
+// memotongnya jadi lingkaran). Panjang ekor di bawah ini sudah
+// diukur agar tetap masuk.
+const SPINE_BADAN = [
+    [372, 236],
+    [330, 250],
+    [292, 284],
+    [268, 328],
+    [262, 376],
+    [276, 424],
+    [308, 458],
+    [352, 478],
+    [400, 486],
+    [444, 482],
+    [476, 470]
+];
+
+const badan = () => menirus(spline(SPINE_BADAN), 14, 1.1, 1.0);
+
+// Filamen ekor: rambut tipis yang melanjutkan ujung ekor ke
+// kanan-atas. Detail kecil ini yang membuat siluetnya terasa
+// seperti ilustrasi, bukan bentuk blok yang berhenti mendadak.
+const SPINE_FILAMEN = [
+    [476, 470],
+    [498, 452],
+    [510, 428],
+    [512, 402]
+];
+
+const filamen = () => menirus(spline(SPINE_FILAMEN), 5, 0.7, 0.7);
+
+// ---------------------------------------------------------
+//  DURI PUNGGUNG
+// ---------------------------------------------------------
+
+// Duri dipasang di tepi badan dan menghadap KE LUAR.
+//
+// Arah luar dihitung dari titik pusat lengkungan badan. Percobaan
+// sebelumnya memakai tanda normal yang salah, sehingga duri
+// tumbuh ke DALAM lengkungan dan terlihat seperti gigi bersisik
+// di sisi yang keliru.
+function duriPunggung() {
+    const spine = spline(SPINE_BADAN);
     const hasil = [];
 
-    for (const t of [0.06, 0.18, 0.30, 0.42]) {
-        const r = R0 + (R1 - R0) * t;
-        const th = TH0 + SWEEP * t;
-        const h = lebar(t) / 2;
+    // Pusat lengkungan badan (di dalam kurva S).
+    const PUSAT = [352, 372];
 
-        const x = CX + Math.cos(th) * (r + h - 6);
-        const y = CY + Math.sin(th) * (r + h - 6);
-        const putar = (th * 180 / Math.PI) + 90;
-        const skala = (0.34 + 0.20 * (1 - t)).toFixed(2);
+    const posisi = [0.05, 0.11, 0.17, 0.23, 0.29];
+
+    for (const t of posisi) {
+        const i = Math.round(t * (spine.length - 1));
+
+        const [x, y] = spine[i];
+
+        // Vektor menjauhi pusat lengkungan = arah luar.
+        const vx = x - PUSAT[0];
+        const vy = y - PUSAT[1];
+        const vlen = Math.hypot(vx, vy) || 1;
+
+        const nx = vx / vlen;
+        const ny = vy / vlen;
+
+        const panjang = 20 - 10 * t;
+        const lebar = 9 - 4 * t;
+
+        const ujung = [x + nx * panjang, y + ny * panjang];
+
+        // Kaki duri diletakkan di sepanjang tepi badan.
+        const tx = -ny;
+        const ty = nx;
+
+        const kiri = [x + tx * lebar / 2, y + ty * lebar / 2];
+        const kanan = [x - tx * lebar / 2, y - ty * lebar / 2];
 
         hasil.push(
-            `      <use href="#kerucut" ` +
-            `transform="translate(${x.toFixed(0)} ${y.toFixed(0)}) ` +
-            `rotate(${putar.toFixed(0)}) scale(${skala})"/>`
+            `    <path d="M ${kiri[0].toFixed(1)} ${kiri[1].toFixed(1)} ` +
+            `L ${ujung[0].toFixed(1)} ${ujung[1].toFixed(1)} ` +
+            `L ${kanan[0].toFixed(1)} ${kanan[1].toFixed(1)} Z"/>`
         );
     }
 
@@ -146,96 +261,112 @@ function duri() {
 }
 
 // ---------------------------------------------------------
-//  ISI GAMBAR (tanpa bingkai, supaya bisa diukur & dipusatkan)
+//  KEPALA
 // ---------------------------------------------------------
 
-function isi() {
-    return `  <!-- ============ BADAN (spiral, ekor menirus) ============ -->
-  <path d="${badan()}"
-        fill="url(#badan)"/>
-
-  <!-- ============ DURI PUNGGUNG ============ -->
-  <g fill="${HIJAU_GELAP}">
-${duri()}
-  </g>
-
-  <!-- ============ TANDUK ============ -->
-  <use href="#kerucut" transform="translate(238 214) rotate(-70) scale(0.7)"
-       fill="${HIJAU_GELAP}"/>
-  <use href="#kerucut" transform="translate(278 178) rotate(-44) scale(1.05)"
-       fill="url(#tanduk)"/>
-
-  <!-- ============ KEPALA ============ -->
-  <!-- Sisi kiri kepala dibuat sampai x=170 supaya menutup tutup
-       bulat badan (yang mencapai x=172). Tanpa itu, ujung badan
-       menyembul di kiri dan terlihat seperti tonjolan. -->
-  <path d="M 170 306
-           C 180 240, 236 184, 300 172
-           L 360 182
-           L 420 206
-           C 448 218, 458 236, 444 250
-           L 378 262
-           L 306 278
-           L 236 298
+// Kepala dibuat KECIL dan bersudut: baji panjang yang meruncing
+// ke moncong, dengan rahang bawah yang membuka. Tidak ada rahang
+// membulat dan tidak ada taring mungil — keduanya yang membuat
+// versi lama terlihat seperti maskot.
+const kepala = () => `  <!-- kepala: baji meruncing ke kanan -->
+  <path d="M 330 240
+           L 392 206
+           L 448 200
+           L 436 232
+           L 384 254
+           L 334 268
            Z"
         fill="url(#kulit)"/>
 
-  <!-- kening -->
-  <path d="M 260 212 C 288 198, 322 196, 348 206"
-        fill="none" stroke="${HIJAU_GELAP}" stroke-width="9"
-        stroke-linecap="round" opacity="0.55"/>
+  <!-- rahang bawah: membuka, memberi kesan moncong menyeringai -->
+  <path d="M 446 208
+           L 404 250
+           L 436 240
+           Z"
+        fill="${HIJAU_GELAP_SEKALI}"/>
 
-  <!-- mulut -->
-  <path d="M 442 244 C 398 260, 338 272, 260 284"
-        fill="none" stroke="${LATAR}" stroke-width="7.5"
-        stroke-linecap="round"/>
+  <!-- mata: CELAH SEMPIT, bukan bulatan dengan pupil.
+       Ini pembeda utama dari maskot lucu. -->
+  <path d="M 378 226 L 404 216 L 402 222 L 380 231 Z"
+        fill="${LATAR}"/>
+  <path d="M 382 225 L 400 218 L 399 221 L 383 228 Z"
+        fill="${SIAN}"/>
 
-  <!-- taring -->
-  <path d="M 372 264 L 378 296 L 391 266 Z" fill="${HIJAU_TERANG}"/>
-  <path d="M 420 256 L 425 282 L 437 258 Z" fill="${HIJAU_TERANG}"/>
+  <!-- tanduk belakang: runcing, mengarah ke belakang-atas -->
+  <path d="M 342 240 L 306 190 L 360 232 Z"
+        fill="${HIJAU_GELAP}"/>
 
-  <!-- mata: sian, supaya beda dari badan hijau -->
-  <ellipse cx="334" cy="224" rx="23" ry="12.5"
-           transform="rotate(-12 334 224)" fill="${LATAR}"/>
-  <circle cx="342" cy="220" r="5" fill="${SIAN}"/>
+  <!-- tanduk kedua, lebih kecil -->
+  <path d="M 356 236 L 338 200 L 372 232 Z"
+        fill="${HIJAU_GELAP}" opacity="0.75"/>`;
 
-  <!-- lubang hidung -->
-  <circle cx="440" cy="232" r="4.2" fill="${LATAR}"/>`;
+// ---------------------------------------------------------
+//  SULUR
+// ---------------------------------------------------------
+
+// Tiga sulur panjang dari belakang kepala. Inilah ciri paling
+// khas logo Kali: garis-garis tipis yang menjulur jauh ke luar
+// dan memaksa siluetnya melebar.
+const SULUR = [
+    { titik: [[330, 246], [276, 232], [214, 214], [152, 196], [96, 182]], w0: 7, w1: 0.8 },
+    { titik: [[334, 258], [284, 254], [228, 246], [172, 234], [118, 220]], w0: 6, w1: 0.8 },
+    { titik: [[338, 270], [292, 272], [242, 270], [192, 262], [142, 250]], w0: 5, w1: 0.8 }
+];
+
+function sulur() {
+    return SULUR.map(
+        (s) => `    <path d="${menirus(spline(s.titik), s.w0, s.w1, 0.8)}"/>`
+    ).join("\n");
+}
+
+// ---------------------------------------------------------
+//  ISI GAMBAR
+// ---------------------------------------------------------
+
+function isi() {
+    return `  <!-- ============ SULUR (menjulur dari belakang kepala) ============ -->
+  <g fill="${HIJAU}" opacity="0.82">
+${sulur()}
+  </g>
+
+  <!-- ============ BADAN (garis tipis menirus) ============ -->
+  <path d="${badan()}"
+        fill="url(#badan)"/>
+
+  <!-- ============ FILAMEN EKOR ============ -->
+  <path d="${filamen()}"
+        fill="${HIJAU_GELAP}"/>
+
+  <!-- ============ DURI PUNGGUNG ============ -->
+  <g fill="${HIJAU_GELAP}">
+${duriPunggung()}
+  </g>
+
+${kepala()}`;
 }
 
 const DEFS = `  <defs>
-    <linearGradient id="kulit" x1="0.12" y1="0" x2="0.88" y2="1">
+    <linearGradient id="kulit" x1="0.1" y1="0" x2="0.9" y2="1">
       <stop offset="0" stop-color="${HIJAU_TERANG}"/>
-      <stop offset="0.42" stop-color="${HIJAU}"/>
+      <stop offset="0.45" stop-color="${HIJAU}"/>
       <stop offset="1" stop-color="${HIJAU_GELAP}"/>
     </linearGradient>
-    <linearGradient id="badan" x1="0.2" y1="0" x2="0.8" y2="1">
+    <linearGradient id="badan" x1="0.2" y1="0" x2="0.75" y2="1">
       <stop offset="0" stop-color="${HIJAU}"/>
-      <stop offset="0.55" stop-color="${HIJAU_TENGAH}"/>
-      <stop offset="1" stop-color="#0b7a54"/>
+      <stop offset="0.5" stop-color="${HIJAU_TENGAH}"/>
+      <stop offset="1" stop-color="${HIJAU_GELAP_SEKALI}"/>
     </linearGradient>
-    <linearGradient id="tanduk" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0" stop-color="${HIJAU_GELAP}"/>
-      <stop offset="0.5" stop-color="${HIJAU}"/>
-      <stop offset="1" stop-color="${HIJAU_TERANG}"/>
-    </linearGradient>
-    <radialGradient id="cahaya" cx="0.56" cy="0.38" r="0.62">
-      <stop offset="0" stop-color="${HIJAU}" stop-opacity="0.18"/>
+    <radialGradient id="cahaya" cx="0.58" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="${HIJAU}" stop-opacity="0.10"/>
       <stop offset="1" stop-color="${HIJAU}" stop-opacity="0"/>
     </radialGradient>
-
-    <!-- Kerucut meruncing: pangkal di (0,0), ujung di (0,-100).
-         Dipakai ulang untuk tanduk dan duri punggung. -->
-    <path id="kerucut"
-          d="M -27 0 C -25 -34, -13 -70, 0 -100
-             C 13 -70, 25 -34, 27 0 Z"/>
   </defs>`;
 
 // ---------------------------------------------------------
 //  UKUR KOTAK ISI
 // ---------------------------------------------------------
 
-const MARGIN = 0.06;   // 6% tiap sisi, ruang untuk pembulatan
+const MARGIN = 0.07;
 
 async function ukur(kode) {
     const { data, info } = await sharp(Buffer.from(kode), { density: 200 })
@@ -268,23 +399,27 @@ function bungkus(transform) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Task Vault">
   <!--
     Naga bergaya logo Kali Linux, memakai palet Task Vault:
-      latar ${LATAR} · badan ${HIJAU} ke #0f8f63 · tanduk ${HIJAU_TERANG}
+      latar ${LATAR} · badan ${HIJAU} ke ${HIJAU_GELAP_SEKALI}
       mata ${SIAN}
 
+    Yang membuatnya garang adalah BENTUKNYA: garis tipis
+    memanjang, kepala kecil meruncing, sulur menjulur, mata
+    berupa celah sempit. Bukan warna.
+
     Berkas ini DIHASILKAN oleh scripts/gen-ikon-naga.mjs.
-    Jangan diedit tangan: badan naga adalah poligon hasil
+    Jangan diedit tangan: seluruh geometri adalah hasil
     hitungan. Setelah mengubah, jalankan:
 
         npm run ikon
 
     Ikon "any" memakai isi penuh. Ikon "maskable" dibuat
     terpisah (icon-maskable-512.png) dengan isi diperkecil ke
-    zona aman 80%, karena Android memotongnya jadi lingkaran.
+    zona aman 76%, karena Android memotongnya jadi lingkaran.
   -->
 ${DEFS}
 
   <rect width="512" height="512" fill="${LATAR}"/>
-  <circle cx="268" cy="256" r="238" fill="url(#cahaya)"/>
+  <circle cx="272" cy="252" r="240" fill="url(#cahaya)"/>
 
   <g transform="${transform}">
 ${isi()}
@@ -311,9 +446,7 @@ const transform =
 
 fs.writeFileSync(path.join(AKAR, "favicon.svg"), bungkus(transform));
 
-console.log("favicon.svg dibuat (naga).");
+console.log("favicon.svg dibuat (naga bergaya Kali).");
 console.log("kotak isi mentah :", lebarIsi + "x" + tinggiIsi,
     `(x ${kotak.minX}..${kotak.maxX}, y ${kotak.minY}..${kotak.maxY})`);
 console.log("skala            :", skala.toFixed(4));
-console.log("badan            : spiral", (SWEEP * 180 / Math.PI).toFixed(0) + " derajat,",
-    "lebar", W0, "->", W1, "px");
