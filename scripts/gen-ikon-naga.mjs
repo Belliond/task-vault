@@ -136,9 +136,12 @@ function pathDari(points, desimal = 1) {
 //
 // SVG tidak bisa membuat garis menirus, jadi sisi kiri dan
 // kanan dihitung sendiri dari garis normal di tiap titik.
-// Eksponen < 1 membuat badan tetap tebal lebih lama lalu
-// menipis cepat di ujung — persis seperti sapuan kuas.
-function menirus(spine, w0, w1, eksponen = 0.85) {
+//
+// `tirusMulai` menentukan di mana penipisan MULAI. Pada logo
+// Kali, badan berupa pita yang lebarnya hampir tetap sepanjang
+// loop, lalu baru menipis di ekor. Tanpa parameter ini, badan
+// sudah menipis sejak leher dan loop-nya terlihat seperti kawat.
+function menirus(spine, w0, w1, eksponen = 0.85, tirusMulai = 0) {
     const kiri = [];
     const kanan = [];
     const n = spine.length - 1;
@@ -157,7 +160,10 @@ function menirus(spine, w0, w1, eksponen = 0.85) {
         const nx = -dy / len;
         const ny = dx / len;
 
-        const h = (w1 + (w0 - w1) * Math.pow(1 - t, eksponen)) / 2;
+        // Bagian sebelum tirusMulai lebarnya tetap w0.
+        const u = Math.max(0, (t - tirusMulai) / (1 - tirusMulai));
+
+        const h = (w1 + (w0 - w1) * Math.pow(1 - u, eksponen)) / 2;
 
         kiri.push([x + nx * h, y + ny * h]);
         kanan.push([x - nx * h, y - ny * h]);
@@ -170,85 +176,126 @@ function menirus(spine, w0, w1, eksponen = 0.85) {
 //  BADAN: huruf S memanjang, menirus jadi ekor
 // ---------------------------------------------------------
 
-// Bentuk akhir: huruf S yang TERBUKA. Leher turun ke kiri,
-// badan menyapu ke bawah, lalu ekor memanjang ke kanan dan
-// berhenti sebelum tepi kanvas.
+// Struktur diambil dari PENGUKURAN referensi (bukan perkiraan):
+// referensi diperkecil ke 128x128, lalu rentang piksel putih tiap
+// baris dibaca dan dikalikan 4. Hasilnya, dalam koordinat 512:
 //
-// Catatan penting: ekor yang terlalu panjang ke sudut kanan-bawah
-// membuat isi keluar dari zona aman ikon maskable (Android
-// memotongnya jadi lingkaran). Panjang ekor di bawah ini sudah
-// diukur agar tetap masuk.
+//   kumis   : tiga helai nyaris sejajar, menjulur dari bahu
+//             (~215,180) ke kiri; ujungnya di (24,128),
+//             (20,176), dan (36,232)
+//   bahu    : ~(215,185), tempat kumis dan leher bertemu
+//   leher   : turun ke kanan-bawah, lebar ~20 px, sampai kepala
+//             di ~(320,230)
+//   kepala  : baji kecil, moncong di ~(368,250)
+//   loop    : sisi kiri di x~205 (y 228..270), dasar di y~315
+//   ekor    : dua helai menyebar ke kanan-bawah, ujung di
+//             ~(400,360) dan ~(388,416)
+//
+// Loop-nya memang lebar dan hampir menutup; itu bentuk aslinya.
+// Yang membuatnya terbaca naga adalah kepala kecil yang tajam,
+// kumis yang mengipasi, dan duri di leher.
 const SPINE_BADAN = [
-    [372, 236],
-    [330, 250],
-    [292, 284],
-    [268, 328],
-    [262, 376],
-    [276, 424],
-    [308, 458],
-    [352, 478],
-    [400, 486],
-    [444, 482],
-    [476, 470]
+    [322, 232],  // pangkal kepala
+    [300, 214],
+    [276, 200],
+    [252, 190],
+    [232, 186],  // bahu
+    [214, 192],
+    [204, 208],
+    [200, 228],  // sisi kiri loop
+    [201, 250],
+    [208, 272],
+    [222, 290],
+    [244, 303],
+    [270, 311],  // dasar loop
+    [298, 316],
+    [322, 326],
+    [340, 344],  // menyapu ke kanan
+    [350, 368],
+    [354, 392]   // ujung badan, tempat ekor
 ];
 
-const badan = () => menirus(spline(SPINE_BADAN), 14, 1.1, 1.0);
+// Lebar badan: pita ~26 px yang lebarnya HAMPIR TETAP sepanjang
+// leher dan loop, baru menipis di ekor (tirusMulai 0.62). Ini
+// yang membuatnya terlihat seperti pita kaligrafi, bukan kawat.
+//
+// w1 dinaikkan dari 3 ke 9 px: dengan w1 kecil, ujung badan
+// memudar hampir transparan karena gradien ikut menipis, sehingga
+// ekornya terlihat pucat dan putus.
+const badan = () => menirus(spline(SPINE_BADAN), 26, 9, 0.55, 0.62);
 
-// Filamen ekor: rambut tipis yang melanjutkan ujung ekor ke
-// kanan-atas. Detail kecil ini yang membuat siluetnya terasa
-// seperti ilustrasi, bukan bentuk blok yang berhenti mendadak.
-const SPINE_FILAMEN = [
-    [476, 470],
-    [498, 452],
-    [510, 428],
-    [512, 402]
+// Ekor: badan berakhir dengan garpu DUA helai tipis yang keduanya
+// menjuntai ke BAWAH, seperti pada referensi.
+//
+// Percobaan sebelumnya membuat helai pertama menuju kanan-atas dan
+// helai kedua ke bawah. Hasilnya bukan garpu, melainkan cabang
+// bersudut seperti trisula, karena kedua helai berangkat ke arah
+// yang berlawanan dari satu titik.
+const EKOR = [
+    { titik: [[354, 392], [366, 404], [378, 420], [386, 440]], w0: 7, w1: 0.6 },
+    { titik: [[354, 392], [358, 412], [362, 436], [366, 462]], w0: 6, w1: 0.6 }
 ];
 
-const filamen = () => menirus(spline(SPINE_FILAMEN), 5, 0.7, 0.7);
+function ekor() {
+    return EKOR.map(
+        (e) => `    <path d="${menirus(spline(e.titik), e.w0, e.w1, 0.55)}"/>`
+    ).join("\n");
+}
 
 // ---------------------------------------------------------
 //  DURI PUNGGUNG
 // ---------------------------------------------------------
 
-// Duri dipasang di tepi badan dan menghadap KE LUAR.
+// Duri kecil di sepanjang LEHER saja, antara kepala dan bahu.
 //
-// Arah luar dihitung dari titik pusat lengkungan badan. Percobaan
-// sebelumnya memakai tanda normal yang salah, sehingga duri
-// tumbuh ke DALAM lengkungan dan terlihat seperti gigi bersisik
-// di sisi yang keliru.
+// Arahnya dihitung dari ruas leher: tegak lurus terhadap arah
+// leher, dipilih yang menghadap KE ATAS (di referensi duri tumbuh
+// dari tepi atas leher). Percobaan sebelumnya memakai vektor dari
+// titik pusat loop; pada leher yang hampir lurus hasilnya duri
+// ikut berputar dan ada yang tumbuh ke dalam.
 function duriPunggung() {
     const spine = spline(SPINE_BADAN);
     const hasil = [];
 
-    // Pusat lengkungan badan (di dalam kurva S).
-    const PUSAT = [352, 372];
+    // Hanya di leher: 2%..22% dari panjang spine.
+    const posisi = [0.02, 0.06, 0.10, 0.14, 0.18, 0.22];
 
-    const posisi = [0.05, 0.11, 0.17, 0.23, 0.29];
-
-    for (const t of posisi) {
+    for (let k = 0; k < posisi.length; k += 1) {
+        const t = posisi[k];
         const i = Math.round(t * (spine.length - 1));
 
         const [x, y] = spine[i];
+        const [xa, ya] = spine[Math.max(0, i - 2)];
+        const [xb, yb] = spine[Math.min(spine.length - 1, i + 2)];
 
-        // Vektor menjauhi pusat lengkungan = arah luar.
-        const vx = x - PUSAT[0];
-        const vy = y - PUSAT[1];
-        const vlen = Math.hypot(vx, vy) || 1;
+        const dx = xb - xa;
+        const dy = yb - ya;
+        const len = Math.hypot(dx, dy) || 1;
 
-        const nx = vx / vlen;
-        const ny = vy / vlen;
+        // Normal tegak lurus leher, dipilih yang mengarah ke atas.
+        let nx = dy / len;
+        let ny = -dx / len;
+        if (ny > 0) { nx = -nx; ny = -ny; }
 
-        const panjang = 20 - 10 * t;
-        const lebar = 9 - 4 * t;
+        // Duri ramping dan runcing: lebih tinggi daripada lebar
+        // pangkalnya, supaya terbaca sebagai duri, bukan gigi.
+        const p = k / (posisi.length - 1);
+        const panjang = 20 - 7 * p;
+        const lebar = 6 - 1.5 * p;
 
-        const ujung = [x + nx * panjang, y + ny * panjang];
+        // Pangkal duri diletakkan di tepi badan (setengah lebar
+        // badan), supaya duri tumbuh dari kulit.
+        const tepi = 10;
+        const bx = x + nx * tepi;
+        const by = y + ny * tepi;
 
-        // Kaki duri diletakkan di sepanjang tepi badan.
+        const ujung = [bx + nx * panjang, by + ny * panjang];
+
         const tx = -ny;
         const ty = nx;
 
-        const kiri = [x + tx * lebar / 2, y + ty * lebar / 2];
-        const kanan = [x - tx * lebar / 2, y - ty * lebar / 2];
+        const kiri = [bx + tx * lebar / 2, by + ty * lebar / 2];
+        const kanan = [bx - tx * lebar / 2, by - ty * lebar / 2];
 
         hasil.push(
             `    <path d="M ${kiri[0].toFixed(1)} ${kiri[1].toFixed(1)} ` +
@@ -264,58 +311,124 @@ function duriPunggung() {
 //  KEPALA
 // ---------------------------------------------------------
 
-// Kepala dibuat KECIL dan bersudut: baji panjang yang meruncing
-// ke moncong, dengan rahang bawah yang membuka. Tidak ada rahang
-// membulat dan tidak ada taring mungil — keduanya yang membuat
-// versi lama terlihat seperti maskot.
-const kepala = () => `  <!-- kepala: baji meruncing ke kanan -->
-  <path d="M 330 240
-           L 392 206
-           L 448 200
-           L 436 232
-           L 384 254
-           L 334 268
+// Kepala: BAJI bersudut yang DIHITUNG dari ujung badan.
+//
+// Ini perbaikan penting. Sebelumnya kepala digambar dengan
+// koordinat tetap yang ditulis tangan, sementara badan berakhir di
+// titik lain. Akibatnya pangkal kepala tidak pernah tepat
+// menyambung: saat diperbesar terlihat seperti kotak putih yang
+// ditempel di ujung badan, dengan sambungan bersudut.
+//
+// Sekarang pangkal kepala diambil dari titik pertama spine badan,
+// dan arah moncong dihitung dari arah leher. Jadi berapa pun spine
+// diubah, kepala selalu menyambung rapat dan sejajar.
+function kepala() {
+    const spine = spline(SPINE_BADAN);
+
+    const [x0, y0] = spine[0];
+    const [x1, y1] = spine[6];
+
+    // Arah MENJAUHI badan (dari leher ke moncong).
+    let dx = x0 - x1;
+    let dy = y0 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+
+    // Normal tegak lurus arah moncong.
+    const nx = -dy;
+    const ny = dx;
+
+    const titik = (maju, samping) => [
+        x0 + dx * maju + nx * samping,
+        y0 + dy * maju + ny * samping
+    ];
+
+    const f = (p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
+
+    // Setengah lebar pangkal kepala dibuat sedikit lebih besar dari
+    // setengah lebar badan, supaya kepalanya terbaca (bukan
+    // menerus seperti pipa).
+    const setengah = 17;
+
+    const atas = titik(0, setengah);
+    const kening = titik(30, 13);
+    const moncong = titik(68, 3);
+    const rahang = titik(46, -14);
+    const bawah = titik(0, -setengah);
+
+    // Mata: lensa memanjang sejajar arah moncong, di dekat kening.
+    const mataA = titik(16, 6);
+    const mataB = titik(40, 5);
+    const mataC = titik(40, -2);
+    const mataD = titik(16, 1);
+
+    const lensa = (a, b, c, d, isi) =>
+        `  <path d="M ${f(a)} Q ${f([(a[0]+b[0])/2, (a[1]+b[1])/2 - 4])} ${f(b)} ` +
+        `Q ${f([(c[0]+d[0])/2, (c[1]+d[1])/2 - 2])} ${f(d)} Z"\n` +
+        `        fill="${isi}"/>`;
+
+    return `  <!-- kepala: baji dihitung dari ujung badan, jadi menyambung rapat -->
+  <path d="M ${f(atas)}
+           L ${f(kening)}
+           L ${f(moncong)}
+           L ${f(rahang)}
+           L ${f(bawah)}
            Z"
         fill="url(#kulit)"/>
 
-  <!-- rahang bawah: membuka, memberi kesan moncong menyeringai -->
-  <path d="M 446 208
-           L 404 250
-           L 436 240
+  <!-- mulut: celah gelap tipis di sisi bawah moncong -->
+  <path d="M ${f(titik(38, -8))}
+           L ${f(titik(66, -3))}
+           L ${f(titik(66, 0))}
+           L ${f(titik(38, -5))}
            Z"
-        fill="${HIJAU_GELAP_SEKALI}"/>
-
-  <!-- mata: CELAH SEMPIT, bukan bulatan dengan pupil.
-       Ini pembeda utama dari maskot lucu. -->
-  <path d="M 378 226 L 404 216 L 402 222 L 380 231 Z"
         fill="${LATAR}"/>
-  <path d="M 382 225 L 400 218 L 399 221 L 383 228 Z"
-        fill="${SIAN}"/>
 
-  <!-- tanduk belakang: runcing, mengarah ke belakang-atas -->
-  <path d="M 342 240 L 306 190 L 360 232 Z"
-        fill="${HIJAU_GELAP}"/>
-
-  <!-- tanduk kedua, lebih kecil -->
-  <path d="M 356 236 L 338 200 L 372 232 Z"
-        fill="${HIJAU_GELAP}" opacity="0.75"/>`;
+  <!-- mata: CELAH SEMPIT berbentuk lensa, bukan bulatan berpupil -->
+${lensa(mataA, mataB, mataC, mataD, LATAR)}
+${lensa(
+    [mataA[0] + dx * 3, mataA[1] + dy * 3],
+    [mataB[0] - dx * 3, mataB[1] - dy * 3],
+    [mataC[0] - dx * 3, mataC[1] - dy * 3],
+    [mataD[0] + dx * 3, mataD[1] + dy * 3],
+    SIAN
+)}`;
+}
 
 // ---------------------------------------------------------
 //  SULUR
 // ---------------------------------------------------------
 
-// Tiga sulur panjang dari belakang kepala. Inilah ciri paling
-// khas logo Kali: garis-garis tipis yang menjulur jauh ke luar
-// dan memaksa siluetnya melebar.
+// Kumis: tiga helai yang berpangkal di BAHU lalu mengipasi ke kiri.
+//
+// Angka diukur dari referensi dengan memindai kolom:
+//
+//   x=48  -> tiga helai di y 126-130, 170-176, 226-230
+//   x=192 -> tiga helai di y 142-150, 162-170, 178-186
+//   x=224 -> ketiganya menyatu jadi satu pita setinggi ~34 px
+//
+// PELAJARAN dari percobaan sebelumnya: pangkal kumis harus
+// benar-benar BERADA DI DALAM badan. Badan di sekitar bahu
+// (x 240) hanya membentang setinggi ~26 px, jadi pangkal yang
+// diletakkan di tepinya menyembulkan ujung rata — terlihat seperti
+// batang terpotong yang menggantung di bahu.
+//
+// Karena itu pangkalnya sekarang dibenamkan JAUH ke dalam badan,
+// di leher (x 300, y 208..228), tempat badan lebih tebal. Karena
+// kumis digambar SEBELUM badan, bagian pangkalnya tertutup siluet
+// dan kumis tampak tumbuh dari dalam badan — bukan ditempel.
 const SULUR = [
-    { titik: [[330, 246], [276, 232], [214, 214], [152, 196], [96, 182]], w0: 7, w1: 0.8 },
-    { titik: [[334, 258], [284, 254], [228, 246], [172, 234], [118, 220]], w0: 6, w1: 0.8 },
-    { titik: [[338, 270], [292, 272], [242, 270], [192, 262], [142, 250]], w0: 5, w1: 0.8 }
+    { titik: [[300, 210], [186, 154], [130, 138], [74, 130], [26, 126]], w0: 15, w1: 1.2 },
+    { titik: [[300, 218], [182, 178], [126, 176], [70, 178], [22, 180]], w0: 14, w1: 1.2 },
+    { titik: [[300, 226], [186, 208], [136, 218], [86, 228], [38, 238]], w0: 13, w1: 1.2 }
 ];
 
+// Tirus baru dimulai di 25% panjang, jadi pangkalnya tetap tebal
+// dan menyatu dengan bahu, lalu menipis seperti cambuk.
 function sulur() {
     return SULUR.map(
-        (s) => `    <path d="${menirus(spline(s.titik), s.w0, s.w1, 0.8)}"/>`
+        (s) => `    <path d="${menirus(spline(s.titik), s.w0, s.w1, 0.85, 0.25)}"/>`
     ).join("\n");
 }
 
@@ -324,18 +437,19 @@ function sulur() {
 // ---------------------------------------------------------
 
 function isi() {
-    return `  <!-- ============ SULUR (menjulur dari belakang kepala) ============ -->
-  <g fill="${HIJAU}" opacity="0.82">
+    return `  <!-- ============ KUMIS (mengipasi dari bahu ke kiri) ============ -->
+  <g fill="${HIJAU}" opacity="0.9">
 ${sulur()}
   </g>
 
-  <!-- ============ BADAN (garis tipis menirus) ============ -->
+  <!-- ============ BADAN (garis menirus: tebal di leher, tipis di ekor) ============ -->
   <path d="${badan()}"
         fill="url(#badan)"/>
 
-  <!-- ============ FILAMEN EKOR ============ -->
-  <path d="${filamen()}"
-        fill="${HIJAU_GELAP}"/>
+  <!-- ============ EKOR (dua helai tipis) ============ -->
+  <g fill="${HIJAU_GELAP}">
+${ekor()}
+  </g>
 
   <!-- ============ DURI PUNGGUNG ============ -->
   <g fill="${HIJAU_GELAP}">
@@ -346,9 +460,13 @@ ${kepala()}`;
 }
 
 const DEFS = `  <defs>
+    <!-- Kepala memakai gradien yang SAMA dengan badan. Percobaan
+         sebelumnya memberi kepala gradien sendiri yang lebih
+         terang, dan hasilnya kepala terlihat seperti potongan
+         kertas putih yang ditempel, bukan bagian dari badan. -->
     <linearGradient id="kulit" x1="0.1" y1="0" x2="0.9" y2="1">
-      <stop offset="0" stop-color="${HIJAU_TERANG}"/>
-      <stop offset="0.45" stop-color="${HIJAU}"/>
+      <stop offset="0" stop-color="${HIJAU}"/>
+      <stop offset="0.5" stop-color="${HIJAU_TENGAH}"/>
       <stop offset="1" stop-color="${HIJAU_GELAP}"/>
     </linearGradient>
     <linearGradient id="badan" x1="0.2" y1="0" x2="0.75" y2="1">
