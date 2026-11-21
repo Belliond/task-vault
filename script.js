@@ -426,6 +426,12 @@ const pinInput =
 const pinError =
     document.getElementById("pinError");
 
+const pinTitle =
+    document.getElementById("pinTitle");
+
+const pinMessage =
+    document.getElementById("pinMessage");
+
 const pinCancel =
     document.getElementById("pinCancel");
 
@@ -791,18 +797,47 @@ scheduleMenu.addEventListener(
 );
 
 
-// ---------- SYNC LMS ----------
-
+// ---------- GERBANG SANDI (SYNC + CRUD TUGAS) ----------
+//
 // Penghalang UI, bukan keamanan: PIN hanya dibandingkan di
 // browser, jadi siapa pun yang membuka DevTools tetap bisa
-// memanggil showPage(). Yang disimpan cuma hash SHA-256.
+// memanggil fungsi di bawah. Yang disimpan cuma hash SHA-256.
+//
+// Satu modal dipakai untuk DUA tujuan, dengan PIN yang sama
+// tetapi kunci yang TERPISAH:
+//
+//   "sync"  -> membuka halaman SYNC (memuat token LMS)
+//   "tugas" -> izin menambah, mengubah, dan menghapus tugas
+//
+// Dipisah supaya membuka daftar tugas tidak ikut membuka token
+// Moodle/Classroom. Masing-masing dibuka sekali per sesi tab.
 const PIN_HASH =
     "0b4ac583b63e5359801f545eaf12af19a978f5512c075e9948c362aa9d584239";
 
 let syncUnlocked =
     sessionStorage.getItem("syncUnlocked") === "1";
 
+let tugasUnlocked =
+    sessionStorage.getItem("tugasUnlocked") === "1";
+
 let pinReturnFocus = null;
+
+// Tujuan modal yang sedang terbuka, dan penyelesai promise-nya.
+let pinTujuan = "sync";
+let pinResolver = null;
+
+const PIN_TEKS = {
+    sync: {
+        judul: "Sync PIN",
+        pesan: "Masukkan PIN untuk membuka halaman SYNC."
+    },
+    tugas: {
+        judul: "Task PIN",
+        pesan:
+            "Masukkan PIN untuk menambah, mengubah, " +
+            "atau menghapus tugas."
+    }
+};
 
 
 function tampilSync() {
@@ -825,16 +860,29 @@ function tampilSync() {
 }
 
 
-function bukaSync() {
+function bukaPin(tujuan) {
 
-    if (syncUnlocked) {
-
-        tampilSync();
-
-        return;
-
+    // Sudah dibuka di sesi tab ini? Jangan tanya lagi.
+    if (tujuan === "sync" && syncUnlocked) {
+        return Promise.resolve(true);
     }
 
+    if (tujuan === "tugas" && tugasUnlocked) {
+        return Promise.resolve(true);
+    }
+
+    // Modal sedang dipakai tujuan lain: jangan tumpuk.
+    if (pinResolver) {
+        return Promise.resolve(false);
+    }
+
+
+    pinTujuan = tujuan;
+
+    const teks = PIN_TEKS[tujuan] || PIN_TEKS.sync;
+
+    pinTitle.textContent = teks.judul;
+    pinMessage.textContent = teks.pesan;
 
     pinReturnFocus = document.activeElement;
 
@@ -846,10 +894,17 @@ function bukaSync() {
 
     pinInput.focus();
 
+
+    return new Promise((resolve) => {
+
+        pinResolver = resolve;
+
+    });
+
 }
 
 
-function closePinModal() {
+function closePinModal(hasil = false) {
 
     pinModal.classList.add("hidden");
 
@@ -863,6 +918,18 @@ function closePinModal() {
 
 
     pinReturnFocus = null;
+
+
+    const resolver = pinResolver;
+
+    pinResolver = null;
+
+
+    if (resolver) {
+
+        resolver(hasil);
+
+    }
 
 }
 
@@ -892,6 +959,16 @@ async function pinCocok(nilai) {
 }
 
 
+// Gerbang untuk tambah / edit / hapus tugas.
+// Dipakai dengan `await`, jadi pemanggilnya bisa berhenti di
+// tengah jalan kalau PIN-nya salah atau dibatalkan.
+function mintaIzinTugas() {
+
+    return bukaPin("tugas");
+
+}
+
+
 pinForm.addEventListener(
     "submit",
     async (event) => {
@@ -901,13 +978,30 @@ pinForm.addEventListener(
 
         if (await pinCocok(pinInput.value.trim())) {
 
-            syncUnlocked = true;
+            const tujuan = pinTujuan;
 
-            sessionStorage.setItem("syncUnlocked", "1");
+            if (tujuan === "tugas") {
 
-            closePinModal();
+                tugasUnlocked = true;
 
-            tampilSync();
+                sessionStorage.setItem("tugasUnlocked", "1");
+
+            }
+            else {
+
+                syncUnlocked = true;
+
+                sessionStorage.setItem("syncUnlocked", "1");
+
+            }
+
+
+            closePinModal(true);
+
+
+            // Pemanggil (bukaSync / tombol token) yang melanjutkan
+            // sendiri lewat promise-nya. Jangan panggil tampilSync()
+            // di sini juga, nanti halaman dirender dua kali.
 
             return;
 
@@ -922,7 +1016,7 @@ pinForm.addEventListener(
 );
 
 
-pinCancel.addEventListener("click", closePinModal);
+pinCancel.addEventListener("click", () => closePinModal(false));
 
 
 pinModal.addEventListener(
@@ -931,12 +1025,27 @@ pinModal.addEventListener(
 
         if (event.target === pinModal) {
 
-            closePinModal();
+            closePinModal(false);
 
         }
 
     }
 );
+
+
+function bukaSync() {
+
+    bukaPin("sync").then((boleh) => {
+
+        if (boleh) {
+
+            tampilSync();
+
+        }
+
+    });
+
+}
 
 
 syncMenu.addEventListener("click", bukaSync);
@@ -955,7 +1064,26 @@ function openAddTaskModal() {
 
     if (!addTaskModal) return;
 
+    // Fokus dikembalikan ke tombol asal setelah modal ditutup.
+    // Diambil SEKARANG, sebelum gerbang sandi mengambil fokus.
     addModalReturnFocus = document.activeElement;
+
+
+    // Tambah tugas butuh izin sandi (sekali per sesi tab).
+    bukaPin("tugas").then((boleh) => {
+
+        if (!boleh) return;
+
+        tampilkanFormTambah();
+
+    });
+
+}
+
+
+function tampilkanFormTambah() {
+
+    if (!addTaskModal) return;
 
     addTaskModal.classList.remove("hidden");
 
@@ -1025,6 +1153,16 @@ document.addEventListener(
     "keydown",
     (event) => {
 
+        // Jangan tutup form tambah saat gerbang sandi sedang
+        // terbuka di atasnya: ESC di situ milik modal sandi.
+        if (event.key === "Escape" &&
+            isPinModalOpen()) {
+
+            return;
+
+        }
+
+
         if (event.key === "Escape" &&
             addTaskModal &&
             !addTaskModal.classList.contains("hidden")) {
@@ -1050,6 +1188,16 @@ taskForm.addEventListener(
 
 
         if (butuhInternet()) {
+
+            return;
+
+        }
+
+
+        // Gerbang kedua. Modal tambah hanya bisa dibuka lewat
+        // gerbang sandi, tetapi sesi bisa saja dihapus di tab lain
+        // atau form dikirim ulang — jadi periksa lagi di sini.
+        if (!(await mintaIzinTugas())) {
 
             return;
 
@@ -6832,13 +6980,17 @@ function wireMoodleSubmit(card, task) {
 
     tombolToken?.addEventListener("click", () => {
 
-        bukaSync();
+        // Gerbang sandi sekarang asinkron (satu modal dipakai
+        // dua tujuan), jadi fokus diatur setelah PIN diterima.
+        bukaPin("sync").then((boleh) => {
 
-        if (syncUnlocked) {
+            if (!boleh) return;
+
+            tampilSync();
 
             moodleUsername.focus();
 
-        }
+        });
 
     });
 
@@ -6899,7 +7051,8 @@ function wireMoodleSubmit(card, task) {
                 "Pengumpulan langsung dikirim ke Moodle dan terlihat " +
                 "oleh pengajar. Masih bisa dibatalkan selama belum dinilai.",
             acceptLabel: "KIRIM",
-            cancelLabel: "BATAL"
+            cancelLabel: "BATAL",
+            danger: false
         });
 
         if (!lanjut) return;
@@ -7082,9 +7235,25 @@ function isEditModalOpen() {
 
 function openEditModal(task) {
 
+    // Edit tugas butuh izin sandi (sekali per sesi tab).
+    // Fokus diambil sebelum gerbang supaya bisa dikembalikan
+    // ke tombol EDIT setelah modal ditutup.
     lastFocusedElement =
         document.activeElement;
 
+
+    bukaPin("tugas").then((boleh) => {
+
+        if (!boleh) return;
+
+        tampilkanFormEdit(task);
+
+    });
+
+}
+
+
+function tampilkanFormEdit(task) {
 
     editId.value =
         task.id;
@@ -7278,7 +7447,7 @@ document.addEventListener(
     "keydown",
     (event) => {
 
-        // Modal PIN paling atas (dibuka dari navbar), lalu
+        // Urutan tumpukan modal: sandi (paling atas), lalu
         // konfirmasi hapus, lalu edit.
         const activeModal =
             isPinModalOpen()
@@ -7388,6 +7557,15 @@ editForm.addEventListener(
 
 
         if (butuhInternet()) {
+
+            return;
+
+        }
+
+
+        // Gerbang kedua untuk jalur edit (lihat catatan di
+        // submit form tambah).
+        if (!(await mintaIzinTugas())) {
 
             return;
 
@@ -7524,7 +7702,8 @@ function openConfirmModal({
     title = "Confirm?",
     message = "",
     acceptLabel = "DELETE",
-    cancelLabel = "ABORT"
+    cancelLabel = "ABORT",
+    danger = true
 
 }) {
 
@@ -7550,6 +7729,14 @@ function openConfirmModal({
         confirmMessage.textContent = message;
         confirmAccept.textContent = acceptLabel;
         confirmCancel.textContent = cancelLabel;
+
+
+        // Aksi merusak (hapus/batalkan) tetap merah; aksi utama
+        // seperti KIRIM memakai hijau.
+        confirmAccept.classList.toggle(
+            "confirm-accept-danger",
+            danger
+        );
 
 
         confirmModal.classList.remove("hidden");
@@ -7634,6 +7821,17 @@ confirmModal.addEventListener(
 async function deleteTask(task) {
 
     if (butuhInternet()) {
+
+        return;
+
+    }
+
+
+    // Hapus tugas butuh izin sandi (sekali per sesi tab).
+    // Gerbang dipasang SEBELUM dialog konfirmasi, supaya dialog
+    // "Purge?" tidak pernah muncul untuk orang yang belum
+    // memasukkan PIN.
+    if (!(await mintaIzinTugas())) {
 
         return;
 

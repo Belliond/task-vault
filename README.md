@@ -870,6 +870,33 @@ Konsekuensi yang perlu diterima:
   memegang rahasia server tidak boleh bisa dipanggil dari browser; kalau bisa,
   siapa pun yang menemukan URL + publishable key dapat memicunya tanpa batas.
 
+### Gerbang sandi (PIN)
+
+Ada dua gerbang PIN di UI, keduanya **penghalang UI, bukan keamanan**:
+
+| Gerbang | Membuka | Kunci sesi |
+|---|---|---|
+| `sync` | Halaman SYNC (token Moodle, pengaturan sync) | `sessionStorage.syncUnlocked` |
+| `tugas` | Tambah, edit, dan hapus tugas | `sessionStorage.tugasUnlocked` |
+
+PIN-nya sama (satu hash SHA-256 di `script.js`, nilai aslinya tidak ada di
+source), tetapi **kuncinya terpisah**. Membuka daftar tugas tidak otomatis
+membuka halaman SYNC, karena halaman itu memuat token LMS.
+
+Yang penting disadari: gerbang ini hanya mencegah klik tidak sengaja, **bukan
+mengamankan data**. PIN dibandingkan di browser, dan `supabaseClient` bisa
+dipanggil langsung dari DevTools. Kalau butuh perlindungan sungguhan, RLS +
+Supabase Auth adalah jalan satu-satunya.
+
+Rincian perilaku:
+
+- PIN diminta **sekali per sesi tab**; menutup tab mengunci lagi.
+- Gerbang dipasang di dua lapis: saat modal dibuka (`openAddTaskModal`,
+  `openEditModal`) **dan** saat form dikirim (`taskForm`, `editForm`), ditambah
+  di awal `deleteTask` sebelum dialog konfirmasi muncul.
+- ABORT pada dialog konfirmasi hapus tidak menghapus apa pun, dan dialog hapus
+  tidak pernah muncul untuk orang yang belum melewati gerbang.
+
 Kalau nanti butuh multi-user yang aman, aktifkan RLS + Supabase Auth dan
 tambahkan kembali kolom `user_id`.
 

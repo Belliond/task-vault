@@ -19,7 +19,8 @@
     "notify": "node scripts/notify-telegram.mjs",
     "classroom:auth": "node scripts/classroom-auth.mjs",
     "ikon": "node scripts/gen-ikon-naga.mjs && node scripts/buat-ikon.mjs && node scripts/uji-zona-aman.mjs",
-    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs && node scripts/test-notify.mjs && node scripts/test-ikon.mjs && node scripts/test-deadline.mjs",
+    "test": "node scripts/test-sync.mjs && node scripts/test-http.mjs && node scripts/test-filter-ui.mjs && node scripts/test-notify.mjs && node scripts/test-ikon.mjs && node scripts/test-deadline.mjs && node scripts/test-sandi.mjs && node scripts/test-warna-tombol.mjs",
+    "test:browser": "node scripts/test-browser-sandi.mjs",
     "setup": "npm run env:build && npm run db:sql"
   },
   "devDependencies": {

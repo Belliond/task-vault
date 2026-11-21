@@ -1775,7 +1775,7 @@
                 <button
                     type="button"
                     id="confirmAccept"
-                    class="confirm-accept"
+                    class="confirm-accept confirm-accept-danger"
                 >
                     DELETE
                 </button>
@@ -1788,7 +1788,15 @@
 
 
     <!-- =====================================================
-         PIN HALAMAN SYNC
+         GERBANG SANDI
+         Satu modal, dua tujuan:
+           - "sync"  : membuka halaman SYNC (token Moodle, dll)
+           - "tugas" : izin tambah / edit / hapus tugas
+
+         PIN-nya sama, tetapi kuncinya TERPISAH. Membuka daftar
+         tugas tidak otomatis membuka halaman SYNC, karena halaman
+         itu memuat token LMS.
+
          Penghalang UI sederhana: PIN tidak dikirim ke mana pun.
          Nilai aslinya tidak ada di source, hanya hash SHA-256.
     ====================================================== -->
@@ -1799,6 +1807,7 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="pinTitle"
+        aria-describedby="pinMessage"
     >
 
         <div class="modal-content confirm-content">
@@ -1811,7 +1820,7 @@
                 Sync PIN
             </h2>
 
-            <p class="confirm-message">
+            <p id="pinMessage" class="confirm-message">
                 Masukkan PIN untuk membuka halaman SYNC.
             </p>
 

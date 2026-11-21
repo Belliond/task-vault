@@ -4073,28 +4073,16 @@ button {
 }
 
 
+/* Arah warna tombol modal:
+     - ABORT / BATAL / TUTUP  -> MERAH (danger)
+     - UNLOCK / KIRIM         -> HIJAU (aksi utama)
+     - DELETE / BATALKAN      -> MERAH, lewat kelas
+                                 .confirm-accept-danger
+
+   Sebelumnya warnanya tertukar: ABORT hijau dan UNLOCK merah,
+   sehingga tombol batal terlihat seperti aksi utama. */
+
 .confirm-cancel {
-
-    color: var(--green);
-
-    border-color: var(--green);
-
-}
-
-
-.confirm-cancel:hover,
-.confirm-cancel:focus-visible {
-
-    color: var(--green);
-
-    border-color: var(--green);
-
-    background: rgba(0, 255, 156, 0.07);
-
-}
-
-
-.confirm-accept {
 
     color: var(--danger);
 
@@ -4103,14 +4091,60 @@ button {
 }
 
 
-.confirm-accept:hover,
-.confirm-accept:focus-visible {
+.confirm-cancel:hover,
+.confirm-cancel:focus-visible {
 
     color: #ff8585;
 
     border-color: var(--danger);
 
-    background: rgba(255, 80, 80, 0.06);
+    background: rgba(255, 93, 115, 0.10);
+
+}
+
+
+.confirm-accept {
+
+    color: var(--green);
+
+    border-color: var(--green);
+
+}
+
+
+.confirm-accept:hover,
+.confirm-accept:focus-visible {
+
+    color: var(--green);
+
+    border-color: var(--green);
+
+    background: var(--green-soft);
+
+}
+
+
+/* Aksi yang menghapus/membatalkan: tetap merah walau posisinya
+   tombol "accept". Tanpa ini, DELETE akan berwarna hijau dan
+   terlihat aman padahal permanen. */
+
+.confirm-accept-danger {
+
+    color: var(--danger);
+
+    border-color: var(--danger);
+
+}
+
+
+.confirm-accept-danger:hover,
+.confirm-accept-danger:focus-visible {
+
+    color: #ff8585;
+
+    border-color: var(--danger);
+
+    background: rgba(255, 93, 115, 0.10);
 
 }
 
