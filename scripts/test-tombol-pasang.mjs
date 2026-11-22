@@ -318,7 +318,72 @@ cek(
 );
 
 
-// ---- 6. Tidak ada error JavaScript ---------------------------
+// ---- 6. Tata letak navbar di layar sempit --------------------
+
+console.log("\n=== tata letak navbar (layar sempit) ===");
+
+// Tombol ini pernah membuat navbar membengkak dari 65px jadi
+// 121px di HP: dengan margin-left: auto ia naik ke baris sendiri
+// di atas tautan navigasi. Uji ini menjaga agar tidak terulang.
+await kirim("Emulation.setDeviceMetricsOverride", {
+    width: 390, height: 780, deviceScaleFactor: 1, mobile: true
+});
+await tidur(1200);
+
+const tataLetak = await eval_(`
+    (() => {
+        const b = document.getElementById('installApp');
+        const nav = document.querySelector('.navbar-nav');
+        const header = document.getElementById('appNavbar');
+        const r = b.getBoundingClientRect();
+        const rn = nav.getBoundingClientRect();
+
+        // Hanya tautan yang masih terlihat di dalam area nav yang
+        // dihitung; yang tergulir keluar memang di luar pandangan.
+        const kiriTampak = Math.max(rn.left, 0);
+        const kananTampak = Math.min(rn.right, window.innerWidth);
+        const tumpang = [...document.querySelectorAll('.nav-link')].some(t => {
+            const k = t.getBoundingClientRect();
+            const kiri = Math.max(k.left, kiriTampak);
+            const kanan = Math.min(k.right, kananTampak);
+            if (kanan <= kiri) return false;
+            return kanan > r.left && kiri < r.right &&
+                   k.bottom > r.top && k.top < r.bottom;
+        });
+
+        const diTitik = document.elementFromPoint(
+            r.left + r.width / 2, r.top + r.height / 2
+        );
+
+        return {
+            tinggiHeader: Math.round(header.getBoundingClientRect().height),
+            tombolSeBarisDenganNav: Math.abs(r.top - rn.top) < 30,
+            tumpangTindih: tumpang,
+            tombolBisaDiklik: diTitik === b || b.contains(diTitik),
+            diDalamLayar: r.right <= window.innerWidth + 0.5 && r.left >= -0.5,
+            gulirHorizontalHalaman:
+                document.documentElement.scrollWidth > window.innerWidth + 1,
+            labelDisembunyikan:
+                getComputedStyle(document.getElementById('installAppLabel'))
+                    .display === 'none',
+            adaAriaLabel: !!b.getAttribute('aria-label')
+        };
+    })()
+`);
+
+cek("navbar tetap satu baris (<= 80px)", tataLetak.tinggiHeader <= 80, true);
+cek("tombol sebaris dengan tautan navigasi", tataLetak.tombolSeBarisDenganNav, true);
+cek("tombol tidak menimpa tautan", tataLetak.tumpangTindih, false);
+cek("tombol tetap bisa diklik", tataLetak.tombolBisaDiklik, true);
+cek("tombol tidak keluar layar", tataLetak.diDalamLayar, true);
+cek("halaman tidak menggulir mendatar", tataLetak.gulirHorizontalHalaman, false);
+cek("label teks disembunyikan di layar sempit", tataLetak.labelDisembunyikan, true);
+cek("aria-label tetap ada untuk pembaca layar", tataLetak.adaAriaLabel, true);
+
+await kirim("Emulation.clearDeviceMetricsOverride");
+
+
+// ---- 7. Tidak ada error JavaScript ---------------------------
 
 console.log("\n=== kesehatan halaman ===");
 

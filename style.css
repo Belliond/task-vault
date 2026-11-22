@@ -4330,6 +4330,69 @@ button {
     }
 
 
+    /* Tombol PASANG APP di layar sempit.
+
+       Bawaannya tombol ini punya margin-left: auto, sehingga ia
+       mendorong dirinya ke baris sendiri di atas tautan navigasi
+       dan navbar membengkak dari 65px jadi 121px. Di sini ia
+       dibuat ringkas (ikon + teks pendek) dan menempel di kanan
+       baris navigasi, bukan baris baru. */
+
+    .install-app {
+
+        /* order: 3 sama dengan .navbar-nav supaya keduanya berada
+           di baris yang SAMA. Kalau tombol dibiarkan order 0, ia
+           naik ke baris atas sendirian dan navbar membengkak
+           (diukur 121px, seharusnya 65px). */
+        order: 3;
+
+        margin-left: 0;
+
+        /* Ikon saja di layar sempit: label teks memakan ~70px dari
+           lebar yang sudah pas-pasan, sehingga tautan navigasi
+           harus digulir lebih jauh. Label tetap terbaca pembaca
+           layar lewat aria-label di tombolnya. */
+        min-width: 44px;
+        min-height: 38px;
+        padding: 6px 12px;
+        justify-content: center;
+
+        box-shadow: none;
+
+    }
+
+
+    .install-app #installAppLabel {
+
+        display: none;
+
+    }
+
+
+    .install-app span[aria-hidden="true"] {
+
+        font-size: 15px;
+
+    }
+
+
+    .navbar-nav {
+
+        /* Tautan mengisi sisa lebar, tombol pasang menempel di
+           ujung kanannya pada baris yang sama.
+
+           flex-basis harus 0 (bukan auto): dengan "auto", lebar
+           dasar nav adalah lebar isinya (~432px) dan tombol
+           terdorong ke baris berikutnya sehingga navbar jadi
+           113px. Dengan 0, nav mengisi sisa ruang setelah tombol
+           dan keduanya muat sebaris. */
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto;
+
+    }
+
+
     /* Navbar bisa dua baris di layar sempit (diukur 119px pada
        390px). Beri jarak fokus yang cukup agar elemen tidak
        tertutup saat di-tab. Nilai ini SATU-SATUNYA di media
