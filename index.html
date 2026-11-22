@@ -144,6 +144,28 @@
                  titik kecil di dalam tombol SYNC (lihat #syncMenu),
                  jadi tidak memakan ruang navbar sama sekali. -->
 
+            <!-- TOMBOL PASANG (PWA)
+
+                 Edge/Chrome menyembunyikan menu "Install page as
+                 app" di tempat yang berbeda-beda antar versi, dan
+                 sebagian orang tidak menemukannya sama sekali.
+                 Tombol ini memakai event beforeinstallprompt
+                 sehingga pemasangan bisa dimulai dari dalam web.
+
+                 Disembunyikan (hidden) secara bawaan: hanya
+                 muncul kalau browser benar-benar menawarkan
+                 pemasangan, atau kalau app sudah terpasang
+                 (tombolnya berubah jadi penanda "APP TERPASANG"). -->
+            <button
+                id="installApp"
+                class="install-app hidden"
+                type="button"
+                title="Pasang Task Vault sebagai aplikasi, lalu pin ke taskbar"
+            >
+                <span aria-hidden="true">⤓</span>
+                <span id="installAppLabel">PASANG APP</span>
+            </button>
+
         </div>
 
     </header>

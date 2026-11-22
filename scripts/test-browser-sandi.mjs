@@ -15,12 +15,20 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pastikanServer } from "./uji-server.mjs";
 
 const AKAR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CHROME = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const PROFIL = path.join(AKAR, "tmp-chrome-profil");
 const PORT = 9333;
 const URL_UJI = process.env.UJI_URL || "http://127.0.0.1:5199/index.html";
+
+// Uji ini butuh halaman lewat HTTP (bukan file://). Kalau server
+// belum menyala, nyalakan sendiri lalu matikan setelah selesai.
+const server = URL_UJI.startsWith("http://127.0.0.1") ||
+               URL_UJI.startsWith("http://localhost")
+    ? await pastikanServer(URL_UJI)
+    : { berhenti: () => {} };
 
 let lulus = 0;
 let gagal = 0;
@@ -166,6 +174,7 @@ if (navigasi.errorText) {
     );
     ws.close();
     chrome.kill();
+    server.berhenti();
     process.exit(1);
 }
 
@@ -710,6 +719,7 @@ cek(
 
 ws.close();
 chrome.kill();
+server.berhenti();
 
 // Bersihkan profil sementara.
 await tidur(300);

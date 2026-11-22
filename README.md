@@ -327,6 +327,7 @@ tetap butuh koneksi.
 | `manifest.json` | `display: standalone`, ikon 192 & 512, `theme_color` |
 | `icon-192.png`, `icon-512.png` | Ikon home screen (di-render dari `favicon.svg`) |
 | `sw.js` | Service worker: shell HTML/CSS/JS + font/CDN |
+| `script.js` | `initPasangApp()`: tombol **PASANG APP** di navbar |
 | `script.js` | Menyimpan hasil query terakhir ke `localStorage` (`tasksCacheV1`) |
 
 Cara kerja:
@@ -355,6 +356,48 @@ Cara kerja:
 
 Kalau mengubah `index.html`/`style.css`/`script.js`, naikkan nilai `CACHE`
 di `sw.js` supaya perangkat lama tidak tertinggal versi lama.
+
+### Tombol PASANG APP di navbar
+
+Menu pemasangan di Edge/Chrome berpindah tempat antar versi — di Edge 158
+namanya **`...` → More tools → Install page as app**, dan di sebagian versi
+ada juga di submenu **Apps**. Karena letaknya tidak konsisten (dan sebagian
+orang tidak menemukannya sama sekali), web punya tombol sendiri di ujung
+kanan navbar.
+
+Tombol ini memakai event `beforeinstallprompt`, yang hanya dikirim browser
+kalau situs memenuhi syarat pemasangan (manifest + service worker + ikon
+192/512). Tiga keadaan yang ditangani `initPasangApp()` di `script.js`:
+
+| Keadaan | Tampilan tombol |
+|---|---|
+| Browser menawarkan pemasangan | Tombol **PASANG APP** aktif |
+| Sudah dibuka sebagai aplikasi (`display-mode: standalone`) | Penanda **APP TERPASANG**, tidak bisa diklik |
+| Browser tidak mendukung (iOS/Safari, Firefox lama) | Tombol tetap tersembunyi |
+
+Event ditahan dengan `preventDefault()` supaya pemasangan dimulai dari
+tombol kita, bukan dari banner yang muncul sendiri di bawah layar.
+
+**Penting untuk pengembangan:** seluruh blok ini ada di dalam
+`function initPasangApp()` dan dipanggil setelah `const installApp`
+dideklarasikan. Kalau diletakkan langsung di level atas sebelum deklarasi
+itu, muncul `ReferenceError: Cannot access 'installApp' before
+initialization` yang **menghentikan seluruh sisa `script.js`** — halaman
+tetap tampil tapi mati total. `scripts/test-tombol-pasang.mjs` memeriksa
+hal ini secara eksplisit.
+
+### Memasang lalu menaruh di taskbar (Edge/Chrome di laptop)
+
+1. Buka situsnya, klik tombol **PASANG APP** di navbar.
+   Alternatif: menu `...` → **More tools** → **Install page as app**.
+2. Setelah terpasang, buka aplikasinya dari **Start Menu** (cari
+   "Task Vault" / "Ghost Task Matrix").
+3. Di jendela aplikasi itu: klik kanan ikonnya di taskbar → **Pin to
+   taskbar**. Edge juga menyediakan panduan yang sama di
+   `...` → **Apps** → **Pin to taskbar**.
+
+Aplikasi hasil pemasangan berjalan di jendela sendiri tanpa address bar
+(`display: standalone`), dan tetap bisa dibuka saat offline.
 
 ---
 
@@ -577,8 +620,15 @@ Kalau hasilnya wajar, jalankan lagi tanpa centang.
 ```bash
 npm run sync:dry     # tampilkan saja
 npm run sync         # tulis ke database
-npm test             # uji fungsi murni + logika filter UI
+npm test             # uji fungsi murni + logika filter UI (tanpa browser)
+npm run test:browser # uji di Chrome/Edge sungguhan lewat CDP
 ```
+
+`npm run test:browser` menjalankan `test-browser-sandi.mjs` (gerbang sandi,
+warna tombol) dan `test-tombol-pasang.mjs` (tombol PASANG APP). Keduanya
+menyalakan `scripts/serve.mjs` sendiri kalau port 5199 belum melayani, jadi
+tidak perlu menyiapkan server lebih dulu. Untuk mengarahkan uji ke situs
+publik, set `UJI_URL=https://belliond.github.io/task-vault/`.
 
 Membaca `MOODLE_TOKEN` dari `.env`, atau dari environment kalau `.env` tidak ada.
 

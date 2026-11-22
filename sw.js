@@ -16,7 +16,7 @@
 // membuang cache lama. Tanpa ini, ikon naga tidak akan muncul
 // di perangkat yang sudah pernah membuka Task Vault: service
 // worker lama tetap menyajikan icon-192/512 yang lama.
-const CACHE = "task-vault-2026-11-26";
+const CACHE = "task-vault-2026-11-27";
 
 const SHELL = [
     "./",

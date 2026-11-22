@@ -444,6 +444,92 @@ button {
 }
 
 
+/* ---------- Tombol pasang aplikasi (PWA) ----------
+   Muncul hanya kalau browser menawarkan pemasangan. Diletakkan di
+   ujung kanan navbar (margin-left: auto) supaya tidak menggeser
+   tautan navigasi, dan tidak tampil sama sekali saat tersembunyi. */
+
+.install-app {
+
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    min-height: 44px;
+    margin-left: auto;
+    padding: 10px 16px;
+
+    border: 2px solid var(--green-dark);
+    border-radius: var(--radius);
+    background: transparent;
+
+    color: var(--green);
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+
+    box-shadow: var(--shadow-hard-sm);
+    cursor: pointer;
+
+    transition:
+        color var(--transition),
+        background var(--transition),
+        border-color var(--transition),
+        box-shadow var(--transition),
+        transform var(--transition);
+
+}
+
+
+.install-app span[aria-hidden="true"] {
+
+    font-size: 15px;
+
+}
+
+
+.install-app:hover {
+
+    border-color: var(--green);
+    background: var(--green-soft);
+    box-shadow: var(--shadow-hard);
+    transform: translate(-2px, -2px);
+
+}
+
+
+.install-app:active {
+
+    box-shadow: none;
+    transform: translate(0, 0);
+
+}
+
+
+/* Sudah terpasang: penanda, bukan tombol yang bisa ditekan lagi. */
+
+.install-app.is-terpasang {
+
+    border-color: var(--border);
+    color: var(--text-soft);
+    box-shadow: none;
+    cursor: default;
+
+}
+
+
+.install-app.is-terpasang:hover {
+
+    background: transparent;
+    transform: none;
+    box-shadow: none;
+
+}
+
+
 .nav-link:hover {
 
     color: var(--text);

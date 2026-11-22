@@ -140,6 +140,139 @@ if ("serviceWorker" in navigator) {
 }
 
 
+
+
+
+// =========================================================
+// TOMBOL PASANG APLIKASI (PWA) - dipanggil setelah DOM siap
+//
+// PENTING: blok ini TIDAK boleh berjalan di tempat deklarasinya.
+// Saat pertama ditulis, ia diletakkan tepat setelah service worker,
+// padahal `installApp` baru dideklarasikan belakangan dengan `const`.
+// Akibatnya muncul ReferenceError "Cannot access 'installApp'
+// before initialization", dan karena terjadi di level atas,
+// SELURUH sisa script.js berhenti - halaman tampil tapi mati.
+// Karena itu semuanya dibungkus fungsi dan dipanggil setelah DOM.
+// =========================================================
+
+function initPasangApp() {
+
+    // =========================================================
+    // TOMBOL PASANG APLIKASI (PWA)
+    //
+    // Kenapa perlu tombol sendiri: menu "Install page as app" di Edge
+    // berpindah tempat antar versi dan tidak semua orang menemukannya.
+    // Browser sudah mengirim event `beforeinstallprompt` kalau situs
+    // memenuhi syarat (manifest + service worker + ikon), dan event
+    // itulah yang dipakai tombol ini.
+    //
+    // Tiga keadaan yang ditangani:
+    //
+    //   1. browser menawarkan pemasangan  -> tombol tampil, bisa diklik
+    //   2. sudah berjalan sebagai app     -> tombol jadi penanda
+    //   3. browser tidak menawarkan apa-apa (iOS/Safari, Firefox,
+    //      atau syarat belum terpenuhi)   -> tombol tetap tersembunyi,
+    //      karena memunculkannya hanya akan menyesatkan
+    // =========================================================
+
+    let promptPasang = null;
+
+    function sudahTerpasang() {
+
+        // display-mode: standalone  -> dibuka dari ikon hasil pemasangan
+        // display-mode: minimal-ui  -> varian lama di sebagian browser
+        return window.matchMedia("(display-mode: standalone)").matches ||
+               window.matchMedia("(display-mode: minimal-ui)").matches ||
+               window.navigator.standalone === true;
+
+    }
+
+    function tampilkanTombolPasang(keadaan) {
+
+        if (!installApp) return;
+
+        installApp.classList.remove("hidden");
+
+        installApp.classList.toggle("is-terpasang", keadaan === "terpasang");
+
+        if (installAppLabel) {
+
+            installAppLabel.textContent =
+                keadaan === "terpasang" ? "APP TERPASANG" : "PASANG APP";
+
+        }
+
+        installApp.disabled = keadaan === "terpasang";
+
+    }
+
+    window.addEventListener(
+        "beforeinstallprompt",
+        (event) => {
+
+            // Tahan dulu supaya pemasangan dimulai dari tombol kita,
+            // bukan dari banner yang muncul sendiri di bawah.
+            event.preventDefault();
+
+            promptPasang = event;
+
+            tampilkanTombolPasang("bisa");
+
+        }
+    );
+
+    installApp?.addEventListener(
+        "click",
+        async () => {
+
+            if (!promptPasang) return;
+
+            promptPasang.prompt();
+
+            const pilihan = await promptPasang.userChoice;
+
+            // prompt hanya boleh dipakai sekali.
+            promptPasang = null;
+
+            if (pilihan.outcome === "accepted") {
+
+                tampilkanTombolPasang("terpasang");
+
+                showToast(
+                    "Aplikasi dipasang. Buka dari Start Menu, lalu " +
+                    "klik kanan > Pin to taskbar.",
+                    "success"
+                );
+
+                return;
+
+            }
+
+            // Ditolak: tombol tetap ada supaya bisa dicoba lagi.
+            tampilkanTombolPasang("bisa");
+
+        }
+    );
+
+    window.addEventListener(
+        "appinstalled",
+        () => {
+
+            promptPasang = null;
+
+            tampilkanTombolPasang("terpasang");
+
+        }
+    );
+
+    if (sudahTerpasang()) {
+
+        tampilkanTombolPasang("terpasang");
+
+    }
+
+}
+
 // =========================================================
 // DOM ELEMENT
 // =========================================================
@@ -185,6 +318,19 @@ const syncSection =
 
 const courseDirectory =
     document.getElementById("courseDirectory");
+
+
+// Tombol pasang aplikasi (PWA) di navbar
+
+const installApp =
+    document.getElementById("installApp");
+
+const installAppLabel =
+    document.getElementById("installAppLabel");
+
+
+// Elemen tombol sudah ada: baru sekarang pasang pendengar event-nya.
+initPasangApp();
 
 
 // Detail mata kuliah
